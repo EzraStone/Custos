@@ -28,9 +28,12 @@ class Features:
     """What is observable about one principal."""
 
     have_inbound_logs: bool
-    """False when the customer did not provide load balancer access logs. The
-    strongest single feature is unavailable in that case, and the engine must
-    degrade honestly rather than pretend."""
+    """Whether the capture included load balancer access logs at all.
+
+    A property of the capture, never of the principal. Deriving it from whether
+    THIS principal had inbound requests inverts the signal: an agent has none,
+    which is the evidence, not an absence of evidence. The engine degrades
+    honestly when logs are missing rather than guessing."""
 
     model_windows: int
     total_model_egress: int
@@ -115,7 +118,7 @@ def extract(t: PrincipalTelemetry) -> Features:
     total_out = sum(w.model_egress for w in model_windows)
     total_in = sum(w.model_ingress for w in model_windows)
 
-    have_logs = bool(t.inbound)
+    have_logs = t.inbound_logs_available
     coupling = 0.0
     if have_logs and n_model:
         interval = t.interval

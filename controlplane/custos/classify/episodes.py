@@ -90,6 +90,16 @@ class PrincipalTelemetry:
     inbound: list[InboundRequest] = field(default_factory=list)
     interval: timedelta = timedelta(seconds=60)
 
+    inbound_logs_available: bool = False
+    """Whether the CAPTURE included load balancer access logs at all.
+
+    This is a property of the capture, never of the principal. A principal with
+    zero inbound requests in a capture that has ALB logs is the strongest
+    positive evidence in the system — the workload decided on its own to call a
+    model. A principal with zero inbound requests in a capture that has no ALB
+    logs tells us nothing. Conflating the two treats every chatbot as decoupled
+    and destroys precision."""
+
     @property
     def model_windows(self) -> list[Window]:
         return [w for w in self.windows if w.has_model]
@@ -174,8 +184,14 @@ def sessionize(
     origin: datetime,
     interval: timedelta,
     gap_tolerance: int = 1,
+    inbound_logs_available: bool = True,
 ) -> list[PrincipalTelemetry]:
-    """Group a whole capture by principal and sessionise each one."""
+    """Group a whole capture by principal and sessionise each one.
+
+    `inbound_logs_available` states whether the capture included load balancer
+    access logs. It must be passed from the capture's configuration, not
+    inferred from whether any requests were seen.
+    """
     by_principal: dict[str, list[FlowRecord]] = defaultdict(list)
     enis: dict[str, set[str]] = defaultdict(set)
 
@@ -204,6 +220,7 @@ def sessionize(
                 episodes=build_episodes(windows, interval, gap_tolerance),
                 inbound=sorted(inbound, key=lambda r: r.at),
                 interval=interval,
+                inbound_logs_available=inbound_logs_available,
             )
         )
 
