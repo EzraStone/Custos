@@ -1,7 +1,6 @@
 """The scanner, end to end, against the labelled corpus."""
 
 import pytest
-
 from custos.register.model import BlastRadius, Status
 
 from custos_a0.scanbridge import scan
