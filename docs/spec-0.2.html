@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Custos — Project Specification</title>
+<style>
+:root{
+  --ink:#14181f;
+  --ink-soft:#3d4653;
+  --ink-faint:#6c7686;
+  --paper:#e9ecf0;
+  --paper-raised:#f4f6f8;
+  --rule:#c2c9d3;
+  --rule-hair:#d6dbe2;
+  --seal:#8c2f39;
+  --seal-soft:#b85560;
+  --verdigris:#2d6a6b;
+  --amber:#8a6a1f;
+
+  --display:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+  --body:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+
+  --margin-w:5.5rem;
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--body);
+  font-size:16px;
+  line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+.sheet{
+  max-width:60rem;
+  margin:0 auto;
+  padding:0 1.5rem 6rem;
+}
+
+/* ---------- masthead ---------- */
+.masthead{
+  padding:4.5rem 0 2rem;
+  border-bottom:2px solid var(--ink);
+}
+.wordmark{
+  font-family:var(--display);
+  font-size:clamp(2.75rem,8vw,4.25rem);
+  line-height:.95;
+  letter-spacing:-.015em;
+  margin:0;
+  font-weight:600;
+}
+.wordmark .gloss{
+  display:block;
+  font-family:var(--mono);
+  font-size:.68rem;
+  letter-spacing:.22em;
+  text-transform:uppercase;
+  color:var(--seal);
+  margin-bottom:1.1rem;
+  font-weight:400;
+}
+.subtitle{
+  font-family:var(--display);
+  font-style:italic;
+  font-size:1.3rem;
+  color:var(--ink-soft);
+  margin:1.1rem 0 0;
+  max-width:38rem;
+}
+.docctl{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));
+  gap:1rem 1.5rem;
+  margin-top:2.5rem;
+  padding-top:1.5rem;
+  border-top:1px solid var(--rule-hair);
+  font-family:var(--mono);
+  font-size:.72rem;
+  line-height:1.5;
+}
+.docctl dt{
+  text-transform:uppercase;
+  letter-spacing:.12em;
+  color:var(--ink-faint);
+  margin:0 0 .2rem;
+}
+.docctl dd{margin:0;color:var(--ink)}
+
+/* ---------- sections ---------- */
+.sec{
+  position:relative;
+  padding:3.25rem 0 0;
+  border-top:1px solid var(--rule-hair);
+  margin-top:3.25rem;
+}
+.sec:first-of-type{border-top:none}
+.sec > .num{
+  font-family:var(--mono);
+  font-size:.72rem;
+  color:var(--seal);
+  letter-spacing:.1em;
+  display:block;
+  margin-bottom:.5rem;
+}
+h2{
+  font-family:var(--display);
+  font-size:clamp(1.65rem,4vw,2.1rem);
+  line-height:1.15;
+  letter-spacing:-.01em;
+  margin:0 0 1.25rem;
+  font-weight:600;
+}
+h3{
+  font-family:var(--display);
+  font-size:1.22rem;
+  margin:2.25rem 0 .65rem;
+  font-weight:600;
+}
+h4{
+  font-family:var(--mono);
+  font-size:.75rem;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--ink-faint);
+  margin:1.75rem 0 .5rem;
+  font-weight:500;
+}
+p{margin:0 0 1.05rem;max-width:44rem}
+ul,ol{margin:0 0 1.05rem;padding-left:1.15rem;max-width:44rem}
+li{margin-bottom:.4rem}
+strong{font-weight:650}
+em{font-style:italic}
+a{color:var(--seal)}
+
+@media (min-width:900px){
+  .sec{padding-left:var(--margin-w)}
+  .sec > .num{
+    position:absolute;
+    left:0;top:3.25rem;
+    width:4rem;
+    text-align:right;
+    margin:0;
+  }
+  .masthead{padding-left:var(--margin-w)}
+}
+
+/* ---------- pull statement ---------- */
+.thesis{
+  font-family:var(--display);
+  font-size:1.35rem;
+  line-height:1.42;
+  color:var(--ink);
+  border-left:3px solid var(--seal);
+  padding:.15rem 0 .15rem 1.4rem;
+  margin:1.75rem 0;
+  max-width:42rem;
+}
+
+/* ---------- callouts ---------- */
+.note{
+  border:1px solid var(--rule);
+  background:var(--paper-raised);
+  padding:1.1rem 1.3rem;
+  margin:1.5rem 0;
+  max-width:44rem;
+}
+.note > :last-child{margin-bottom:0}
+.note .tag{
+  font-family:var(--mono);
+  font-size:.68rem;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  display:block;
+  margin-bottom:.5rem;
+  color:var(--ink-faint);
+}
+.note.risk{border-color:var(--seal-soft)}
+.note.risk .tag{color:var(--seal)}
+.note.gate{border-color:var(--verdigris)}
+.note.gate .tag{color:var(--verdigris)}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;margin:1.5rem 0;-webkit-overflow-scrolling:touch}
+table{
+  border-collapse:collapse;
+  width:100%;
+  min-width:34rem;
+  font-size:.87rem;
+}
+th{
+  font-family:var(--mono);
+  font-size:.68rem;
+  letter-spacing:.11em;
+  text-transform:uppercase;
+  color:var(--ink-faint);
+  text-align:left;
+  font-weight:500;
+  padding:0 1rem .5rem 0;
+  border-bottom:1px solid var(--ink);
+  vertical-align:bottom;
+}
+td{
+  padding:.7rem 1rem .7rem 0;
+  border-bottom:1px solid var(--rule-hair);
+  vertical-align:top;
+  line-height:1.5;
+}
+td:last-child,th:last-child{padding-right:0}
+tbody tr:last-child td{border-bottom:1px solid var(--rule)}
+
+/* ---------- invariant stamps ---------- */
+.inv{
+  display:grid;
+  grid-template-columns:auto 1fr;
+  gap:.9rem 1rem;
+  margin:1.25rem 0;
+  max-width:46rem;
+  font-size:.92rem;
+}
+.inv dt{
+  font-family:var(--mono);
+  font-size:.68rem;
+  letter-spacing:.06em;
+  color:var(--seal);
+  border:1px solid var(--seal-soft);
+  padding:.18rem .42rem;
+  height:fit-content;
+  white-space:nowrap;
+}
+.inv dd{margin:0;padding-top:.1rem}
+
+/* ---------- code / schema ---------- */
+pre{
+  font-family:var(--mono);
+  font-size:.78rem;
+  line-height:1.6;
+  background:var(--paper-raised);
+  border:1px solid var(--rule-hair);
+  padding:1.1rem 1.2rem;
+  overflow-x:auto;
+  margin:1.25rem 0;
+}
+code{font-family:var(--mono);font-size:.86em;background:var(--paper-raised);padding:.08em .3em;border:1px solid var(--rule-hair)}
+pre code{background:none;border:none;padding:0;font-size:1em}
+
+/* ---------- phase strip ---------- */
+.phase{
+  border-top:1px solid var(--rule);
+  padding-top:1rem;
+  margin-top:2rem;
+}
+.phase .head{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:baseline;
+  gap:.75rem;
+  margin-bottom:.6rem;
+}
+.phase .id{
+  font-family:var(--mono);
+  font-size:.7rem;
+  letter-spacing:.12em;
+  color:var(--seal);
+}
+.phase .name{
+  font-family:var(--display);
+  font-size:1.18rem;
+  font-weight:600;
+}
+.phase .dur{
+  font-family:var(--mono);
+  font-size:.7rem;
+  color:var(--ink-faint);
+  margin-left:auto;
+}
+
+/* ---------- state legend ---------- */
+.states{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.5rem;
+  margin:1.25rem 0;
+  font-family:var(--mono);
+  font-size:.7rem;
+  letter-spacing:.06em;
+}
+.states span{
+  border:1px solid var(--rule);
+  padding:.28rem .55rem;
+  background:var(--paper-raised);
+}
+.states .s-unsanctioned{border-color:var(--seal-soft);color:var(--seal)}
+.states .s-sanctioned{border-color:var(--verdigris);color:var(--verdigris)}
+
+hr.rule{
+  border:none;
+  border-top:1px solid var(--rule-hair);
+  margin:2.5rem 0;
+}
+
+.colophon{
+  margin-top:4rem;
+  padding-top:1.5rem;
+  border-top:2px solid var(--ink);
+  font-family:var(--mono);
+  font-size:.72rem;
+  color:var(--ink-faint);
+  line-height:1.7;
+}
+@media (min-width:900px){.colophon{padding-left:var(--margin-w)}}
+
+a:focus-visible,summary:focus-visible{outline:2px solid var(--seal);outline-offset:2px}
+
+@media print{
+  body{background:#fff;font-size:10.5pt}
+  .sheet{max-width:none;padding:0}
+  .sec{page-break-inside:auto}
+  h2,h3{page-break-after:avoid}
+  table,pre,.note{page-break-inside:avoid}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <h1 class="wordmark"><span class="gloss">Project specification · Draft 0.2</span>Custos</h1>
+  <p class="subtitle">The register of every AI agent running in a company, and the checkpoint that governs what those agents are permitted to do.</p>
+  <dl class="docctl">
+    <div><dt>Status</dt><dd>Pre-build</dd></div>
+    <div><dt>Date</dt><dd>16 Aug 2026</dd></div>
+    <div><dt>Supersedes</dt><dd>Imprimatur 0.1</dd></div>
+    <div><dt>Companion</dt><dd>Production dev spec (enforcement)</dd></div>
+    <div><dt>Open decisions</dt><dd>§10 — 7 items</dd></div>
+  </dl>
+</header>
+
+<!-- 1 -->
+<section class="sec">
+  <span class="num">§ 01</span>
+  <h2>What Custos is</h2>
+
+  <p>AI agents are becoming autonomous identities. They hold credentials, call tools, and write to production systems without a human reading each action. Identity and access systems decide <em>which agents may act</em>. Nobody decides <em>which actions are permitted</em> — and at most companies, nobody can say which agents are acting at all.</p>
+
+  <p class="thesis">CrowdStrike made endpoints visible and governable. Custos does that for autonomous agents.</p>
+
+  <p>Custos has two halves. <strong>The Register</strong> discovers agents running in a company's cloud — including the ones nobody enrolled — and maps each to its owner, its credentials, and the systems it can reach. <strong>The Checkpoint</strong> sits in front of consequential agent actions, verifies cryptographically which agent under whose delegation is proposing them, evaluates them against deterministic policy, and allows, blocks, or routes to a human — issuing a signed receipt either way.</p>
+
+  <h4>Precision on claims</h4>
+  <p>Two things Custos does not do, stated here so they are never claimed in a deck or a sales call. Custos does not judge whether an action is <em>safe</em> in any semantic sense; it evaluates actions against deterministic policy the customer authored. And the Checkpoint does not <em>detect</em> compromised agents; it gates all actions in its path and evaluates each. Behavioural detection is a Register capability (§4.6), not a Checkpoint one.</p>
+</section>
+
+<!-- 2 -->
+<section class="sec">
+  <span class="num">§ 02</span>
+  <h2>Why both halves exist</h2>
+
+  <p>Neither half is viable alone, and the dependency runs in one direction only.</p>
+
+  <p>Enforcement without discovery has an empty register. A checkpoint can only govern agents that were enrolled, and the agents that were enrolled are precisely the ones that were already known, reviewed, and least likely to be the problem. Onboarding becomes a manual enumeration exercise the customer cannot complete, because the thing being asked for — a list of every agent they run — is the thing they lack.</p>
+
+  <p>Discovery without enforcement is a report read once and filed. It creates awareness and no control, and awareness alone does not renew a contract.</p>
+
+  <p class="thesis">The Register populates the tables the Checkpoint governs. Build the register first; sell the checkpoint to the customers whose findings alarmed them.</p>
+
+  <h4>Sequencing consequence</h4>
+  <p>The Register ships first — not because it is the better product, but because it is the only half that produces evidence before it is complete. It delivers its most persuasive artifact on day one with no integration, no risk, and no trust required. The Checkpoint's first customer arrives only after the hard part is done.</p>
+</section>
+
+<!-- 3 -->
+<section class="sec">
+  <span class="num">§ 03</span>
+  <h2>Competitive reality</h2>
+
+  <p>Stated without softening, because every one of these will be raised in diligence.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Category</th><th>Who</th><th>What they do</th><th>The gap</th></tr></thead>
+    <tbody>
+      <tr><td>Eval &amp; tracing</td><td>Langfuse, Braintrust, Arize, Galileo</td><td>Instrument an agent, get traces and quality metrics</td><td>Opt-in. Coverage equals the list you already had.</td></tr>
+      <tr><td>General APM</td><td>Datadog, New Relic, Dynatrace</td><td>Bundled agent monitoring inside existing contracts</td><td>Operations-first. Weak on identity and blast radius.</td></tr>
+      <tr><td>Runtime AI security</td><td>Lakera, Prisma AIRS</td><td>Block prompt injection at the request layer</td><td>Assumes you know which agents to protect.</td></tr>
+      <tr><td>Tenant governance</td><td>Microsoft Agent 365</td><td>Agent registry and policy inside the M365 / Entra tenant</td><td>Tenant-scoped. Does not see agents in cloud workloads.</td></tr>
+      <tr><td>Identity</td><td>Okta, WorkOS, agentic identity vendors</td><td>Decide which agents may authenticate</td><td>Authorize the actor, not the action.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note risk">
+    <span class="tag">Material — verify before the next customer call</span>
+    <p>Microsoft Agent 365 shipped an agent registry, generally available May 2026. It provides a unified tenant inventory including third-party agents. This is the discovery wedge, shipped by the largest possible incumbent.</p>
+    <p>The scope distinction Custos depends on: Agent 365 sees agents operating <em>in the Microsoft tenant</em>. Custos sees agents operating <em>in cloud infrastructure</em> — services in AWS accounts making model API calls under IAM roles, which the tenant registry has no visibility into. Reporting also suggests Agent 365 is currently more visibility plane than control plane, with enforcement for non-Microsoft agents still maturing.</p>
+    <p><strong>Action:</strong> confirm this scope boundary independently. If Agent 365 extends to cloud workload discovery, the Register's differentiation narrows to attribution depth and multi-cloud, and the positioning in §1 must be rewritten.</p>
+  </div>
+
+  <h4>The honest competitive position</h4>
+  <p>The space is crowded and consolidating — Snyk/Invariant, Coralogix/Aporia, ClickHouse/Langfuse, Anthropic/Humanloop. That validates the category and compresses the window. Never claim the space is empty. Claim one unserved job: <em>which agents are running that nobody enrolled, and what can each one destroy.</em></p>
+</section>
+
+<!-- 4 -->
+<section class="sec">
+  <span class="num">§ 04</span>
+  <h2>Phase A — The Register</h2>
+
+  <h3>4.1 The load-bearing technical assumption</h3>
+  <p>Everything downstream depends on one claim that has not been tested:</p>
+
+  <p class="thesis">An agent is distinguishable from a chatbot backend using network and identity metadata alone.</p>
+
+  <p>Both make TLS calls to the same model endpoints. Payloads are encrypted and, by design (SEC-18), never inspected. So the classifier must separate them on observable metadata only.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>Signal</th><th>Source</th><th>Strength</th></tr></thead>
+    <tbody>
+      <tr><td>Burst of sequential model calls, monotonically growing payload size, sub-second gaps</td><td>Flow log timing + byte counts</td><td>Strong</td></tr>
+      <tr><td>No correlated inbound human request in the window</td><td>ALB / API gateway log correlation</td><td>Strong</td></tr>
+      <tr><td>MCP protocol traffic</td><td>Port and protocol fingerprint</td><td>Strong</td></tr>
+      <tr><td>Machine principal rather than user session</td><td>CloudTrail</td><td>Moderate</td></tr>
+      <tr><td>Call volume inconsistent with human pacing</td><td>Temporal analysis</td><td>Moderate</td></tr>
+      <tr><td>Sustained off-hours activity</td><td>Temporal analysis</td><td>Weak</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>The dominant signal is the first: an agent produces bursts of sequential calls with growing context and no inbound human request; a chatbot produces one or two calls tightly coupled to an arriving request. This is inferable without reading a single payload byte, which is what makes the privacy posture in §7 possible rather than aspirational.</p>
+
+  <div class="note gate">
+    <span class="tag">Gate G0 — two weeks, ~30 hours</span>
+    <p>Build a test environment with three agents (a LangGraph service, a coding agent, a tool-calling loop) and two chatbot backends. Capture flow logs and CloudTrail only. Hand-analyse for separation.</p>
+    <p><strong>Pass</strong> → proceed as specified. <strong>Fail</strong> → fall back to gateway-log ingestion, which requires the customer to already run an LLM gateway. That is a materially weaker wedge and the pitch, timeline, and target profile all change. Decide by end of week 2 either way; do not proceed on hope.</p>
+  </div>
+
+  <h3>4.2 Architecture</h3>
+<pre><code>CUSTOMER AWS ACCOUNT
+  VPC Flow Logs ─┐
+  CloudTrail ────┼──▶ COLLECTOR ──── metadata only, TLS ────┐
+  Gateway logs ──┘    (read-only IAM,                       │
+   (optional)          no host agent)                       │
+                                                            ▼
+                                            CUSTOS CONTROL PLANE
+                                              Classifier  → is it an agent?
+                                              Attributor  → who owns it?
+                                              Register    → canonical inventory
+                                              Baseline    → what is normal?
+                                              Report / API / console</code></pre>
+
+  <h3>4.3 Collector</h3>
+  <ul>
+    <li>Deployed by a single CloudFormation or Terraform apply into the customer account. Target: under 30 minutes from a one-page doc, by a platform engineer, without a meeting.</li>
+    <li>Assumes a cross-account role with read-only permissions and no write permission anywhere.</li>
+    <li>Emits derived metadata only. Constructed so that transmitting payload bodies is <em>impossible</em>, not merely disabled — security teams will read the source.</li>
+    <li>Open source (§10, decision 5). It is the component under the most scrutiny and the largest single objection remover in security review.</li>
+    <li>Single static Go binary. Low footprint, no runtime dependency, acceptable to customers.</li>
+  </ul>
+
+  <h3>4.4 Classifier</h3>
+  <p>Rule-based, hand-tuned from G0 findings. No machine learning until three design partners have produced real traffic. Rules are debuggable and defensible on a call, which matters more than marginal accuracy at this stage — every finding will be challenged by the person who owns the workload.</p>
+  <p>Emits agent candidates with a confidence score. Confidence below threshold produces a candidate for review, never a register entry (SEC-17).</p>
+
+  <h3>4.5 Attributor</h3>
+  <p>Resolves principal → resource tags → team → human. This converts <em>"something was detected"</em> into a ticket someone can act on.</p>
+  <div class="note risk">
+    <span class="tag">Failure mode</span>
+    <p>A finding with no owner is noise, and noise gets the tool uninstalled. Attribution deserves disproportionate investment relative to how unglamorous it is. If tag hygiene is poor enough that attribution fails, the product is a curiosity rather than a control.</p>
+  </div>
+
+  <h3>4.6 Baseline and drift</h3>
+  <p>Per-agent rolling baseline: tool set, call volume p50/p95, endpoints reached, active hours. Departures raise a drift finding. This is the Register's detection capability, and it is the honest home of any claim about detecting compromised or misbehaving agents.</p>
+</section>
+
+<!-- 5 -->
+<section class="sec">
+  <span class="num">§ 05</span>
+  <h2>Phase B — The Checkpoint</h2>
+
+  <p>Specified in full in the companion production development specification. Summarised here only for how it relates to the Register.</p>
+
+  <p>An inline gateway that intercepts consequential agent actions. For each, it verifies the calling agent's signed credential and delegation chain, evaluates the proposed action against deterministic policy, and returns allow, deny, or hold-for-human. Every decision produces a signed receipt. No LLM sits in the decision path. Unknown actions and evaluator errors fail closed.</p>
+
+  <h4>Dependency on the Register</h4>
+  <p>The Checkpoint's <code>issuers</code>, <code>agents</code>, <code>agent_keys</code>, and <code>delegations</code> tables are populated manually in the companion spec. With the Register, onboarding changes from <em>"enumerate all 40 of your agents"</em> to <em>"review this list and grant imprimatur to the ones you recognise."</em> That is the difference between a pilot that stalls in week one and a pilot that starts.</p>
+
+  <div class="note risk">
+    <span class="tag">The hardest requirement in the entire project</span>
+    <p>SEC-03 requires that the downstream system reject direct traffic that bypasses the Checkpoint. This obliges the customer to reconfigure network paths and credentials so the target system accepts only gateway-originated traffic.</p>
+    <p>Without it, an agent simply calls the target API directly and Custos becomes a suggestion box. This is a harder ask than anything technical in the project, it is the make-or-break of the enforcement value proposition, and it must be raised in the first pilot conversation rather than discovered during integration.</p>
+  </div>
+
+  <h4>Availability cost, unpriced</h4>
+  <p>Readiness fails closed when safe enforcement is not possible. Correct security posture; it also means a Custos outage halts the customer's agent workflow. At a 99.5% pilot target that is roughly 3.6 hours per month. No customer has agreed to that yet, and the number belongs in the pilot agreement rather than in a footnote.</p>
+
+  <h4>Hard scope boundary</h4>
+  <p>No industrial equipment, radiation systems, safety interlocks, medical treatment processes, or autonomous movement of funds. Reversible drafts requiring human approval only. This boundary is not negotiable for a pilot logo, however attractive.</p>
+</section>
+
+<!-- 6 -->
+<section class="sec">
+  <span class="num">§ 06</span>
+  <h2>Unified data model</h2>
+
+  <p>The agent record is the product. Everything else is plumbing. The provenance fields are what allow one schema to serve both halves.</p>
+
+<pre><code>Agent
+├── id, first_seen, last_seen
+├── status          discovered | pending_review | sanctioned | retired
+├── provenance
+│   ├── source              manual | discovered | imported
+│   ├── confidence          0.0–1.0   (classifier)
+│   └── observed_principal  IAM role / service account
+│
+├── identity
+│   ├── principal, owner_team, owner_human
+│   └── compute             ECS | Lambda | EC2 | EKS
+│
+├── model
+│   ├── providers, endpoints
+│   └── est_monthly_spend   derived from byte counts
+│
+├── reach                          ← the field that sells the product
+│   ├── credentials         secrets the principal can assume
+│   ├── tools               MCP servers / internal APIs observed
+│   ├── data_stores         DBs and buckets reachable
+│   └── blast_radius        read | write | destructive
+│
+├── imprimatur              null while unsanctioned
+│   ├── granted_by, granted_at
+│   ├── approved_tools[], approved_data[]
+│   └── key_id              → Checkpoint credential
+│
+└── baseline
+    ├── calls_per_hour      p50 / p95
+    ├── tool_set            observed
+    └── active_hours        distribution</code></pre>
+
+  <div class="states">
+    <span class="s-unsanctioned">discovered</span>
+    <span>pending_review</span>
+    <span class="s-sanctioned">sanctioned</span>
+    <span>retired</span>
+  </div>
+
+  <p><strong>The unsanctioned set</strong> — agents in <code>discovered</code> with no imprimatur — is the recurring value delivery. It regenerates on every scan, which is what makes this a subscription rather than an audit engagement.</p>
+
+  <p><code>reach</code> is what converts interest into a purchase order. <em>"You have 34 agents"</em> is a curiosity. <em>"Eleven are unsanctioned, and one holds a role with write access to your billing tables"</em> is a budget line.</p>
+</section>
+
+<!-- 7 -->
+<section class="sec">
+  <span class="num">§ 07</span>
+  <h2>Security invariants</h2>
+
+  <p>SEC-01 through SEC-15 are specified in the companion production document and are carried forward unchanged. The Register adds three. All are testable and none are relaxable for a feature request.</p>
+
+  <dl class="inv">
+    <dt>SEC-16</dt><dd>Discovery is read-only. The collector's credential grants no write permission to any customer resource, and the collector contains no code path that mutates customer infrastructure.</dd>
+    <dt>SEC-17</dt><dd>Discovered records confer no authority. A discovered agent cannot execute through the Checkpoint until an operator explicitly grants imprimatur. Discovery populates the register; it never authorises. Without this, traffic that imitates the agent signature would auto-provision itself a credential.</dd>
+    <dt>SEC-18</dt><dd>Metadata only. Identities, endpoints, byte counts, timings and protocol fingerprints leave the customer account. Prompts, completions, and payload bodies never do, under any configuration.</dd>
+  </dl>
+
+  <h4>On the surveillance question</h4>
+  <p>A tool that inventories every agent and its credentials is reconnaissance-shaped. In practice the uplift to an attacker is near zero, because it requires read credentials they would already have to hold. Two constraints keep it that way: the collector cannot be pointed at an environment its operator lacks legitimate access to, and SEC-18 ensures the data collected describes software rather than the people using it. The metadata-only constraint is what keeps the ethical position defensible — do not trade it away for a feature.</p>
+</section>
+
+<!-- 8 -->
+<section class="sec">
+  <span class="num">§ 08</span>
+  <h2>Build sequence</h2>
+
+  <p>Gates, not calendar dates. Durations assume two engineers full time, or one engineer at roughly double.</p>
+
+  <div class="phase">
+    <div class="head"><span class="id">A0</span><span class="name">Prove the signal</span><span class="dur">2 weeks</span></div>
+    <p>Test environment, flow logs only, hand analysis. Gate G0 in §4.1. <strong>Exit:</strong> the burst signature separates agents from chatbots, or the fallback is chosen and the pitch revised.</p>
+  </div>
+
+  <div class="phase">
+    <div class="head"><span class="id">A1</span><span class="name">Scanner</span><span class="dur">3 weeks</span></div>
+    <p>Collector, rule classifier, attribution, reach mapping, static HTML report. No database, no auth, no UI, no multi-tenancy. <strong>Exit:</strong> a report run against a real environment that surprises the person who owns it.</p>
+  </div>
+
+  <div class="phase">
+    <div class="head"><span class="id">A2</span><span class="name">Register</span><span class="dur">6–8 weeks</span></div>
+    <p>Persistent store, console, sanction workflow, auth and tenant isolation, scheduled re-scans, Slack and SIEM delivery. <strong>Exit:</strong> three organisations scanning repeatedly without being prompted.</p>
+  </div>
+
+  <div class="phase">
+    <div class="head"><span class="id">A3</span><span class="name">Drift</span><span class="dur">4–6 weeks</span></div>
+    <p>Baselining and departure alerts (§4.6). SOC 2 Type I evidence collection begins in parallel — it needs three months of observation and gates the first enterprise deal, not the product. <strong>Exit:</strong> first paid contract.</p>
+  </div>
+
+  <div class="phase">
+    <div class="head"><span class="id">B0–B7</span><span class="name">Checkpoint</span><span class="dur">Companion spec</span></div>
+    <p>Shadow mode first — observe proposed actions, evaluate policy, record decisions, execute nothing. Shadow requires almost none of the key management and execution machinery, so it validates demand months before enforcement is safe to ship. <strong>Do not build beyond shadow until a paying Register customer asks for it.</strong></p>
+  </div>
+</section>
+
+<!-- 9 -->
+<section class="sec">
+  <span class="num">§ 09</span>
+  <h2>Commercial plan</h2>
+
+  <h4>Entry motion</h4>
+  <p>Free read-only scan of one non-production account. Non-production is the unlock: it clears a platform lead's approval bar without a security review. The report creates the demand for a production scan, and the production scan creates the demand for continuous monitoring.</p>
+
+  <h4>Pricing</h4>
+  <p>Per agent under management, tiered. Revenue scales with the growth of the problem rather than with data volume. Early pilots deliberately underpriced at $500–2,500/month: the objective is the word <em>paying</em>, not margin. Enterprise contracts land at $50–150k once the Checkpoint enters scope.</p>
+
+  <h4>Target profile</h4>
+  <p>80–400 engineers. Series B/C. AWS. Agents adopted bottom-up rather than through a governance programme. No dedicated AI platform team — if one exists, that team is already the product. Skip AI-native startups; at thirty people they know exactly what is running.</p>
+
+  <h4>Non-code blockers on the first sale</h4>
+  <ul>
+    <li>Data flow diagram — what leaves the account, where it goes, who can read it</li>
+    <li>Pre-written security questionnaire response</li>
+    <li>Mutual NDA and a simple MSA</li>
+    <li>Public collector repository</li>
+    <li>Cyber liability insurance</li>
+  </ul>
+
+  <h4>The sentence the company is built to be able to say</h4>
+  <p class="thesis">We scanned <em>N</em> companies. Every one had AI agents their security team had never registered — <em>M</em> of them holding write credentials to production.</p>
+</section>
+
+<!-- 10 -->
+<section class="sec">
+  <span class="num">§ 10</span>
+  <h2>Open decisions</h2>
+
+  <p>Each of these changes the specification materially and none can be resolved from inside the document.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>#</th><th>Decision</th><th>What turns on it</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Team size — solo or with a co-founder engineer</td><td>Every duration in §8 doubles if solo. Largest single variable.</td></tr>
+      <tr><td>2</td><td>Cloud target for v1</td><td>AWS assumed — flow logs plus CloudTrail is the richest passive signal. GCP workable, Azure materially harder.</td></tr>
+      <tr><td>3</td><td>Design partner access</td><td>Currently zero in profile. Sourcing is the primary activity, not a background one.</td></tr>
+      <tr><td>4</td><td>Kubernetes in scope for v1</td><td>Pod-level attribution needs eBPF or k8s audit logs — both more invasive than a cross-account role.</td></tr>
+      <tr><td>5</td><td>Open-source the collector</td><td>Recommended. Removes the largest security-review objection; a real and irreversible strategic commitment.</td></tr>
+      <tr><td>6</td><td>Time commitment</td><td>A0 works nights and weekends. A2 does not.</td></tr>
+      <tr><td>7</td><td>Agent 365 scope boundary</td><td>§3. If it extends to cloud workloads, §1 positioning is rewritten.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- 11 -->
+<section class="sec">
+  <span class="num">§ 11</span>
+  <h2>Kill gates</h2>
+
+  <p>Points at which the honest move is to change course rather than push forward. Written now, while it is still cheap to be honest.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>When</th><th>Condition</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr><td>End of A0</td><td>Signature does not separate agents from chatbots</td><td>Pivot to gateway-log ingestion. Revise pitch and target profile. Continue.</td></tr>
+      <tr><td>Week 5</td><td>Zero scans landed after 40+ asks</td><td>Access is the fatal problem, not the product. Stop building and solve distribution.</td></tr>
+      <tr><td>Week 8</td><td>Four or more scans, nothing surprising in any</td><td>Companies do know what they run. Discovery is not a business — reconsider enforcement-first.</td></tr>
+      <tr><td>Week 10</td><td>Findings surprising, no willingness to pay</td><td>Interesting, not urgent. Continue, but price and position accordingly.</td></tr>
+      <tr><td>Any time</td><td>Agent 365 or Datadog ships equivalent cloud-workload discovery</td><td>Differentiation narrows to attribution depth and multi-cloud. Reassess honestly rather than reflexively.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>The week-8 gate is the one to take seriously. If four companies scan clean, that is the answer, and it is better received in October than the following June.</p>
+</section>
+
+<!-- 12 -->
+<section class="sec">
+  <span class="num">§ 12</span>
+  <h2>Not building</h2>
+
+  <p>Recorded because the pull toward each is strong, and every one of them is a way to avoid the conversation that actually determines whether this works.</p>
+
+  <ul>
+    <li>Multi-tenancy, RBAC, and SSO before a paying customer</li>
+    <li>Key management, KMS integration, signing infrastructure — Checkpoint only</li>
+    <li>Issuer, delegation, and session models — Checkpoint only</li>
+    <li>Execution leases, outbox workers, reconciliation — Checkpoint only</li>
+    <li>Policy authoring UI, simulation, staged rollout</li>
+    <li>Internet-wide agent scanning. Not technically possible without a privileged vantage point, and it inherits the entire civil-liberties objection the in-account model avoids. Cross-customer signal is built from the union of consenting environments, one customer at a time.</li>
+    <li>Machine-learned classification before three design partners have produced real traffic</li>
+    <li>Anything a customer has not asked for by name</li>
+  </ul>
+</section>
+
+<!-- 13 -->
+<section class="sec">
+  <span class="num">§ 13</span>
+  <h2>First task</h2>
+
+  <p>Not architecture. Not the fundraise. Not the name.</p>
+
+  <p>Build the A0 test environment and answer one question: <strong>does the burst signature separate an agent from a chatbot using flow logs alone?</strong></p>
+
+  <p>Roughly thirty hours. Every other page of this document is contingent on the answer, and the answer is available this week.</p>
+</section>
+
+<footer class="colophon">
+  Custos · Project specification, draft 0.2 · 16 August 2026<br>
+  Companion documents: production development specification (Checkpoint, P0–P7); ten-week evidence plan.<br>
+  Sections marked with a risk or gate note require a decision before the work they describe begins.
+</footer>
+
+</div>
+</body>
+</html>
