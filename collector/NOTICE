@@ -1,0 +1,13 @@
+Custos Collector
+Copyright (c) 2026 Ezra Stone
+
+Licensed under the Apache License, Version 2.0.
+
+This component runs inside customer infrastructure under a read-only credential.
+It is published so that any security reviewer can verify two claims by reading
+the source rather than trusting a data flow diagram:
+
+  SEC-16  The collector holds no write permission and contains no code path
+          that mutates customer infrastructure.
+  SEC-18  Only derived metadata leaves the customer account. There is no code
+          path, under any configuration, that transmits a payload body.
