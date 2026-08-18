@@ -52,17 +52,31 @@ BEDROCK = Endpoint(
 )
 
 # MCP servers.
-MCP_GITHUB = Endpoint("mcp-github.svc.internal", "10.0.5.11", 8931, EndpointClass.MCP, writes=True)
-MCP_FILES = Endpoint("mcp-filesystem.svc.internal", "10.0.5.12", 8931, EndpointClass.MCP, writes=True)
+MCP_GITHUB = Endpoint(
+    "mcp-github.svc.internal", "10.0.5.11", 8931, EndpointClass.MCP, writes=True
+)
+MCP_FILES = Endpoint(
+    "mcp-filesystem.svc.internal", "10.0.5.12", 8931, EndpointClass.MCP, writes=True
+)
 
 # Internal APIs.
-BILLING_API = Endpoint("billing-api.svc.internal", "10.0.4.21", 8080, EndpointClass.INTERNAL_API, writes=True)
-TICKET_API = Endpoint("ticketing.svc.internal", "10.0.4.22", 8080, EndpointClass.INTERNAL_API, writes=True)
-DEPLOY_API = Endpoint("deploy-ctl.svc.internal", "10.0.4.23", 8443, EndpointClass.INTERNAL_API, writes=True)
+BILLING_API = Endpoint(
+    "billing-api.svc.internal", "10.0.4.21", 8080, EndpointClass.INTERNAL_API, writes=True
+)
+TICKET_API = Endpoint(
+    "ticketing.svc.internal", "10.0.4.22", 8080, EndpointClass.INTERNAL_API, writes=True
+)
+DEPLOY_API = Endpoint(
+    "deploy-ctl.svc.internal", "10.0.4.23", 8443, EndpointClass.INTERNAL_API, writes=True
+)
 
 # Datastores.
-ORDERS_DB = Endpoint("orders.cluster-ro.rds.amazonaws.com", "10.0.9.44", 5432, EndpointClass.DATASTORE)
-BILLING_DB = Endpoint("billing.cluster.rds.amazonaws.com", "10.0.9.45", 5432, EndpointClass.DATASTORE, writes=True)
+ORDERS_DB = Endpoint(
+    "orders.cluster-ro.rds.amazonaws.com", "10.0.9.44", 5432, EndpointClass.DATASTORE
+)
+BILLING_DB = Endpoint(
+    "billing.cluster.rds.amazonaws.com", "10.0.9.45", 5432, EndpointClass.DATASTORE, writes=True
+)
 VECTOR_DB = Endpoint("vectors.svc.internal", "10.0.6.30", 6333, EndpointClass.DATASTORE)
 ARTIFACTS_S3 = Endpoint(
     "artifacts.s3.us-east-1.amazonaws.com", "52.216.10.7", 443,
