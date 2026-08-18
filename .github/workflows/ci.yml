@@ -1,0 +1,67 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ./controlplane -e ./a0 pytest ruff
+      - name: Lint
+        run: ruff check controlplane a0
+      - name: Test control plane
+        run: cd controlplane && pytest -q
+      - name: Test A0
+        run: cd a0 && pytest -q
+
+  gate:
+    # The G0 gate runs in CI and fails the build if the signal stops
+    # separating. It is the one result the whole company is contingent on, so
+    # it is not allowed to regress quietly between commits.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ./controlplane -e ./a0
+      - name: Run the A0 experiment
+        run: python -m custos_a0.cli experiment
+
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - name: Format
+        run: cd collector && test -z "$(gofmt -l .)"
+      - name: Vet
+        run: cd collector && go vet ./...
+      - name: Test
+        run: cd collector && go test -race ./...
+      - name: Build
+        run: cd collector && CGO_ENABLED=0 go build -trimpath ./cmd/custos-collector
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Format
+        run: terraform -chdir=collector/deploy/terraform fmt -check
+      - name: Validate
+        run: |
+          terraform -chdir=collector/deploy/terraform init -backend=false
+          terraform -chdir=collector/deploy/terraform validate
