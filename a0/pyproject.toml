@@ -1,0 +1,26 @@
+[project]
+name = "custos-a0"
+version = "0.1.0"
+description = "The A0 signal experiment: synthetic telemetry and G0 evaluation."
+requires-python = ">=3.11"
+dependencies = ["custos"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3", "ruff>=0.7"]
+
+[project.scripts]
+custos-a0 = "custos_a0.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["custos_a0*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
