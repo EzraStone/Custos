@@ -100,14 +100,19 @@ def role_name(principal: str) -> str:
     return match.group("name") if match else principal
 
 
-def _name_stem(principal: str) -> str:
-    """Strip conventional suffixes to leave something team-shaped."""
+def _name_stem(principal: str) -> tuple[str, bool]:
+    """Strip conventional suffixes to leave something team-shaped.
+
+    Returns the stem and whether a suffix was actually recognised. That flag
+    matters: stripping `-worker` off `checkout-worker` means we learned the
+    name follows a convention, whereas `svc0001` tells us nothing at all and
+    must not be reported as a team.
+    """
     name = role_name(principal)
     for suffix in _SUFFIXES:
-        if name.endswith(suffix):
-            name = name[: -len(suffix)]
-            break
-    return name.strip("-_")
+        if name.endswith(suffix) and len(name) > len(suffix):
+            return name[: -len(suffix)].strip("-_"), True
+    return name.strip("-_"), False
 
 
 def resolve(facts: PrincipalFacts) -> Attribution:
@@ -135,10 +140,12 @@ def resolve(facts: PrincipalFacts) -> Attribution:
                 segment, "", Method.PATH_CONVENTION, _METHOD_CONFIDENCE[Method.PATH_CONVENTION]
             )
 
-    stem = _name_stem(facts.principal)
-    if stem and "-" in stem:
-        # Only the first segment of a hyphenated name is worth guessing from,
-        # and only as a lead to chase rather than an answer.
+    stem, recognised = _name_stem(facts.principal)
+    # A guess is only worth making when the name follows some convention: a
+    # recognised suffix was stripped, or the name is hyphenated. An opaque
+    # identifier like svc0001 yields nothing, and inventing an owner for it
+    # would be worse than reporting none.
+    if stem and (recognised or "-" in stem):
         return Attribution(
             stem.split("-")[0], "", Method.NAME_HEURISTIC,
             _METHOD_CONFIDENCE[Method.NAME_HEURISTIC],
