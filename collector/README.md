@@ -32,10 +32,16 @@ every mutating action. It creates no compute and touches no existing resource.
 
 **3. Send us the `role_arn` output.** That is the only thing we need.
 
-**4. Optional, and worth it:** if you can also point us at your load balancer
-access logs, do. Without them our recall drops from 100% to 60% on our test
-corpus, and the agents we miss are the low-volume ones — which are usually the
-ones you would most want to know about.
+**4. Optional, and worth it:** set `CUSTOS_ACCESS_LOGS` to the S3 location of
+your load balancer access logs. Without them our recall drops from 100% to 60%
+on our test corpus, and the agents we miss are the low-volume ones — which are
+usually the ones you would most want to know about.
+
+We take four fields from those logs: timestamp, target address, and the two
+byte counts. The URL, query string, user agent, client IP, and trace ID are
+discarded at parse time and cannot reach us. See
+`internal/ingest/accesslogs_test.go`, which proves it against a line containing
+an email address and an API key.
 
 ---
 
@@ -46,7 +52,7 @@ ones you would most want to know about.
 | VPC Flow Logs | Addresses, ports, byte counts, packet counts, timings, TCP flags |
 | CloudTrail | Which principal is attached to which network interface |
 | IAM (read-only) | Role tags, IAM paths, attached policy actions |
-| ALB access logs *(optional)* | When a request arrived and how large it was |
+| ALB access logs *(optional)* | Timestamp, target address, and two byte counts — nothing else |
 
 Flow logs are read from wherever you already deliver them — set
 `CUSTOS_FLOW_LOGS` to a CloudWatch Logs group name or to `s3://bucket/prefix`.

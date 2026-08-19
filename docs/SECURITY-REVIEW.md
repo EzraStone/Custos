@@ -67,6 +67,26 @@ path from a payload byte to the network.
 **Backed by:** `internal/wire/wire.go`, `internal/ship/ship.go`,
 `TestNoPayloadShapedFieldNames`.
 
+### Your load balancer logs contain URLs and user agents. What do you take?
+
+Four fields per line: the timestamp, the target address, and the two byte
+counts. Nothing else.
+
+An ALB access log line carries the request URL and query string, the user
+agent, the client IP and port, TLS details, and trace identifiers. All of it
+describes the people using your system rather than the software, and none of it
+reaches us — it is discarded at parse time and has nowhere to go afterwards,
+because `wire.InboundRequest` has no field that could hold it.
+
+We take these four because correlation needs exactly them: whether a burst of
+model traffic was answering something a human asked for. Nothing more is
+required, so nothing more is taken.
+
+**Backed by:** `TestSEC18NothingSensitiveSurvivesParsing`, which parses a
+realistic line whose query string contains an email address and an API key and
+asserts that neither, nor the user agent, path, client address, or trace ID,
+appears anywhere in the parsed record.
+
 ### Can the collector change anything in our account?
 
 No, enforced in three places independently.
