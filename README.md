@@ -44,7 +44,7 @@ make experiment  # run A0, print the G0 verdict, write a sample scan report
 
 | Path | Language | What it is |
 |---|---|---|
-| `collector/` | Go | Runs in the customer's account under a read-only role. Apache-2.0. |
+| `collector/` | Go | Runs in the customer's account under a read-only role. Reads VPC Flow Logs from CloudWatch or S3, resolves interfaces to principals, enumerates IAM capability. Apache-2.0. |
 | `controlplane/` | Python | Classifier, register, attribution, reach, report. |
 | `a0/` | Python | The G0 experiment: synthetic telemetry and evaluation. |
 | `checkpoint/` | Go | Inline enforcement gateway. Not started. |

@@ -48,6 +48,10 @@ ones you would most want to know about.
 | IAM (read-only) | Role tags, IAM paths, attached policy actions |
 | ALB access logs *(optional)* | When a request arrived and how large it was |
 
+Flow logs are read from wherever you already deliver them — set
+`CUSTOS_FLOW_LOGS` to a CloudWatch Logs group name or to `s3://bucket/prefix`.
+We do not ask you to change your delivery destination.
+
 ## What it sends
 
 Exactly the structures in [`internal/wire/wire.go`](internal/wire/wire.go).
@@ -69,10 +73,20 @@ Verify it yourself:
 go test ./internal/wire/    # walks every wire type by reflection
 ```
 
-To see the literal bytes rather than take our word for it:
+To see the literal bytes rather than take our word for it, against your real
+account:
 
 ```
-CUSTOS_DRY_RUN=1 CUSTOS_FLOW_LOGS=<group> ./custos-collector --from-file <export>
+CUSTOS_DRY_RUN=1 \
+CUSTOS_FLOW_LOGS=/aws/vpc/flowlogs \
+CUSTOS_ACCOUNT_ID=<account> AWS_REGION=<region> \
+  ./custos-collector
+```
+
+Or without granting any access at all, against an export you hand us:
+
+```
+CUSTOS_DRY_RUN=1 CUSTOS_FLOW_LOGS=x ./custos-collector --from-file <export>
 ```
 
 ## What it cannot do
