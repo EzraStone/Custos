@@ -28,11 +28,19 @@ type FlowSource interface {
 // the account.
 type Collector struct {
 	Flows    FlowSource
+	Requests RequestSource
 	Network  awsread.NetworkAPI
 	Identity awsread.IdentityAPI
 
 	AccountID string
 	Region    string
+}
+
+// RequestSource reads inbound requests for a window. Optional: many customers
+// will not hand over load balancer logs, and the classifier degrades honestly
+// without them rather than guessing.
+type RequestSource interface {
+	Read(context.Context, awsread.Window) ([]wire.InboundRequest, error)
 }
 
 // Report is what a human needs to judge whether a scan is trustworthy.
@@ -41,11 +49,13 @@ type Collector struct {
 // the collection, not the account, and it is printed locally rather than being
 // the basis of a finding.
 type Report struct {
-	Stats      flowlogs.Stats
-	Interfaces int
-	Principals int
-	Degraded   []Attribution
-	Errors     []string
+	Stats       flowlogs.Stats
+	Interfaces  int
+	Principals  int
+	Requests    int
+	HaveALBLogs bool
+	Degraded    []Attribution
+	Errors      []string
 }
 
 // Trustworthy reports whether the scan covered enough to make an absence of
@@ -61,6 +71,16 @@ func (r Report) Summary() string {
 		r.Stats.Parsed, r.Stats.Lines, r.Stats.Coverage()*100)
 	fmt.Fprintf(&b, "resolved %d principals across %d interfaces\n",
 		r.Principals, r.Interfaces)
+
+	if r.HaveALBLogs {
+		fmt.Fprintf(&b, "correlated against %d inbound requests\n", r.Requests)
+	} else {
+		// Worth saying every run. This is the difference between finding a
+		// customer's low-volume agents and surfacing them as maybes.
+		fmt.Fprintf(&b, "NOTE: no load balancer access logs configured — the strongest "+
+			"classifier signal is unavailable, so low-volume agents will surface for "+
+			"review rather than as findings\n")
+	}
 
 	if r.Stats.SkipData > 0 {
 		fmt.Fprintf(&b, "WARNING: %d SKIPDATA lines — AWS dropped records it could not "+
@@ -114,6 +134,16 @@ func (c *Collector) Collect(ctx context.Context, w awsread.Window) (wire.Batch, 
 		report.Errors = append(report.Errors, err.Error())
 	}
 	batch.Flows = records
+
+	if c.Requests != nil {
+		requests, err := c.Requests.Read(ctx, w)
+		if err != nil {
+			report.Errors = append(report.Errors, err.Error())
+		}
+		batch.Requests = requests
+		report.Requests = len(requests)
+		report.HaveALBLogs = true
+	}
 
 	interfaceIDs := distinctInterfaces(records)
 	report.Interfaces = len(interfaceIDs)
