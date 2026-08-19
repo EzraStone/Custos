@@ -37,6 +37,11 @@ type Stats struct {
 	NoData    int
 	SkipData  int
 	Malformed int
+
+	// Truncated is set when a read stopped at its event limit rather than at
+	// the end of the window. A truncated window changes what an absence of
+	// findings means, so it is carried all the way into the report.
+	Truncated bool
 }
 
 // Coverage is the fraction of lines successfully parsed.
