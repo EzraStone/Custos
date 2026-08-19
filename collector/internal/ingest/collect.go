@@ -151,6 +151,13 @@ func (c *Collector) Collect(ctx context.Context, w awsread.Window) (wire.Batch, 
 	return batch, report, nil
 }
 
+// DistinctInterfaces returns the unique interface IDs in a set of records.
+// Exported so a file-based run can report the same interface count as an AWS
+// run, rather than reporting zero because it never looked.
+func DistinctInterfaces(records []wire.FlowRecord) []string {
+	return distinctInterfaces(records)
+}
+
 func distinctInterfaces(records []wire.FlowRecord) []string {
 	seen := map[string]bool{}
 	var out []string

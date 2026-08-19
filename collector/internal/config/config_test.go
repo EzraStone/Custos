@@ -81,3 +81,36 @@ func TestBadWindowIsRejected(t *testing.T) {
 		t.Fatal("unparseable window must be rejected")
 	}
 }
+
+func TestCrossAccountRoleRequiresAnExternalID(t *testing.T) {
+	_, err := Load(env(map[string]string{
+		"CUSTOS_DRY_RUN": "1", "CUSTOS_FLOW_LOGS": "g",
+		"CUSTOS_ROLE_ARN": "arn:aws:iam::1:role/custos-discovery",
+	}))
+	if err == nil {
+		t.Fatal("a cross-account role without an external ID must be refused")
+	}
+}
+
+func TestS3SourceIsDetected(t *testing.T) {
+	c := &Config{FlowLogs: "s3://acme-flow-logs/AWSLogs/1/vpcflowlogs/us-east-1"}
+	bucket, prefix, ok := c.S3Source()
+	if !ok || bucket != "acme-flow-logs" || prefix != "AWSLogs/1/vpcflowlogs/us-east-1" {
+		t.Fatalf("got %q %q %v", bucket, prefix, ok)
+	}
+}
+
+func TestCloudWatchGroupIsNotMistakenForS3(t *testing.T) {
+	c := &Config{FlowLogs: "/aws/vpc/flowlogs"}
+	if _, _, ok := c.S3Source(); ok {
+		t.Fatal("a log group name must not parse as an S3 source")
+	}
+}
+
+func TestBucketWithNoPrefixIsValid(t *testing.T) {
+	c := &Config{FlowLogs: "s3://acme-flow-logs"}
+	bucket, prefix, ok := c.S3Source()
+	if !ok || bucket != "acme-flow-logs" || prefix != "" {
+		t.Fatalf("got %q %q %v", bucket, prefix, ok)
+	}
+}

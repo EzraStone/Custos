@@ -31,10 +31,28 @@ type Config struct {
 
 	AccountID  string
 	Region     string
-	FlowLogs   string // CloudWatch Logs group or S3 prefix holding flow logs
+	FlowLogs   string // CloudWatch Logs group name, or s3://bucket/prefix
 	AccessLogs string // optional: ALB access log prefix
 	Window     time.Duration
 	DryRun     bool // read and print, never send
+
+	// RoleARN is the cross-account role to assume. Empty means use ambient
+	// credentials, which is how a customer runs this inside their own account.
+	RoleARN string
+
+	// ExternalID guards the confused deputy problem. Required with RoleARN.
+	ExternalID string
+}
+
+// S3Source reports whether FlowLogs names an S3 location, returning the bucket
+// and prefix. Otherwise FlowLogs is a CloudWatch Logs group name.
+func (c *Config) S3Source() (bucket, prefix string, ok bool) {
+	rest, found := strings.CutPrefix(c.FlowLogs, "s3://")
+	if !found {
+		return "", "", false
+	}
+	bucket, prefix, _ = strings.Cut(rest, "/")
+	return bucket, prefix, bucket != ""
 }
 
 var (
@@ -58,6 +76,8 @@ func Load(getenv func(string) string) (*Config, error) {
 		AccessLogs: strings.TrimSpace(getenv("CUSTOS_ACCESS_LOGS")),
 		Window:     DefaultWindow,
 		DryRun:     getenv("CUSTOS_DRY_RUN") == "1",
+		RoleARN:    strings.TrimSpace(getenv("CUSTOS_ROLE_ARN")),
+		ExternalID: strings.TrimSpace(getenv("CUSTOS_EXTERNAL_ID")),
 	}
 	if raw := getenv("CUSTOS_WINDOW"); raw != "" {
 		d, err := time.ParseDuration(raw)
@@ -96,6 +116,16 @@ func (c *Config) Validate() error {
 	}
 	if c.Window <= 0 {
 		return errors.New("CUSTOS_WINDOW must be positive")
+	}
+	if c.RoleARN != "" && c.ExternalID == "" {
+		// A cross-account role with no external ID can be assumed by anyone
+		// who learns the ARN. Refusing here is cheaper than explaining it in a
+		// post-mortem.
+		return errors.New(
+			"CUSTOS_EXTERNAL_ID is required when CUSTOS_ROLE_ARN is set")
+	}
+	if c.RoleARN != "" && c.Region == "" {
+		return errors.New("AWS_REGION is required when assuming a role")
 	}
 	return nil
 }

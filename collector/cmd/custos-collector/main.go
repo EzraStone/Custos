@@ -19,8 +19,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/EzraStone/Custos/collector/internal/awsclient"
 	"github.com/EzraStone/Custos/collector/internal/config"
 	"github.com/EzraStone/Custos/collector/internal/flowlogs"
+	"github.com/EzraStone/Custos/collector/internal/ingest"
 	"github.com/EzraStone/Custos/collector/internal/ship"
 	"github.com/EzraStone/Custos/collector/internal/wire"
 )
@@ -73,37 +75,21 @@ func run(args []string, stdout, stderr *os.File) error {
 }
 
 func collect(ctx context.Context, cfg *config.Config, path string, stdout, stderr *os.File) error {
-	if path == "" {
-		return errors.New(
-			"AWS log ingestion is not wired up yet; use --from-file with exported flow logs")
-	}
-
-	fh, err := os.Open(path)
+	batch, report, err := build(ctx, cfg, path)
 	if err != nil {
 		return err
 	}
-	defer fh.Close()
+	// Stamped here rather than only in the shipper, so a dry run shows the
+	// same bytes that would actually be sent.
+	batch.Collector = Version
 
-	records, stats, err := flowlogs.Parse(fh)
-	if err != nil {
-		return fmt.Errorf("parsing flow logs: %w", err)
-	}
-
-	fmt.Fprintf(stderr, "parsed %d of %d lines (%.1f%% coverage)",
-		stats.Parsed, stats.Lines, stats.Coverage()*100)
-	if stats.SkipData > 0 {
-		// Surfaced loudly. High SKIPDATA means the account's traffic is
-		// under-represented and an absence of findings means less.
-		fmt.Fprintf(stderr, "; %d SKIPDATA lines — traffic is under-represented", stats.SkipData)
-	}
-	fmt.Fprintln(stderr)
-
-	batch := wire.Batch{
-		AccountID:   cfg.AccountID,
-		Region:      cfg.Region,
-		WindowStart: time.Now().UTC().Add(-cfg.Window),
-		WindowEnd:   time.Now().UTC(),
-		Flows:       records,
+	fmt.Fprint(stderr, report.Summary())
+	if !report.Trustworthy() {
+		// Said plainly rather than buried. A scan with poor coverage that finds
+		// nothing is not the same as a clean account, and the difference is the
+		// whole meaning of the result.
+		fmt.Fprintln(stderr,
+			"NOTE: coverage was incomplete — an absence of findings means less than usual")
 	}
 
 	if !cfg.WillSend() {
@@ -117,6 +103,68 @@ func collect(ctx context.Context, cfg *config.Config, path string, stdout, stder
 	}
 
 	return ship.New(cfg.Endpoint, cfg.Token, Version).Send(ctx, batch)
+}
+
+// build assembles a batch, from a local file when one is given and from AWS
+// otherwise. The file path exists so a customer can hand us an export without
+// granting any access at all, which is a useful first step in a review.
+func build(ctx context.Context, cfg *config.Config, path string) (wire.Batch, ingest.Report, error) {
+	if path != "" {
+		return fromFile(cfg, path)
+	}
+	return fromAWS(ctx, cfg)
+}
+
+func fromFile(cfg *config.Config, path string) (wire.Batch, ingest.Report, error) {
+	fh, err := os.Open(path)
+	if err != nil {
+		return wire.Batch{}, ingest.Report{}, err
+	}
+	defer fh.Close()
+
+	records, stats, err := flowlogs.Parse(fh)
+	if err != nil {
+		return wire.Batch{}, ingest.Report{}, fmt.Errorf("parsing flow logs: %w", err)
+	}
+
+	end := time.Now().UTC()
+	return wire.Batch{
+		AccountID:   cfg.AccountID,
+		Region:      cfg.Region,
+		WindowStart: end.Add(-cfg.Window),
+		WindowEnd:   end,
+		Flows:       records,
+	}, ingest.Report{Stats: stats, Interfaces: len(ingest.DistinctInterfaces(records))}, nil
+}
+
+func fromAWS(ctx context.Context, cfg *config.Config) (wire.Batch, ingest.Report, error) {
+	clients, err := awsclient.New(ctx, awsclient.Options{
+		Region:     cfg.Region,
+		RoleARN:    cfg.RoleARN,
+		ExternalID: cfg.ExternalID,
+	})
+	if err != nil {
+		return wire.Batch{}, ingest.Report{}, err
+	}
+
+	var source ingest.FlowSource
+	if bucket, prefix, ok := cfg.S3Source(); ok {
+		source = &ingest.S3Reader{
+			API: clients.Objects, Bucket: bucket, Prefix: prefix,
+			AccountID: cfg.AccountID, Region: cfg.Region,
+		}
+	} else {
+		source = &ingest.CloudWatchReader{API: clients.Logs, Group: cfg.FlowLogs}
+	}
+
+	collector := &ingest.Collector{
+		Flows:     source,
+		Network:   clients.Network,
+		Identity:  clients.Identity,
+		AccountID: cfg.AccountID,
+		Region:    cfg.Region,
+	}
+	return collector.Collect(ctx, ingest.Window(cfg.Window))
 }
 
 const explanation = `custos-collector
@@ -142,10 +190,12 @@ WHAT IT CANNOT DO
 CONFIGURATION
   CUSTOS_ENDPOINT      https URL of the control plane   (required to send)
   CUSTOS_TOKEN         credential you hold              (required to send)
-  CUSTOS_FLOW_LOGS     log group or S3 prefix           (required)
+  CUSTOS_FLOW_LOGS     log group name, or s3://bucket/prefix   (required)
   CUSTOS_ACCESS_LOGS   ALB access log prefix            (optional, improves recall)
   CUSTOS_ACCOUNT_ID    account being scanned
   CUSTOS_WINDOW        collection window, default 1h
+  CUSTOS_ROLE_ARN      cross-account role to assume     (optional)
+  CUSTOS_EXTERNAL_ID   required whenever a role is assumed
   CUSTOS_DRY_RUN=1     read and print, never send
 
 With no endpoint or token configured this binary does nothing at all.
