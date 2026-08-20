@@ -18,7 +18,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ./controlplane -e ./a0 pytest ruff
       - name: Lint
-        run: ruff check controlplane a0
+        run: ruff check controlplane a0 site
       - name: Test control plane
         run: cd controlplane && pytest -q
       - name: Test A0
@@ -53,6 +53,18 @@ jobs:
         run: cd collector && go test -race ./...
       - name: Build
         run: cd collector && CGO_ENABLED=0 go build -trimpath ./cmd/custos-collector
+
+  site:
+    # The site claims it loads no third-party resource and runs no script.
+    # A claim nobody tests is a claim that quietly stops being true.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check links, anchors, and self-claims
+        run: python site/check.py
 
   terraform:
     runs-on: ubuntu-latest

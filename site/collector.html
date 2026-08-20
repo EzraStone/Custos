@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The collector — Custos</title>
+<meta name="description" content="The only Custos component that runs in your account. One static Go binary under a read-only role, Apache-2.0, with a dry-run mode that prints the literal bytes it would send.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/custos.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<nav class="topbar" aria-label="Primary">
+  <div class="sheet">
+    <a class="brand" href="index.html">
+      <svg class="seal" viewBox="0 0 32 32" fill="none" stroke="currentColor" aria-hidden="true">
+        <circle cx="16" cy="16" r="14.25" stroke-width="1.5"/>
+        <circle cx="16" cy="16" r="11" stroke-width="0.75" opacity=".55"/>
+        <path d="M16 4.5v23" stroke-width="1.5"/>
+        <path d="M6.5 16h4.25M21.25 16h4.25" stroke-width="1.25" opacity=".8"/>
+      </svg>
+      Custos
+    </a>
+    <div class="navlinks">
+      <a href="index.html">Overview</a>
+      <a href="evidence.html">Evidence</a>
+      <a href="report.html">The report</a>
+      <a href="security.html">Security</a>
+      <a href="collector.html" aria-current="page">Collector</a>
+      <a href="https://github.com/EzraStone/Custos">Source</a>
+    </div>
+  </div>
+</nav>
+
+<main id="main" class="sheet">
+
+<header class="masthead">
+  <h1 class="wordmark"><span class="gloss">Apache-2.0 · runs in your account</span>The collector</h1>
+  <p class="subtitle">This binary runs in <em>your</em> account, under <em>your</em> credentials, and reads network and identity metadata. It installs nothing, mutates nothing, and never reads a payload byte.</p>
+  <dl class="docctl">
+    <div><dt>Language</dt><dd>Go, static binary</dd></div>
+    <div><dt>Licence</dt><dd>Apache-2.0</dd></div>
+    <div><dt>Runtime deps</dt><dd>None</dd></div>
+    <div><dt>Created in your VPC</dt><dd>Nothing</dd></div>
+    <div><dt>Setup target</dt><dd>30 minutes, no meeting</dd></div>
+  </dl>
+</header>
+
+<!-- 1 -->
+<section class="sec">
+  <span class="num">§ 01</span>
+  <h2>Try it without giving it anything</h2>
+
+  <pre><code>git clone https://github.com/EzraStone/Custos
+cd Custos/collector &amp;&amp; go build ./cmd/custos-collector
+
+./custos-collector --explain          <span class="c"># what it reads, sends, and cannot do</span>
+./custos-collector                    <span class="c"># unconfigured: does nothing, exits clean</span>
+
+CUSTOS_DRY_RUN=1 CUSTOS_FLOW_LOGS=x \
+  ./custos-collector --from-file logs <span class="c"># prints the literal batch, sends nothing</span></code></pre>
+
+  <p>Dry run exists for security review. <em>"Show me exactly what you would
+  send"</em> gets a literal answer — the actual bytes — rather than a data flow
+  diagram.</p>
+
+  <p>The third command reads a flow log export you hand it and grants no AWS
+  access at all. If your process needs the review to happen before any role is
+  created, that is the path.</p>
+</section>
+
+<!-- 2 -->
+<section class="sec">
+  <span class="num">§ 02</span>
+  <h2>What it reads</h2>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th scope="col">Source</th><th scope="col">What we take</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">VPC Flow Logs</td><td>Addresses, ports, byte counts, packet counts, timings, TCP flags</td></tr>
+        <tr><td class="mono">CloudTrail</td><td>Which principal is attached to which network interface</td></tr>
+        <tr><td class="mono">IAM (read-only)</td><td>Role tags, IAM paths, attached policy actions</td></tr>
+        <tr><td class="mono">ALB access logs<br><span class="muted">optional</span></td><td>Timestamp, target address, and two byte counts — <a href="security.html#alb">nothing else</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Flow logs are read from wherever you already deliver them — set
+  <code>CUSTOS_FLOW_LOGS</code> to a CloudWatch Logs group name or to
+  <code>s3://bucket/prefix</code>. We do not ask you to change your delivery
+  destination, and we do not ask you to change your aggregation interval: the
+  classifier measures identically at 60 seconds and at 600.</p>
+
+  <div class="note gate">
+    <span class="tag">The one optional source that is worth it</span>
+    <p>Without ALB access logs, recall on the test corpus falls from 100% to 60%
+    — and the agents that degrade are the low-volume ones, which are usually the
+    ones you would most want to know about. Four fields are taken from those logs
+    and the rest is discarded at parse time.</p>
+  </div>
+</section>
+
+<!-- 3 -->
+<section class="sec">
+  <span class="num">§ 03</span>
+  <h2>What it sends</h2>
+
+  <p>Exactly the structures in <code>internal/wire/wire.go</code>, and nothing
+  else. There is no field on any of those types capable of holding a prompt, a
+  completion, or any other payload body, and the shipper's only entry point
+  accepts nothing but those types:</p>
+
+  <pre><code>func (s *Shipper) Send(ctx context.Context, batch wire.Batch) error</code></pre>
+
+  <p>Those two files are the complete proof. This is not a redaction step that
+  could be misconfigured — there is no path from a payload byte to the
+  network.</p>
+
+  <p>Verify it yourself:</p>
+
+  <pre><code>go test ./internal/wire/    <span class="c"># walks every wire type by reflection</span></code></pre>
+
+  <p>Or see the literal bytes against your real account, before granting anywhere
+  to send them:</p>
+
+  <pre><code>CUSTOS_DRY_RUN=1 \
+CUSTOS_FLOW_LOGS=/aws/vpc/flowlogs \
+CUSTOS_ACCOUNT_ID=&lt;account&gt; AWS_REGION=&lt;region&gt; \
+  ./custos-collector</code></pre>
+</section>
+
+<!-- 4 -->
+<section class="sec">
+  <span class="num">§ 04</span>
+  <h2>What it cannot do</h2>
+
+  <p class="thesis">Write anything.</p>
+
+  <p>Every AWS call goes through <code>internal/awsread</code>, which refuses any
+  operation whose verb is not <code>Describe</code>, <code>Get</code>,
+  <code>List</code>, <code>Filter</code>, <code>Lookup</code>,
+  <code>BatchGet</code>, or <code>Search</code> — before a request is
+  constructed. An allowlist, so a verb AWS invents next year is refused by
+  default.</p>
+
+  <p>The IAM policy grants no write permission, and a second policy explicitly
+  denies every mutating action alongside it. That deny changes nothing today; it
+  exists so that a future widening of the grant, by us or by someone on your
+  side, still cannot write.</p>
+
+  <p><code>logs:StartQuery</code> is denied by name. Logs Insights would be a
+  convenient way to read flow logs, and it creates a billable resource in your
+  account.</p>
+
+  <p>Every operation the collector attempts is recorded and available to you.</p>
+</section>
+
+<!-- 5 -->
+<section class="sec">
+  <span class="num">§ 05</span>
+  <h2>Setting it up</h2>
+
+  <div class="ledger">
+    <div class="row">
+      <span class="what">1</span>
+      <span class="desc">Look at what it does before granting it anything. <code>go build ./cmd/custos-collector &amp;&amp; ./custos-collector --explain</code></span>
+      <span class="st done">You</span>
+    </div>
+    <div class="row">
+      <span class="what">2</span>
+      <span class="desc">Apply the Terraform. One IAM role, read-only, with an explicit deny on every mutating action. It creates no compute and touches no existing resource.</span>
+      <span class="st done">You</span>
+    </div>
+    <div class="row">
+      <span class="what">3</span>
+      <span class="desc">Send us the <code>role_arn</code> output. That is the only thing we need.</span>
+      <span class="st done">You</span>
+    </div>
+    <div class="row">
+      <span class="what">4</span>
+      <span class="desc">Optional and worth it: set <code>CUSTOS_ACCESS_LOGS</code> to the S3 location of your load balancer access logs.</span>
+      <span class="st partial">Optional</span>
+    </div>
+  </div>
+
+  <pre><code>cd deploy/terraform
+terraform init
+terraform apply -var="external_id=&lt;the value we sent you&gt;"</code></pre>
+
+  <h3>Configuration</h3>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th scope="col">Variable</th><th scope="col">Required</th><th scope="col">Meaning</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">CUSTOS_ENDPOINT</td><td>to send</td><td>Control plane, https only</td></tr>
+        <tr><td class="mono">CUSTOS_TOKEN</td><td>to send</td><td>Credential you hold</td></tr>
+        <tr><td class="mono">CUSTOS_FLOW_LOGS</td><td>yes</td><td>Log group name, or <code>s3://bucket/prefix</code></td></tr>
+        <tr><td class="mono">CUSTOS_ACCESS_LOGS</td><td>no</td><td>ALB access logs; lifts recall from 60% to 100% on the test corpus</td></tr>
+        <tr><td class="mono">CUSTOS_ACCOUNT_ID</td><td>no</td><td>Account being scanned</td></tr>
+        <tr><td class="mono">CUSTOS_WINDOW</td><td>no</td><td>Collection window, default <code>1h</code></td></tr>
+        <tr><td class="mono">CUSTOS_ROLE_ARN</td><td>no</td><td>Cross-account role to assume</td></tr>
+        <tr><td class="mono">CUSTOS_EXTERNAL_ID</td><td>no</td><td>Required whenever a role is assumed</td></tr>
+        <tr><td class="mono">CUSTOS_DRY_RUN=1</td><td>no</td><td>Read and print, never send</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Without an endpoint and a token it does nothing at all and exits zero.</p>
+
+  <h3>Removing it</h3>
+  <pre><code>terraform destroy</code></pre>
+  <p>There is nothing else. No agent on any host, no resource in any VPC, nothing
+  left behind.</p>
+</section>
+
+<!-- 6 -->
+<section class="sec">
+  <span class="num">§ 06</span>
+  <h2>Why this one component is open source</h2>
+
+  <p>A commercial decision rather than a philosophical one. The collector is the
+  only component that runs inside customer infrastructure, and three of the five
+  invariants are demonstrable only by reading its source.</p>
+
+  <p>A closed collector would require a reviewer to trust a data flow diagram,
+  and the reviewers worth selling to do not. Everything else — classifier,
+  register, report, and the Checkpoint when it exists — is proprietary.</p>
+
+  <div class="note">
+    <span class="tag">Why Go, specifically</span>
+    <p>It compiles to a single static binary with no runtime dependency, which
+    matters enormously when the ask is <em>"run our code in your account"</em>.
+    "Here is a 12MB binary, here is the source, no interpreter, no dependency
+    tree" clears review far faster than an application with forty transitive
+    dependencies — every one of which is a supply chain question the reviewer now
+    has to ask.</p>
+  </div>
+
+  <div class="cta">
+    <h2>Read it, then decide</h2>
+    <p>The interesting files are small. <code>internal/wire/wire.go</code> is the
+    complete list of what can leave your account.
+    <code>internal/ship/ship.go</code> is the only thing that can send it.
+    <code>internal/awsread/awsread.go</code> is why it cannot write.</p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/EzraStone/Custos/tree/main/collector">Read the collector</a>
+      <a class="btn" href="security.html">Security review pack</a>
+    </div>
+  </div>
+</section>
+
+<a class="nextpage" href="index.html">
+  <span class="label">Back to</span>
+  <span class="t">Overview</span>
+  <span class="d">What Custos is, what a scan produces, and what is deliberately
+  not built yet.</span>
+</a>
+
+<footer class="colophon">
+  <div class="cols">
+    <div>
+      <p class="label">Product</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="report.html">The scan report</a></li>
+        <li><a href="evidence.html">Evidence</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="label">For reviewers</p>
+      <ul>
+        <li><a href="security.html">Security review pack</a></li>
+        <li><a href="security.html#invariants">The five invariants</a></li>
+        <li><a href="collector.html">Collector</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="label">Source</p>
+      <ul>
+        <li><a href="https://github.com/EzraStone/Custos/tree/main/collector">collector/</a></li>
+        <li><a href="https://github.com/EzraStone/Custos/tree/main/collector/deploy/terraform">Terraform module</a></li>
+        <li><a href="https://github.com/EzraStone/Custos/blob/main/LICENSE">Apache-2.0</a></li>
+      </ul>
+    </div>
+  </div>
+  <p>Read the source — that is why it is open.</p>
+</footer>
+
+<div class="pagefoot"></div>
+</main>
+</body>
+</html>

@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security — Custos</title>
+<meta name="description" content="The five invariants, the answers a security team asks before approving a scan, and the two files that establish the entire privacy claim. Every answer names the file or test that backs it.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/custos.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<nav class="topbar" aria-label="Primary">
+  <div class="sheet">
+    <a class="brand" href="index.html">
+      <svg class="seal" viewBox="0 0 32 32" fill="none" stroke="currentColor" aria-hidden="true">
+        <circle cx="16" cy="16" r="14.25" stroke-width="1.5"/>
+        <circle cx="16" cy="16" r="11" stroke-width="0.75" opacity=".55"/>
+        <path d="M16 4.5v23" stroke-width="1.5"/>
+        <path d="M6.5 16h4.25M21.25 16h4.25" stroke-width="1.25" opacity=".8"/>
+      </svg>
+      Custos
+    </a>
+    <div class="navlinks">
+      <a href="index.html">Overview</a>
+      <a href="evidence.html">Evidence</a>
+      <a href="report.html">The report</a>
+      <a href="security.html" aria-current="page">Security</a>
+      <a href="collector.html">Collector</a>
+      <a href="https://github.com/EzraStone/Custos">Source</a>
+    </div>
+  </div>
+</nav>
+
+<main id="main" class="sheet">
+
+<header class="masthead">
+  <h1 class="wordmark"><span class="gloss">Review pack</span>Security</h1>
+  <p class="subtitle">Pre-written answers to what a security team asks before approving a scan. Every claim names the file or test that backs it — and if a claim and the code disagree, the code is right and this page is a bug.</p>
+  <dl class="docctl">
+    <div><dt>Egress</dt><dd>One direction, HTTPS, TLS 1.2 minimum</dd></div>
+    <div><dt>Ingress</dt><dd>None</dd></div>
+    <div><dt>Host agent</dt><dd>None</dd></div>
+    <div><dt>Write permission</dt><dd>None, denied three ways</dd></div>
+    <div><dt>Removal</dt><dd><code>terraform destroy</code></dd></div>
+  </dl>
+</header>
+
+<!-- 1 -->
+<section class="sec">
+  <span class="num">§ 01</span>
+  <h2>Data flow</h2>
+
+  <div class="flow" role="img" aria-label="Data flow diagram. Inside your AWS account: VPC Flow Logs, CloudTrail, read-only IAM, and optional ALB logs feed a collector running under a read-only role with no host agent and no compute created. It sends metadata only — addresses, ports, byte counts, timings, tags, policy actions — one way to the Custos control plane, where the classifier, register, and report run. Prompts, completions, request bodies, URLs, user agents, and client addresses never leave.">YOUR AWS ACCOUNT                             │  CUSTOS
+                                             │
+  VPC Flow Logs ──┐                          │
+  CloudTrail ─────┤                          │
+  IAM (read) ─────┼──▶ collector ────────────┼──▶ control plane
+  ALB logs ───────┘    read-only role        │      classifier
+   (optional)          no host agent         │      register
+                       no compute created    │      report
+                                             │
+                       ── metadata only ──▶  │
+                       addresses, ports,     │
+                       byte counts, timings, │
+                       tags, policy actions  │
+                                             │
+                       ─── never leaves ───  │
+                       prompts, completions, │
+                       request bodies, URLs, │
+                       user agents, client   │
+                       addresses             │</div>
+
+  <p><strong>Egress:</strong> one direction, HTTPS, TLS 1.2 minimum, to an
+  endpoint you configure. <strong>Ingress:</strong> none — nothing connects into
+  your account. <strong>Residency:</strong> control plane region is contractual
+  rather than technical. Ask.</p>
+</section>
+
+<!-- 2 -->
+<section class="sec" id="invariants">
+  <span class="num">§ 02</span>
+  <h2>The five invariants</h2>
+
+  <p>Five, all testable, none relaxable for a feature request. SEC-01 through
+  SEC-15 belong to the Checkpoint and are specified elsewhere; SEC-16 through
+  SEC-18 are the Register's, and SEC-19 and SEC-20 arose from building the
+  collector.</p>
+
+  <dl class="inv">
+    <dt>SEC-16</dt>
+    <dd><strong>Discovery is read-only.</strong> The collector's credential grants
+      no write permission to any customer resource, and the collector contains no
+      code path that mutates customer infrastructure.
+      <span class="by">Enforced by: internal/awsread wraps every AWS client and exposes only read operations. TestNoMutatingAPIs fails if any call whose verb is not on the read allowlist appears in the call graph.</span></dd>
+
+    <dt>SEC-17</dt>
+    <dd><strong>Discovered records confer no authority.</strong> A discovered agent
+      cannot execute through the Checkpoint until an operator explicitly grants
+      imprimatur. Without this, traffic that imitates the agent signature would
+      auto-provision itself a credential — the register would become a
+      self-service credential issuer for anything that could produce a burst of
+      model calls.
+      <span class="by">Enforced by: status reaches sanctioned only through grant_imprimatur(), which requires an operator identity. test_sec17_* asserts no classifier confidence, however high, produces a sanctioned record.</span></dd>
+
+    <dt>SEC-18</dt>
+    <dd><strong>Metadata only.</strong> Identities, endpoints, byte counts,
+      timings, and protocol fingerprints leave the customer account. Prompts,
+      completions, and payload bodies never do, under any configuration.
+      <span class="by">Enforced structurally: the wire types have no field capable of holding a payload, and the shipper accepts only those types. TestWireTypesCarryNoPayload walks the structs by reflection and fails on any unrecognised field.</span></dd>
+
+    <dt>SEC-19</dt>
+    <dd><strong>The collector is inert without an explicit destination.</strong> It
+      performs no network egress until configured with a control plane endpoint
+      and a customer-held credential. Run with no configuration, it reads nothing
+      and sends nothing. This exists so that “what happens if someone runs this
+      by accident” has a boring answer during review.
+      <span class="by">Enforced by: TestZeroConfigIsInert, TestRunningByAccidentDoesNothing.</span></dd>
+
+    <dt>SEC-20</dt>
+    <dd><strong>Findings are attributable or they are not shipped.</strong> Any
+      register entry that cannot be attributed to at least a resource tag is
+      emitted as an unattributed candidate in a separate section, never mixed
+      into the owned findings. This is an invariant rather than a preference
+      because the failure it prevents is commercial, and commercial failures are
+      the ones that get rationalised away.
+      <span class="by">Enforced by: test_sec20_unattributed_segregated.</span></dd>
+  </dl>
+
+  <div class="note">
+    <span class="tag">Why this mechanism rather than a policy</span>
+    <p>Each invariant names the test that enforces it, and they are written so
+    that breaking one requires deliberately editing a test named after the thing
+    you are breaking. A change that removes or weakens one of those tests is a
+    change to the invariant, not a refactor — and the repository's contributing
+    guide says so in as many words.</p>
+  </div>
+</section>
+
+<!-- 3 -->
+<section class="sec">
+  <span class="num">§ 03</span>
+  <h2>The questions, answered</h2>
+
+  <div class="qa">
+
+    <h3>What data leaves our account?</h3>
+    <p>The structures in <code>collector/internal/wire/wire.go</code> and nothing
+    else. Network metadata (addresses, ports, byte and packet counts, timings,
+    TCP flags), identity metadata (principal ARNs, IAM paths, role tags, attached
+    policy actions), and optionally load balancer timing and size.</p>
+    <p class="backed"><span class="k">Backed by</span> TestWireTypesCarryNoPayload
+    walks every wire type by reflection against a field allowlist. Adding a field
+    requires editing a test named after the invariant it breaks.</p>
+
+    <h3>Do you read prompts or model responses?</h3>
+    <p class="answer-no">No, and the collector is not capable of it.</p>
+    <p><code>ship.Send</code> takes a <code>wire.Batch</code> and nothing else —
+    no <code>io.Reader</code>, no <code>[]byte</code>, no generic payload — and no
+    type in <code>wire</code> has a field that could hold one.</p>
+    <pre><code><span class="c">// the shipper's only entry point</span>
+func (s *Shipper) Send(ctx context.Context, batch wire.Batch) error</code></pre>
+    <p>This is deliberately not a redaction step. A redaction step is a filter,
+    filters have bugs and configuration, and you are right not to trust one.
+    There is no path from a payload byte to the network.</p>
+    <p class="backed"><span class="k">Backed by</span> internal/wire/wire.go,
+    internal/ship/ship.go, TestNoPayloadShapedFieldNames.</p>
+
+    <h3 id="alb">Your load balancer logs contain URLs and user agents. What do you take?</h3>
+    <p>Four fields per line: the timestamp, the target address, and the two byte
+    counts. Nothing else.</p>
+    <p>An ALB access log line carries the request URL and query string, the user
+    agent, the client IP and port, TLS details, and trace identifiers. All of it
+    describes the people using your system rather than the software, and none of
+    it reaches us — it is discarded at parse time and has nowhere to go
+    afterwards, because <code>wire.InboundRequest</code> has no field that could
+    hold it.</p>
+    <p>We take these four because correlation needs exactly them: whether a burst
+    of model traffic was answering something a human asked for. Nothing more is
+    required, so nothing more is taken.</p>
+    <p class="backed"><span class="k">Backed by</span>
+    TestSEC18NothingSensitiveSurvivesParsing, which parses a realistic line whose
+    query string contains an email address and an API key, and asserts that
+    neither — nor the user agent, path, client address, or trace ID — appears
+    anywhere in the parsed record.</p>
+
+    <h3>Can the collector change anything in our account?</h3>
+    <p class="answer-no">No, enforced in three places independently.</p>
+    <ol>
+      <li>The IAM role grants no write permission.</li>
+      <li>A second policy explicitly denies every mutating action, including
+      <code>logs:StartQuery</code>, which creates a billable resource.</li>
+      <li><code>internal/awsread</code> refuses any operation whose verb is not on
+      a read allowlist, before a request is constructed.</li>
+    </ol>
+    <p>The third exists so the claim survives the first two being widened by
+    mistake.</p>
+    <p class="backed"><span class="k">Backed by</span> deploy/terraform/iam.tf,
+    TestNoMutatingAPIs.</p>
+
+    <h3>What if it runs somewhere it should not?</h3>
+    <p>Nothing happens. With no endpoint and no credential configured it exits
+    immediately having read nothing and sent nothing.</p>
+    <p class="backed"><span class="k">Backed by</span> TestZeroConfigIsInert,
+    TestRunningByAccidentDoesNothing.</p>
+
+    <h3>Can we see exactly what would be sent before approving it?</h3>
+    <p>Yes. <code>CUSTOS_DRY_RUN=1</code> prints the literal batch — the actual
+    bytes, not a summary — and sends nothing. <code>--explain</code> prints what
+    the binary reads, sends, and structurally cannot do. We recommend doing this
+    first.</p>
+
+    <h3>Do you install an agent on our hosts?</h3>
+    <p class="answer-no">No.</p>
+    <p>There is no host agent, no sidecar, no kernel module, no eBPF. The
+    collector reads logs your account already produces, and it can run entirely
+    outside your infrastructure if you prefer.</p>
+
+    <h3>What is the blast radius if you are breached?</h3>
+    <p>We would hold read-only metadata about your infrastructure: which
+    principals exist, what they talk to, and what their policies permit. No
+    credentials, no data, no payloads, and no ability to act in your account —
+    the role requires an external ID and grants nothing but reads.</p>
+    <p>The honest framing: this is inventory data about your software. It would
+    be useful to an attacker who was already inside, and it would not get them
+    inside. The collector cannot be pointed at an account whose operator lacks
+    legitimate access to it.</p>
+
+    <h3>Who can access our data internally?</h3>
+    <p>Ask us, and hold us to the answer in the MSA. This is a process question
+    and this page is about code; anyone who answers it with a code reference is
+    avoiding it.</p>
+
+    <h3>Are you SOC 2 compliant?</h3>
+    <p class="answer-no qualified">Not yet.</p>
+    <p>Type I evidence collection needs three months of observation and is
+    planned to run in parallel with a later phase. It gates enterprise contracts,
+    not pilots.</p>
+    <p>If SOC 2 is a hard requirement for a non-production read-only scan, say so
+    now rather than after two weeks of process — it is a reasonable requirement
+    and we would rather know.</p>
+
+    <h3>What happens when we want you gone?</h3>
+    <pre><code>terraform destroy</code></pre>
+    <p>There is nothing else — no agent on any host, no resource in any VPC,
+    nothing left behind.</p>
+
+  </div>
+</section>
+
+<!-- 4 -->
+<section class="sec">
+  <span class="num">§ 04</span>
+  <h2>What we do not claim</h2>
+
+  <p>Stated here so it is never claimed on a call either.</p>
+
+  <ul>
+    <li><strong>We do not judge whether an action is safe.</strong> The classifier
+    decides whether a workload is an agent. It has no opinion about whether that
+    is good.</li>
+    <li><strong>We do not detect compromised agents.</strong> Behavioural drift
+    detection is a planned Register capability and is not built. Anything
+    described as detection today would be a lie.</li>
+    <li><strong>Blast radius is what a credential permits, not what the agent
+    did.</strong> It is read from IAM policy, and we label it that way.</li>
+    <li><strong>Spend figures are estimates from byte counts.</strong> Good for
+    ranking agents against each other. Not reconcilable against an invoice.</li>
+    <li><strong>Our endpoint catalogue goes stale.</strong> Its revision is
+    stamped in every report. An agent using only a provider we do not yet
+    recognise will not appear.</li>
+  </ul>
+</section>
+
+<!-- 5 -->
+<section class="sec">
+  <span class="num">§ 05</span>
+  <h2>The position this rests on</h2>
+
+  <p class="thesis">Custos inventories <strong>software</strong>, not people.</p>
+
+  <p>Every record describes a machine principal, an endpoint, and a byte count.
+  Prompts, completions, and payload bodies never leave the customer account under
+  any configuration, and the collector cannot be pointed at an environment its
+  operator lacks legitimate access to.</p>
+
+  <p>Those two constraints are what make the ethical position hold, which is why
+  they are invariants enforced structurally in the collector rather than by
+  policy. They are not traded away for a feature.</p>
+</section>
+
+<a class="nextpage" href="collector.html">
+  <span class="label">Next</span>
+  <span class="t">The collector</span>
+  <span class="d">The only component that runs in your account. Apache-2.0, one
+  static binary, and three commands that show you exactly what it would send.</span>
+</a>
+
+<footer class="colophon">
+  <div class="cols">
+    <div>
+      <p class="label">Product</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="report.html">The scan report</a></li>
+        <li><a href="evidence.html">Evidence</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="label">For reviewers</p>
+      <ul>
+        <li><a href="security.html">Security review pack</a></li>
+        <li><a href="security.html#invariants">The five invariants</a></li>
+        <li><a href="collector.html">Collector</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="label">Source</p>
+      <ul>
+        <li><a href="https://github.com/EzraStone/Custos/blob/main/docs/SECURITY-REVIEW.md">Review pack, in the repo</a></li>
+        <li><a href="https://github.com/EzraStone/Custos/blob/main/docs/SECURITY-INVARIANTS.md">Invariants</a></li>
+        <li><a href="https://github.com/EzraStone/Custos/tree/main/collector/internal/wire">internal/wire</a></li>
+      </ul>
+    </div>
+  </div>
+  <p>If a claim on this page and the code disagree, the code is right and this
+  page is a bug.</p>
+</footer>
+
+<div class="pagefoot"></div>
+</main>
+</body>
+</html>

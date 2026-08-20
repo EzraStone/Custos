@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evidence — Custos</title>
+<meta name="description" content="The G0 result in full: an agent separates from a chatbot backend on flow log metadata alone, with a 0.26 margin, at both aggregation intervals. Including the two signals that were measured and rejected.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/custos.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<nav class="topbar" aria-label="Primary">
+  <div class="sheet">
+    <a class="brand" href="index.html">
+      <svg class="seal" viewBox="0 0 32 32" fill="none" stroke="currentColor" aria-hidden="true">
+        <circle cx="16" cy="16" r="14.25" stroke-width="1.5"/>
+        <circle cx="16" cy="16" r="11" stroke-width="0.75" opacity=".55"/>
+        <path d="M16 4.5v23" stroke-width="1.5"/>
+        <path d="M6.5 16h4.25M21.25 16h4.25" stroke-width="1.25" opacity=".8"/>
+      </svg>
+      Custos
+    </a>
+    <div class="navlinks">
+      <a href="index.html">Overview</a>
+      <a href="evidence.html" aria-current="page">Evidence</a>
+      <a href="report.html">The report</a>
+      <a href="security.html">Security</a>
+      <a href="collector.html">Collector</a>
+      <a href="https://github.com/EzraStone/Custos">Source</a>
+    </div>
+  </div>
+</nav>
+
+<main id="main" class="sheet">
+
+<header class="masthead">
+  <h1 class="wordmark"><span class="gloss">Gate G0 · the load-bearing assumption</span>The evidence</h1>
+  <p class="subtitle">Whether an agent separates from a chatbot backend on network metadata alone — after that metadata has been degraded the way real flow logs degrade it.</p>
+  <dl class="docctl">
+    <div><dt>Verdict</dt><dd>Pass</dd></div>
+    <div><dt>Margin</dt><dd>+0.260</dd></div>
+    <div><dt>Recall</dt><dd>1.00</dd></div>
+    <div><dt>Precision</dt><dd>1.00</dd></div>
+    <div><dt>Reproduce</dt><dd><code>make experiment</code></dd></div>
+  </dl>
+</header>
+
+<!-- 1 -->
+<section class="sec">
+  <span class="num">§ 01</span>
+  <h2>The question, and the harder one that replaced it</h2>
+
+  <p>The specification asked whether the burst signature separates an agent from
+  a chatbot using flow logs alone. That question cannot be answered honestly
+  without asking a strictly harder one:</p>
+
+  <p class="thesis">Does an agent separate from a chatbot using flow logs alone,
+  <em>after those flow logs have been degraded by aggregation and TLS connection
+  reuse the way real VPC Flow Logs degrade them?</em></p>
+
+  <p>The specification budgeted two weeks and an AWS test environment for this
+  gate. Answering the harder version in software first means the AWS environment
+  gets built to <em>confirm</em> a result rather than to search for one — and had
+  the result been a fail, that would have been known in a day rather than a
+  fortnight.</p>
+
+  <div class="stamp">
+    <span class="verdict">G0 PASS</span>
+    <p>Separation margin +0.26, full recall, zero false positives, identical at
+    both flow log aggregation intervals.</p>
+  </div>
+
+  <p>CI runs the experiment on every push and fails the build if it stops
+  holding. It is the one result the whole company is contingent on, so it is not
+  allowed to regress quietly between commits.</p>
+</section>
+
+<!-- 2 -->
+<section class="sec">
+  <span class="num">§ 02</span>
+  <h2>Result</h2>
+
+  <div class="tw">
+    <table>
+      <caption>Four configurations, one corpus</caption>
+      <thead>
+        <tr>
+          <th scope="col">Configuration</th>
+          <th scope="col" class="num">Recall</th>
+          <th scope="col" class="num">Precision</th>
+          <th scope="col" class="num">Margin</th>
+          <th scope="col" class="num">Flow records</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>60s aggregation, with ALB logs</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">+0.260</td><td class="num">33,042</td></tr>
+        <tr><td>600s aggregation, with ALB logs</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">+0.260</td><td class="num">16,240</td></tr>
+        <tr><td>60s aggregation, no ALB logs</td><td class="num">0.60</td><td class="num">1.00</td><td class="num">+0.293</td><td class="num">33,042</td></tr>
+        <tr><td>600s aggregation, no ALB logs</td><td class="num">0.60</td><td class="num">1.00</td><td class="num">+0.290</td><td class="num">16,240</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Every agent scores above 0.95. Every clear negative scores below 0.31. The
+  two deliberately ambiguous workloads land at 0.52 and 0.69 — inside the review
+  band, which is where SEC-17 requires them to be rather than being decided by a
+  classifier.</p>
+
+  <div class="tw">
+    <table>
+      <caption>Per workload, 600s aggregation with ALB logs</caption>
+      <thead>
+        <tr>
+          <th scope="col">Workload</th>
+          <th scope="col">Truth</th>
+          <th scope="col" class="num">Confidence</th>
+          <th scope="col">Disposition</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="is-agent"><td class="mono">nightly-ops-agent</td><td>agent</td><td class="num">0.996</td><td>agent</td></tr>
+        <tr class="is-agent"><td class="mono">autofix-coding-agent</td><td>agent</td><td class="num">0.996</td><td>agent</td></tr>
+        <tr class="is-agent"><td class="mono">support-triage-agent</td><td>agent</td><td class="num">0.994</td><td>agent</td></tr>
+        <tr class="is-agent"><td class="mono">inventory-reconciler</td><td>agent</td><td class="num">0.957</td><td>agent</td></tr>
+        <tr class="is-agent is-cut"><td class="mono">finance-close-agent</td><td>agent</td><td class="num">0.951</td><td>agent</td></tr>
+        <tr><td class="mono">nightly-doc-summariser</td><td>not agent</td><td class="num">0.691</td><td>review</td></tr>
+        <tr><td class="mono">ci-test-generator</td><td>not agent</td><td class="num">0.515</td><td>review</td></tr>
+        <tr><td class="mono">kb-assistant</td><td>not agent</td><td class="num">0.302</td><td>not agent</td></tr>
+        <tr><td class="mono">sales-copilot-web</td><td>not agent</td><td class="num">0.086</td><td>not agent</td></tr>
+        <tr><td class="mono">docs-chat-backend</td><td>not agent</td><td class="num">0.060</td><td>not agent</td></tr>
+        <tr><td class="mono">search-embedder</td><td>not agent</td><td class="num">0.053</td><td>not agent</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="muted">The dashed rule is the separation. The gap between the lowest
+  agent and the highest negative is the 0.26.</p>
+</section>
+
+<!-- 3 -->
+<section class="sec">
+  <span class="num">§ 03</span>
+  <h2>Finding 1 — the specification's headline signal does not exist</h2>
+
+  <p>The specification rated this <strong>Strong</strong>:</p>
+
+  <blockquote class="thesis">Burst of sequential model calls, monotonically
+  growing payload size, sub-second gaps — source: flow log timing and byte
+  counts.</blockquote>
+
+  <p>It is not implementable. Two facts compose to destroy it:</p>
+
+  <ol>
+    <li>VPC Flow Logs aggregate per 5-tuple over a fixed interval — 60 seconds by
+    default, 600 in the cheaper configuration a cost-conscious platform team will
+    already have set.</li>
+    <li>Every model provider SDK pools TCP connections, with a keep-alive around
+    ninety seconds.</li>
+  </ol>
+
+  <p>So twenty sequential model calls over one pooled connection inside one
+  aggregation window produce <strong>one</strong> flow record, with the byte
+  counts summed and the timing gone. Measured on the corpus's busiest agent at a
+  60-second interval: <strong>fewer than 0.5 flow records per model
+  call</strong>. The individual calls are not in the data at any interval a
+  customer will actually have configured.</p>
+
+  <p>This is the single most important thing the experiment established, and it
+  would have consumed most of the two-week budget to discover by packet
+  capture.</p>
+</section>
+
+<!-- 4 -->
+<section class="sec">
+  <span class="num">§ 04</span>
+  <h2>Finding 2 — what replaces it is better</h2>
+
+  <p>Cumulative <strong>egress-to-ingress asymmetry</strong> against model
+  endpoints.</p>
+
+  <p>An agent resends its entire accumulated transcript on every step. Over an
+  episode of <em>n</em> steps, bytes sent grow as <em>n</em>² while bytes
+  received grow as <em>n</em>. A chatbot sends one prompt and receives one
+  answer, so both grow linearly with a roughly constant ratio.</p>
+
+  <div class="tw">
+    <table>
+      <thead>
+        <tr><th scope="col">Workload</th><th scope="col" class="num">Egress ratio</th><th scope="col">Truth</th></tr>
+      </thead>
+      <tbody>
+        <tr class="is-agent"><td class="mono">autofix-coding-agent</td><td class="num">34.5</td><td>agent</td></tr>
+        <tr class="is-agent"><td class="mono">nightly-ops-agent</td><td class="num">15.8</td><td>agent</td></tr>
+        <tr class="is-agent"><td class="mono">support-triage-agent</td><td class="num">13.5</td><td>agent</td></tr>
+        <tr class="is-agent"><td class="mono">inventory-reconciler</td><td class="num">8.9</td><td>agent</td></tr>
+        <tr class="is-agent is-cut"><td class="mono">finance-close-agent</td><td class="num">7.9</td><td>agent</td></tr>
+        <tr><td class="mono">nightly-doc-summariser</td><td class="num">6.5</td><td>not agent</td></tr>
+        <tr><td class="mono">sales-copilot-web</td><td class="num">4.7</td><td>not agent</td></tr>
+        <tr><td class="mono">ci-test-generator</td><td class="num">3.0</td><td>not agent</td></tr>
+        <tr><td class="mono">docs-chat-backend</td><td class="num">1.7</td><td>not agent</td></tr>
+        <tr><td class="mono">kb-assistant</td><td class="num">0.8</td><td>not agent</td></tr>
+        <tr><td class="mono">search-embedder</td><td class="num">0.1</td><td>not agent</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Clean separation at 7.9 against 6.5 — narrow enough that it is weighted
+  alongside other signals rather than used as a threshold. But it is a property
+  of <strong>summed bytes</strong>, so aggregation cannot touch it. That is why
+  the result is identical at 60 and 600 seconds.</p>
+
+  <h3>The full signal set</h3>
+
+  <p>Five signals, each carrying a weight and a sentence a human can argue with.
+  A signal that improves accuracy but cannot be explained in one sentence to the
+  engineer who owns the workload is not worth having — every finding gets
+  challenged by that person, and a confidence score loses that argument.</p>
+
+  <div class="tw">
+    <table>
+      <thead>
+        <tr><th scope="col">Signal</th><th scope="col" class="num">Weight</th><th scope="col">What it observes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="mono">inbound_decoupling</td><td class="num">2.6</td><td>Model traffic in intervals where no request arrived at the load balancer. This workload decides on its own to call a model.</td></tr>
+        <tr><td class="mono">egress_asymmetry</td><td class="num">2.4</td><td>Bytes sent to model endpoints against bytes received back.</td></tr>
+        <tr><td class="mono">tool_interleave</td><td class="num">2.0</td><td>Model traffic interleaved with calls to internal destinations — the shape of a tool-calling loop.</td></tr>
+        <tr><td class="mono">mcp_fingerprint</td><td class="num">1.6</td><td>Traffic to an MCP server.</td></tr>
+        <tr><td class="mono">offhours_activity</td><td class="num">0.3</td><td>Model traffic outside working hours.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Against a bias of &minus;3.2: a prior against calling something an agent.
+  Most principals in an AWS account are not agents, and a classifier that forgets
+  that generates a report nobody finishes reading.</p>
+
+  <div class="note">
+    <span class="tag">What the classifier is forbidden from reading</span>
+    <p>Feature extraction is structurally prevented from reading principal
+    names, enforced by parsing the module source rather than by convention. Real
+    IAM roles are often named <code>role/something-agent</code>, and a classifier
+    reading that would score well on this corpus while learning nothing.</p>
+  </div>
+</section>
+
+<!-- 5 -->
+<section class="sec">
+  <span class="num">§ 05</span>
+  <h2>Finding 3 — the classifier is invariant to aggregation interval</h2>
+
+  <p>Identical recall, precision, and margin at 60 and 600 seconds.</p>
+
+  <p>This is a commercial result more than a technical one. Had accuracy
+  depended on 60-second aggregation, onboarding would include "reconfigure flow
+  logs on your production VPCs" — a change request against production, a week of
+  delay per customer, and a reason for a platform lead to say no. It does
+  not.</p>
+</section>
+
+<!-- 6 -->
+<section class="sec">
+  <span class="num">§ 06</span>
+  <h2>Finding 4 — what load balancer logs are worth, quantified</h2>
+
+  <p>Without ALB access logs, recall falls from 100% to 60%. Precision stays at
+  100%, and both missed agents land in the review band rather than being
+  dropped.</p>
+
+  <p>The two that degrade are the low-volume and short-episode agents —
+  including <code>finance-close-agent</code>, which runs three times a day and
+  holds write access to billing.</p>
+
+  <p class="thesis">The agent that matters most is the one that degrades
+  first.</p>
+
+  <p>That gives the onboarding ask a precise justification rather than a vague
+  one: <em>"Also give us load balancer access logs. Without them your most
+  dangerous agent shows up as a maybe instead of a finding."</em> Four fields are
+  taken from those logs and nothing else — see
+  <a href="security.html#alb">what we take from an access log line</a>.</p>
+</section>
+
+<!-- 7 -->
+<section class="sec">
+  <span class="num">§ 07</span>
+  <h2>Finding 5 — two expected signals were measured and rejected</h2>
+
+  <p>Both are recorded in the source under <code>REJECTED</code>, with the
+  numbers that killed them, because both will be proposed again by someone who
+  has read the specification but not the data.</p>
+
+  <h3>Context growth</h3>
+  <p>The specification's "monotonically growing payload size". Rejected twice
+  over. It does not survive 600-second aggregation at all — every workload
+  measures about 1.0. And where it <em>is</em> measurable, at 60 seconds, it
+  fires hardest on the hardest negative: the multi-turn chatbot scores
+  <strong>5.67, above every genuine agent</strong>, because a multi-turn
+  conversation accumulates context exactly the way an agent trajectory does.
+  Using it would have cost precision on the workload type customers have most
+  of.</p>
+
+  <h3>Episode persistence</h3>
+  <p>Length of a run of model-active intervals. At 600 seconds it degenerates
+  into a proxy for call volume: the embedding service runs longer than every
+  agent in the corpus. A signal that inverts under a configuration the customer
+  chooses is worse than no signal, so it was dropped rather than weighted
+  low.</p>
+</section>
+
+<!-- 8 -->
+<section class="sec">
+  <span class="num">§ 08</span>
+  <h2>Finding 6 — call volume carries no signal at all</h2>
+
+  <p>The highest-volume workload in the corpus is a negative: an embedding
+  service making 13,606 model calls. The lowest-volume agent makes 55.</p>
+
+  <p>Any classifier that ranks by activity finds the agents nobody was worried
+  about and misses the one they should be.</p>
+</section>
+
+<!-- 9 -->
+<section class="sec">
+  <span class="num">§ 09</span>
+  <h2>Why this should be believed, and where it should not</h2>
+
+  <h3>The corpus is adversarial by construction</h3>
+  <p>Four negatives exist specifically to defeat naive signals: a multi-turn
+  chatbot that accumulates context like an agent, a RAG assistant that
+  interleaves tool calls like an agent, a batch job with no inbound requests, and
+  a CI pipeline producing exactly the "burst of sequential model calls" the
+  specification leads with. Tests assert those properties hold, so the corpus
+  cannot quietly become easy and turn a passing gate into an artefact.</p>
+
+  <h3>The weights were fitted on this corpus</h3>
+  <p>That is the honest limitation. What this establishes is that a separating
+  signal <em>exists</em> and survives aggregation, and which features carry it.
+  It does not establish that these specific weights generalise. The first real
+  capture will move them, and the thresholds sit in measured empty space rather
+  than at round numbers so there is room for that.</p>
+
+  <h3>Synthetic traffic embeds assumptions</h3>
+  <p>The byte model assumes roughly four bytes per token, standard MTU, and
+  typical SDK pooling. Those are defensible and they are still assumptions. The
+  AWS test environment is still worth building — its job is now to confirm the
+  byte ratios hold against real provider endpoints, which is a one-week task
+  against a stated prediction rather than a two-week search.</p>
+
+  <div class="note risk">
+    <span class="tag">Read this before quoting any number on this page</span>
+    <p>No scan has run against a real account. Every figure here comes from
+    synthetic telemetry generated by the A0 harness, and it is labelled that way
+    in the source, in the sample report, and here.</p>
+  </div>
+
+  <h3>Reproduce it</h3>
+  <pre><code><span class="c"># virtualenv and both Python packages</span>
+make setup
+
+<span class="c"># runs the sweep, prints the G0 verdict, writes a sample report</span>
+make experiment</code></pre>
+</section>
+
+<a class="nextpage" href="report.html">
+  <span class="label">Next</span>
+  <span class="t">The report</span>
+  <span class="d">What a customer is actually handed: findings ordered by what each
+  agent could destroy, a review band, and a limitations section that is part of
+  the document.</span>
+</a>
+
+<footer class="colophon">
+  <div class="cols">
+    <div>
+      <p class="label">Product</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="report.html">The scan report</a></li>
+        <li><a href="evidence.html">Evidence</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="label">For reviewers</p>
+      <ul>
+        <li><a href="security.html">Security review pack</a></li>
+        <li><a href="security.html#invariants">The five invariants</a></li>
+        <li><a href="collector.html">Collector</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="label">Source</p>
+      <ul>
+        <li><a href="https://github.com/EzraStone/Custos">Repository</a></li>
+        <li><a href="https://github.com/EzraStone/Custos/blob/main/docs/A0-FINDINGS.md">A0 findings</a></li>
+        <li><a href="https://github.com/EzraStone/Custos/blob/main/controlplane/custos/classify/signals.py">signals.py</a></li>
+      </ul>
+    </div>
+  </div>
+  <p>Custos inventories software, not people. Every record describes a machine
+  principal, an endpoint, and a byte count.</p>
+</footer>
+
+<div class="pagefoot"></div>
+</main>
+</body>
+</html>

@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Custos — the register of every AI agent running in a company</title>
+<meta name="description" content="Custos discovers the AI agents running in a cloud account — including the ones nobody enrolled — resolves each to its owner and its blast radius, and reads no payload byte to do it.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/custos.css">
+<meta property="og:title" content="Custos — the register of every AI agent running in a company">
+<meta property="og:description" content="Discovery of unenrolled AI agents from network and identity metadata alone. Gate G0 passed: 0.26 separation margin, full recall, zero false positives.">
+<meta property="og:type" content="website">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<nav class="topbar" aria-label="Primary">
+  <div class="sheet">
+    <a class="brand" href="index.html">
+      <svg class="seal" viewBox="0 0 32 32" fill="none" stroke="currentColor" aria-hidden="true">
+        <circle cx="16" cy="16" r="14.25" stroke-width="1.5"/>
+        <circle cx="16" cy="16" r="11" stroke-width="0.75" opacity=".55"/>
+        <path d="M16 4.5v23" stroke-width="1.5"/>
+        <path d="M6.5 16h4.25M21.25 16h4.25" stroke-width="1.25" opacity=".8"/>
+      </svg>
+      Custos
+    </a>
+    <div class="navlinks">
+      <a href="index.html" aria-current="page">Overview</a>
+      <a href="evidence.html">Evidence</a>
+      <a href="report.html">The report</a>
+      <a href="security.html">Security</a>
+      <a href="collector.html">Collector</a>
+      <a href="https://github.com/EzraStone/Custos">Source</a>
+    </div>
+  </div>
+</nav>
+
+<main id="main" class="sheet">
+
+<header class="masthead">
+  <h1 class="wordmark"><span class="gloss">Agent discovery · Gate G0 passed</span>Custos</h1>
+  <p class="subtitle">The register of every AI agent running in a company, and the checkpoint that governs what those agents are permitted to do.</p>
+  <dl class="docctl">
+    <div><dt>Phase</dt><dd>A0 complete</dd></div>
+    <div><dt>Cloud</dt><dd>AWS</dd></div>
+    <div><dt>Collector</dt><dd>Open source, Apache-2.0</dd></div>
+    <div><dt>In customer account</dt><dd>One read-only IAM role</dd></div>
+    <div><dt>Now seeking</dt><dd>Design partners</dd></div>
+  </dl>
+</header>
+
+<!-- 1 -->
+<section class="sec">
+  <span class="num">§ 01</span>
+  <h2>Nobody can list the agents they are already running</h2>
+
+  <p>Companies are running autonomous agents that hold credentials, call tools,
+  and write to production systems without a human reading each action. They were
+  not procured. They were built by a team that needed one, given a role, and
+  deployed.</p>
+
+  <p>Identity systems decide <em>which agents may authenticate</em>. Nobody
+  decides <em>which actions are permitted</em> — and at most companies, nobody
+  can say which agents are running at all.</p>
+
+  <p class="thesis">Every tool in this category is opt-in. Your coverage equals
+  the list you already had, and the list you already had is the problem.</p>
+
+  <p>Eval and tracing platforms instrument agents someone chose to instrument.
+  Runtime AI security blocks attacks against agents someone chose to protect.
+  Tenant registries see agents inside the tenant, not the ones running as an IAM
+  role in a VPC. Each of those is useful. None of them answers the first
+  question a security lead actually has.</p>
+</section>
+
+<!-- 2 -->
+<section class="sec">
+  <span class="num">§ 02</span>
+  <h2>See, attribute, stop</h2>
+
+  <p>Three capabilities in a strict dependency order, and the order runs one
+  way. Enforcement without discovery governs an empty register — it can only
+  reach the agents that were already known, reviewed, and least likely to be
+  the problem. Discovery without enforcement is a report read once and filed.</p>
+
+  <div class="verbs">
+    <article class="verb">
+      <span class="ord">01 —</span>
+      <h3>See</h3>
+      <p>Find the agents running in a cloud account, including the ones nobody
+      enrolled, from network and identity metadata alone. No host agent, no
+      sidecar, no SDK to adopt, no code change in any workload.</p>
+      <span class="state">Built · running end to end</span>
+    </article>
+    <article class="verb">
+      <span class="ord">02 —</span>
+      <h3>Attribute</h3>
+      <p>Resolve each finding to its owner, its credential, and what that
+      credential permits. A finding nobody can route is noise, and noise gets
+      the tool uninstalled.</p>
+      <span class="state">Built · running end to end</span>
+    </article>
+    <article class="verb pending">
+      <span class="ord">03 —</span>
+      <h3>Stop</h3>
+      <p>Gate consequential actions against deterministic policy the customer
+      authored, with a signed receipt for every decision — allow, deny, or hold
+      for a human.</p>
+      <span class="state">Not started, deliberately</span>
+    </article>
+  </div>
+
+  <div class="note">
+    <span class="tag">Why the third one is empty</span>
+    <p>The Checkpoint is not started until a paying customer asks for it by
+    name. It is the half that is worth more, and it is also the half that is
+    unsellable until the register it governs has something in it. Building it
+    first would mean asking a customer to enumerate their agents — which is the
+    exact thing they cannot do.</p>
+  </div>
+</section>
+
+<!-- 3 -->
+<section class="sec">
+  <span class="num">§ 03</span>
+  <h2>What a scan produces</h2>
+
+  <p>One document, delivered without an integration. It names each agent, who
+  owns it, what its credential permits, and the sentences behind the finding —
+  because the engineer who owns the workload is going to dispute it, and they
+  should be arguing with a byte ratio rather than with a confidence score.</p>
+
+  <dl class="figures">
+    <div><dt>Principals seen</dt><dd>11</dd></div>
+    <div><dt>Agents found</dt><dd>5<span class="sub">none of them enrolled</span></dd></div>
+    <div><dt>Write-capable</dt><dd>4<span class="sub">one can destroy</span></dd></div>
+    <div><dt>Sent for review</dt><dd>2<span class="sub">discovery may not decide alone</span></dd></div>
+    <div><dt>Est. spend</dt><dd>$3,115<span class="sub">per month, ranking only</span></dd></div>
+  </dl>
+
+  <p class="label">Two findings from that report, verbatim</p>
+
+  <div class="findings">
+    <article class="finding destructive">
+      <header>
+        <h3>ops-automation</h3>
+        <span class="radius">can destroy</span>
+      </header>
+      <dl class="meta">
+        <div><dt>Owner</dt><dd>platform</dd></div>
+        <div><dt>Principal</dt><dd class="mono">role/ops-automation</dd></div>
+        <div><dt>Compute</dt><dd>EKS</dd></div>
+        <div><dt>Confidence</dt><dd>1.00</dd></div>
+        <div><dt>Est. spend</dt><dd>$40/mo</dd></div>
+        <div><dt>Status</dt><dd>discovered</dd></div>
+      </dl>
+      <details open>
+        <summary>Why this was flagged</summary>
+        <ul class="evidence">
+          <li>100% of the intervals containing model traffic had no request
+          arriving at the load balancer. This workload decides on its own to
+          call a model.</li>
+          <li>Sent 5.1MB to model endpoints and received 333.3KB back, a ratio
+          of 15.8:1. An agent resends its accumulated transcript on every step;
+          a chatbot sends one prompt per answer.</li>
+          <li>Model traffic was interleaved with calls to 3 internal
+          destinations in 100% of active intervals — the shape of a tool-calling
+          loop.</li>
+          <li>Traffic to an MCP server in 21 intervals.</li>
+          <li>100% of model traffic fell outside working hours.</li>
+        </ul>
+      </details>
+    </article>
+
+    <article class="finding write">
+      <header>
+        <h3>finance-close</h3>
+        <span class="radius">can write</span>
+      </header>
+      <dl class="meta">
+        <div><dt>Owner</dt><dd>finance</dd></div>
+        <div><dt>Principal</dt><dd class="mono">role/finance-close</dd></div>
+        <div><dt>Compute</dt><dd>Lambda</dd></div>
+        <div><dt>Confidence</dt><dd>0.95</dd></div>
+        <div><dt>Est. spend</dt><dd>$12/mo</dd></div>
+        <div><dt>Status</dt><dd>discovered</dd></div>
+      </dl>
+      <details>
+        <summary>Why this was flagged</summary>
+        <ul class="evidence">
+          <li>100% of the intervals containing model traffic had no request
+          arriving at the load balancer. This workload decides on its own to
+          call a model.</li>
+          <li>Model traffic was interleaved with calls to 2 internal
+          destinations in 100% of active intervals — the shape of a tool-calling
+          loop.</li>
+          <li>Sent 1.0MB to model endpoints and received 132.4KB back, a ratio
+          of 7.9:1.</li>
+          <li>60% of model traffic fell outside working hours.</li>
+        </ul>
+      </details>
+    </article>
+  </div>
+
+  <p><code>finance-close</code> costs twelve dollars a month, runs three times a
+  day, and holds write access to billing. It is the cheapest workload in the
+  account and the most dangerous one in the report. Any tool that ranks by
+  activity finds the agents nobody was worried about and misses that one.</p>
+
+  <div class="actions">
+    <a class="btn" href="report.html">Read the whole report</a>
+  </div>
+</section>
+
+<!-- 4 -->
+<section class="sec">
+  <span class="num">§ 04</span>
+  <h2>How an agent separates from a chatbot</h2>
+
+  <p>Both make TLS calls to the same model endpoints. Payloads are encrypted
+  and, by invariant, never inspected. So the classifier gets metadata and
+  nothing else — and everything downstream depended on one untested claim:</p>
+
+  <p class="thesis">An agent is distinguishable from a chatbot backend using
+  network and identity metadata alone.</p>
+
+  <p>That claim is now tested against an adversarial corpus, at both flow log
+  aggregation intervals, with the negatives built specifically to defeat the
+  obvious signals.</p>
+
+  <div class="stamp">
+    <span class="verdict">G0 PASS</span>
+    <p>Separation margin +0.26. Full recall, zero false positives, identical at
+    60-second and 600-second aggregation.</p>
+  </div>
+
+  <p>The signal that carries it is <strong>cumulative egress-to-ingress
+  asymmetry</strong> against model endpoints. An agent resends its entire
+  accumulated transcript on every step, so over an episode of <em>n</em> steps
+  its bytes sent grow as <em>n</em>² while bytes received grow as <em>n</em>. A
+  chatbot sends one prompt and receives one answer, and both grow linearly.</p>
+
+  <p>It is a property of summed bytes, which is why aggregation cannot touch it
+  — and why the result is identical whether a customer's flow logs are
+  configured at 60 seconds or at the cheaper 600.</p>
+
+  <div class="note risk">
+    <span class="tag">The finding that mattered most was a negative</span>
+    <p>The specification's headline signal — bursts of sequential model calls
+    with sub-second gaps — is <strong>not implementable</strong>. Flow logs
+    aggregate per 5-tuple over a fixed interval, every provider SDK pools
+    connections for around ninety seconds, and so twenty sequential model calls
+    collapse into one record with the timing gone. Measured on the busiest agent
+    in the corpus: fewer than 0.5 flow records per model call.</p>
+    <p>Two further signals the specification expected to carry the classifier
+    were measured and rejected, with the numbers that killed them recorded in
+    the source.</p>
+  </div>
+
+  <div class="actions">
+    <a class="btn" href="evidence.html">The full G0 result</a>
+  </div>
+</section>
+
+<!-- 5 -->
+<section class="sec">
+  <span class="num">§ 05</span>
+  <h2>What never leaves the account</h2>
+
+  <p>Prompts, completions, and payload bodies, under any configuration. Not as
+  a redaction step — a redaction step is a filter, filters have bugs and
+  configuration, and a reviewer is right not to trust one.</p>
+
+  <p>There is simply no field on any wire type capable of holding a payload, and
+  the shipper's only entry point accepts nothing but those types. Two files
+  establish the entire privacy claim, and both are open source.</p>
+
+  <dl class="inv">
+    <dt>SEC-16</dt><dd>Discovery is read-only. Enforced in the IAM policy <em>and</em> in code.
+      <span class="by">TestNoMutatingAPIs</span></dd>
+    <dt>SEC-17</dt><dd>Discovered records confer no authority. One function can sanction, and it needs a human.
+      <span class="by">test_sec17_*</span></dd>
+    <dt>SEC-18</dt><dd>Metadata only. Enforced by wire types having no field that can hold a payload.
+      <span class="by">TestWireTypesCarryNoPayload</span></dd>
+    <dt>SEC-19</dt><dd>The collector is inert without an explicit destination.
+      <span class="by">TestZeroConfigIsInert</span></dd>
+    <dt>SEC-20</dt><dd>A finding without an owner is segregated, never mixed into owned findings.
+      <span class="by">test_sec20_unattributed_segregated</span></dd>
+  </dl>
+
+  <p>Each invariant names the test that enforces it. They are written so that
+  breaking one requires deliberately editing a test named after the thing you
+  are breaking.</p>
+
+  <div class="actions">
+    <a class="btn" href="security.html">Security review pack</a>
+    <a class="btn" href="collector.html">What the collector does</a>
+  </div>
+</section>
+
+<!-- 6 -->
+<section class="sec">
+  <span class="num">§ 06</span>
+  <h2>Built, and not built</h2>
+
+  <p>Stated plainly, because a security product that overstates once is never
+  trusted again.</p>
+
+  <div class="ledger">
+    <div class="row">
+      <span class="what">collector</span>
+      <span class="desc">Go binary, read-only role, flow logs from CloudWatch or S3, principal resolution, IAM enumeration, ALB access logs. Apache-2.0.</span>
+      <span class="st done">Built</span>
+    </div>
+    <div class="row">
+      <span class="what">classifier</span>
+      <span class="desc">Five weighted signals, each with a sentence a human can argue with. Weights fitted on the A0 corpus.</span>
+      <span class="st done">Built</span>
+    </div>
+    <div class="row">
+      <span class="what">register</span>
+      <span class="desc">Agent records with provenance, owner, reach, and blast radius read from IAM policy.</span>
+      <span class="st done">Built</span>
+    </div>
+    <div class="row">
+      <span class="what">report</span>
+      <span class="desc">The delivered artifact. Owned findings, review band, unattributed candidates, and a stated limitations section.</span>
+      <span class="st done">Built</span>
+    </div>
+    <div class="row">
+      <span class="what">checkpoint</span>
+      <span class="desc">Inline enforcement gateway. Not started until a paying customer asks for it.</span>
+      <span class="st none">Not started</span>
+    </div>
+    <div class="row">
+      <span class="what">console</span>
+      <span class="desc">Operator UI. The report is the product until someone needs to click something.</span>
+      <span class="st none">Not started</span>
+    </div>
+    <div class="row">
+      <span class="what">real capture</span>
+      <span class="desc">Every number here comes from synthetic telemetry. No scan has run against a real account.</span>
+      <span class="st partial">Pending a design partner</span>
+    </div>
+    <div class="row">
+      <span class="what">SOC 2</span>
+      <span class="desc">Type I evidence collection needs three months of observation. It gates enterprise contracts, not pilots.</span>
+      <span class="st none">Not yet</span>
+    </div>
+  </div>
+
+  <h3>Not being built</h3>
+  <p>Multi-tenancy, RBAC and SSO before a paying customer. Policy authoring UI.
+  Machine-learned classification before three design partners have produced real
+  traffic. Kubernetes pod-level attribution, which needs eBPF or audit logs and
+  is more invasive than the cross-account role the whole entry motion is built
+  to avoid. And internet-wide scanning, which is not possible without a
+  privileged vantage point and inherits the entire civil-liberties objection the
+  in-account model avoids.</p>
+</section>
+
+<!-- 7 -->
+<section class="sec">
+  <span class="num">§ 07</span>
+  <h2>What we are asking for</h2>
+
+  <div class="cta">
+    <h2>An AWS account and a read-only role</h2>
+    <p>The technical risk that justified building first is resolved. Every
+    remaining question is answerable only by pointing this at an environment
+    nobody here has seen: whether the byte ratios hold against real provider
+    endpoints, whether tag hygiene is good enough that attribution resolves, and
+    how many workload shapes exist that the corpus does not anticipate.</p>
+    <p>Onboarding is one Terraform apply against a non-production account,
+    targeted at thirty minutes and no meeting. You can read every line of the
+    collector first, and you can run it in dry-run mode against your own account
+    to see the literal bytes before granting it anywhere to send them.</p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/EzraStone/Custos/issues/new?title=Design+partner+enquiry">Become a design partner</a>
+      <a class="btn" href="collector.html">Try the collector first</a>
+    </div>
+  </div>
+
+  <div class="note gate">
+    <span class="tag">The gate we would fail on</span>
+    <p>Four or more scans that surprise nobody means companies do know what they
+    run, and discovery is not a business. That gate is real, it is written down,
+    and it cannot be reached without design partners — which is why sourcing
+    them is the primary activity now rather than a background one.</p>
+  </div>
+</section>
+
+<a class="nextpage" href="evidence.html">
+  <span class="label">Next</span>
+  <span class="t">The evidence</span>
+  <span class="d">The G0 result in full: what was tested, what separated, what was
+  measured and thrown away, and where the result should not be believed.</span>
+</a>
+
+<footer class="colophon">
+  <div class="cols">
+    <div>
+      <p class="label">Product</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="report.html">The scan report</a></li>
+        <li><a href="evidence.html">Evidence</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="label">For reviewers</p>
+      <ul>
+        <li><a href="security.html">Security review pack</a></li>
+        <li><a href="security.html#invariants">The five invariants</a></li>
+        <li><a href="collector.html">Collector</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="label">Source</p>
+      <ul>
+        <li><a href="https://github.com/EzraStone/Custos">Repository</a></li>
+        <li><a href="https://github.com/EzraStone/Custos/tree/main/collector">Collector · Apache-2.0</a></li>
+        <li><a href="https://github.com/EzraStone/Custos/blob/main/docs/A0-FINDINGS.md">A0 findings</a></li>
+      </ul>
+    </div>
+  </div>
+  <p>Custos inventories software, not people. Every record describes a machine
+  principal, an endpoint, and a byte count.</p>
+  <p>This site loads no third-party resource, sets no cookie, and runs no
+  script.</p>
+</footer>
+
+<div class="pagefoot"></div>
+</main>
+</body>
+</html>

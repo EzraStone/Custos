@@ -38,6 +38,7 @@ headline signal is not implementable at all, and what replaces it is better.
 make setup       # virtualenv, both Python packages
 make check       # lint and test everything
 make experiment  # run A0, print the G0 verdict, write a sample scan report
+make site        # serve the website at localhost:8000
 ```
 
 ## Layout
@@ -49,6 +50,7 @@ make experiment  # run A0, print the G0 verdict, write a sample scan report
 | `a0/` | Python | The G0 experiment: synthetic telemetry and evaluation. |
 | `checkpoint/` | Go | Inline enforcement gateway. Not started. |
 | `console/` | TypeScript | Operator UI. Not started. |
+| `site/` | HTML | The website. Five static pages, no build step. |
 
 Language choices and their reasoning: [docs/adr/0001-language-choices.md](docs/adr/0001-language-choices.md).
 

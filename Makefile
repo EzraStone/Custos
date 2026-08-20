@@ -11,7 +11,7 @@ RUFF := $(VENV)/bin/ruff
 PYTEST := $(VENV)/bin/pytest
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check lint test test-py test-go fmt experiment collector clean
+.PHONY: help setup check lint test test-py test-go fmt experiment collector site site-check clean
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -23,17 +23,17 @@ setup: ## Create the virtualenv and install both Python packages editable
 	$(PIP) -q install -e ./controlplane -e ./a0
 	$(PIP) -q install pytest ruff
 
-check: lint test ## Everything CI runs
+check: lint test site-check ## Everything CI runs
 
 lint: ## Lint Python and vet Go
-	$(RUFF) check controlplane a0
+	$(RUFF) check controlplane a0 site
 	@if [ -d collector ] && [ -f collector/go.mod ]; then \
 	  cd collector && gofmt -l . && go vet ./...; fi
 	@if [ -d checkpoint ] && [ -f checkpoint/go.mod ]; then \
 	  cd checkpoint && gofmt -l . && go vet ./...; fi
 
 fmt: ## Auto-fix formatting
-	$(RUFF) check --fix controlplane a0
+	$(RUFF) check --fix controlplane a0 site
 	@if [ -f collector/go.mod ]; then cd collector && gofmt -w .; fi
 	@if [ -f checkpoint/go.mod ]; then cd checkpoint && gofmt -w .; fi
 
@@ -49,6 +49,13 @@ test-go: ## Go tests
 
 experiment: ## Run the A0 experiment and write the report
 	$(PY) -m custos_a0.cli experiment --out a0/out
+
+site: ## Serve the website at http://localhost:8000
+	@echo "serving site/ at http://localhost:8000 — ctrl-c to stop"
+	@cd site && python3 -m http.server 8000
+
+site-check: ## Check the website's links, anchors, and its claims about itself
+	python3 site/check.py
 
 collector: ## Build the collector binary
 	cd collector && CGO_ENABLED=0 go build -trimpath -o bin/custos-collector ./cmd/custos-collector

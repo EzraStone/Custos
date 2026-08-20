@@ -1,0 +1,46 @@
+# Publishing the website.
+#
+# Deliberately manual. A commit landing on main is not a decision to change
+# what the public internet reads about a company that has not shipped its
+# first scan, so this workflow publishes only when a human runs it.
+#
+# Validation is not manual — that lives in ci.yml and runs on every push.
+#
+# Requires: Settings → Pages → Source: GitHub Actions.
+name: site
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # The same check CI runs. Publishing a broken link is worse than not
+      # publishing, so the gate is repeated here rather than assumed.
+      - name: Check the site
+        run: python site/check.py
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
