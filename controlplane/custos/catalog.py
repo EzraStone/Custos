@@ -75,7 +75,64 @@ DATASTORE_PORTS = frozenset({
 
 _STORAGE_AWS_SERVICES = frozenset({"S3", "DYNAMODB", "RDS", "ELASTICACHE"})
 
-_MODEL_NETS = tuple(ipaddress.ip_network(c) for c in MODEL_RANGES)
+_MODEL_NETS: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = tuple(
+    ipaddress.ip_network(c) for c in MODEL_RANGES
+)
+
+
+def extend(ranges: list[str], aws_services: list[str] | None = None) -> None:
+    """Add model endpoints the built-in catalogue does not know about.
+
+    Three cases this exists for, all of which produce an invisible agent
+    otherwise:
+
+      A self-hosted gateway. Many teams front every provider behind one
+      internal endpoint, which classifies as an internal API and takes all its
+      model traffic with it.
+
+      A provider we have not added. The catalogue goes stale between releases
+      and a customer may be the first to use something.
+
+      A private endpoint. Bedrock over a VPC endpoint appears on a private
+      address, and pkt-dst-aws-service does not always carry through.
+
+    Deliberately additive and never subtractive. Removing a range would let a
+    customer hide an agent from their own report, and a security tool that can
+    be configured blind is worse than one that cannot be configured at all.
+
+    Caches are cleared, because a classification made before the extension
+    would otherwise outlive it.
+    """
+    global _MODEL_NETS
+
+    parsed = []
+    for entry in ranges:
+        try:
+            parsed.append(ipaddress.ip_network(entry, strict=False))
+        except ValueError as exc:
+            raise ValueError(f"not a valid network: {entry!r}") from exc
+
+    _MODEL_NETS = _MODEL_NETS + tuple(parsed)
+    if aws_services:
+        globals()["MODEL_AWS_SERVICES"] = MODEL_AWS_SERVICES | frozenset(aws_services)
+
+    is_model_endpoint.cache_clear()
+    classify_cache_clear()
+
+
+def classify_cache_clear() -> None:
+    """Clear the memoised destination lookups."""
+    is_private.cache_clear()
+
+
+def configured_ranges() -> tuple[str, ...]:
+    """Every model range currently in effect, for the report's provenance.
+
+    A finding is only as good as the catalogue that produced it, and a customer
+    who extended the catalogue should see that reflected rather than reading
+    the built-in revision and assuming it was all we used.
+    """
+    return tuple(str(net) for net in _MODEL_NETS)
 
 
 @lru_cache(maxsize=8192)
