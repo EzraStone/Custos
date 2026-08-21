@@ -14,11 +14,12 @@ and each one is worthless without the others:
 
 Custos is that pattern for autonomous agents.
 
-| Camera network | Custos |
-| --- | --- |
-| Cameras on roads nobody watches | Collector reading flow logs and CloudTrail — sees agents nobody enrolled |
-| Plate → owner → history | Attributor: principal → resource tags → team → human |
-| Hotlist hit → interdiction | Checkpoint: policy match → allow, deny, or hold for human |
+| Camera network | Custos | Built |
+| --- | --- | --- |
+| Cameras on roads nobody watches | Collector reading flow logs and CloudTrail — sees agents nobody enrolled | Yes |
+| Plate → owner → history | Attributor: principal → tags → team → human, across EC2, Lambda, ECS | Yes |
+| A sighting becomes a record | Register, baselines, and what changed since last week | Yes |
+| Hotlist hit → interdiction | Checkpoint: policy match → allow, deny, or hold for human | Not started |
 
 **See what agents are doing, know where they came from, and stop them when they
 should be stopped.** That is the whole company in one sentence, and every
@@ -38,6 +39,12 @@ does not renew a contract.
 
 So: build the seeing, sell the stopping. The Register populates the tables the
 Checkpoint governs.
+
+**Where that leaves us.** The seeing works end to end and the attribution
+resolves to a named team. The stopping is deliberately not started, because
+§12 says not before a paying customer asks for it and starting it early would
+be the most expensive way to avoid the conversation that actually decides
+whether this works.
 
 ## Where the analogy must not be used out loud
 
@@ -60,6 +67,22 @@ The defensible statement of the same idea, which happens to also be true:
 Those two constraints are what make the ethical position hold, which is why they
 are invariants in `docs/SECURITY-INVARIANTS.md` and enforced structurally in the
 collector rather than by policy. Do not trade them away for a feature.
+
+Three places that position has already been tested in code, each recorded where
+it was decided:
+
+- Load balancer access logs carry request URLs, query strings, user agents, and
+  client addresses. The collector takes four fields — timestamp, target, and two
+  byte counts — and the rest cannot survive parsing.
+- Structured logs follow the same rule as the wire, and a third-party HTTP
+  client logging full URLs was caught and quieted rather than tolerated.
+- Drift findings are phrased as questions to the workload's owner and state
+  outright that they are not evidence of a problem, because the data cannot
+  carry a stronger claim.
+
+None of those were forced by an outside requirement. They are the position
+being kept when it would have been easier not to, which is the only test of
+whether it is real.
 
 ## The sentence the company is built to be able to say
 
