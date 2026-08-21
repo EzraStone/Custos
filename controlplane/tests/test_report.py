@@ -128,6 +128,15 @@ def test_report_is_self_contained():
 
 # --- change and drift sections ----------------------------------------------
 
+
+def prose(page: str) -> str:
+    """Collapse whitespace before asserting on rendered sentences.
+
+    Source line wrapping is not meaningful in HTML, and a test that breaks when
+    a paragraph is rewrapped is a test that gets deleted rather than fixed.
+    """
+    return " ".join(page.split())
+
 def _diff(changes=(), previous=1):
     from custos.diff import ScanDiff
 
@@ -152,7 +161,7 @@ def test_no_change_section_on_a_first_scan():
 
 def test_a_quiet_week_says_so_rather_than_rendering_empty():
     page = render(result([agent()]), "acme", T0, diff=_diff())
-    assert "Nothing changed" in page
+    assert "Nothing changed" in prose(page)
 
 
 def test_an_escalation_is_called_out_above_the_inventory():
@@ -163,7 +172,7 @@ def test_an_escalation_is_called_out_above_the_inventory():
         diff=_diff([_change(ChangeKind.BLAST_RADIUS_INCREASED)]),
     )
     assert page.index("Since the last scan") < page.index("Unsanctioned agents")
-    assert "most worth acting on today" in page
+    assert "most worth acting on today" in prose(page)
     assert "went from write to destructive" in page
     assert "finance" in page
 
@@ -176,7 +185,7 @@ def test_a_new_agent_is_listed_without_the_alarm():
         diff=_diff([_change(ChangeKind.APPEARED, "kb-indexer appeared for the first time")]),
     )
     assert "kb-indexer appeared" in page
-    assert "most worth acting on today" not in page
+    assert "most worth acting on today" not in prose(page)
 
 
 def test_drift_is_phrased_as_questions_and_claims_nothing():
@@ -189,7 +198,7 @@ def test_drift_is_phrased_as_questions_and_claims_nothing():
     )
     assert "Behaviour worth asking about" in page
     assert "Is that expected?" in page
-    assert "None of it is evidence of a problem" in page
+    assert "None of it is evidence of a problem" in prose(page)
     for word in ("compromised", "malicious", "breach", "attack"):
         assert word not in page.lower()
 
