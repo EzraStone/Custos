@@ -161,6 +161,62 @@ def cmd_grant(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_prune(args: argparse.Namespace) -> int:
+    """Drop telemetry past its retention window.
+
+    Intended for a cron. Agents and audit entries are never touched, so this is
+    safe to run unattended — the destructive-looking command cannot destroy the
+    thing that matters.
+    """
+    from .store.retention import prune, vacuum
+
+    conn = open_database(args.db)
+    result = prune(conn, observation_days=args.observation_days, scan_days=args.scan_days)
+    if not args.no_vacuum:
+        vacuum(conn)
+
+    print(
+        f"pruned {result.observations:,} observations, {result.scans:,} scans, "
+        f"{result.batches:,} batches"
+    )
+    print("agents and audit entries were not touched")
+    return 0
+
+
+def cmd_diff(args: argparse.Namespace) -> int:
+    """Show what changed between the two most recent scans."""
+    from .diff import compare
+
+    conn = open_database(args.db)
+    agents = AgentStore(conn)
+    scans = ScanStore(conn)
+
+    history = scans.scans_for(args.account, limit=2)
+    if len(history) < 2:
+        print("Need two scans to compare. Run another scan.")
+        return 0
+
+    current, previous = history[0], history[1]
+    registry = {a.id: a for a in agents.list_for_account(args.account)}
+    result = compare(
+        registry,
+        scans.observations_for_scan(current.id),
+        scans.observations_for_scan(previous.id),
+        previous_scan_id=previous.id,
+        current_scan_id=current.id,
+    )
+
+    print(f"comparing {previous.started_at:%Y-%m-%d %H:%M} .. "
+          f"{current.started_at:%Y-%m-%d %H:%M} UTC")
+    print()
+    print(result.headline)
+    for change in result.actionable:
+        owner = change.owner_team or "unattributed"
+        print(f"  [{change.kind}] {change.detail}")
+        print(f"      owner: {owner}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="custos", description=__doc__)
     parser.add_argument("--db", default="custos.db", help="SQLite database path")
@@ -181,6 +237,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--account", required=True)
     p.add_argument("--limit", type=int, default=20)
     p.set_defaults(func=cmd_history)
+
+    p = sub.add_parser("diff", help="compare the two most recent scans")
+    p.add_argument("--account", required=True)
+    p.set_defaults(func=cmd_diff)
+
+    p = sub.add_parser("prune", help="drop telemetry past its retention window")
+    p.add_argument("--observation-days", type=int, default=90)
+    p.add_argument("--scan-days", type=int, default=365)
+    p.add_argument("--no-vacuum", action="store_true",
+                   help="skip reclaiming disk space, which locks the database briefly")
+    p.set_defaults(func=cmd_prune)
 
     p = sub.add_parser("grant", help="sanction an agent")
     p.add_argument("agent_id")
