@@ -124,3 +124,87 @@ def test_report_is_self_contained():
     page = render(result([agent()]), "acme", T0)
     for external in ("http://", "https://", "<script", "src="):
         assert external not in page, external
+
+
+# --- change and drift sections ----------------------------------------------
+
+def _diff(changes=(), previous=1):
+    from custos.diff import ScanDiff
+
+    d = ScanDiff(previous_scan_id=previous, current_scan_id=2)
+    d.changes = list(changes)
+    return d
+
+
+def _change(kind, detail="finance-close went from write to destructive", team="finance"):
+    from custos.diff import Change
+
+    return Change(kind=kind, agent_id="agt_1",
+                  principal="arn:aws:iam::1:role/finance-close",
+                  detail=detail, owner_team=team)
+
+
+def test_no_change_section_on_a_first_scan():
+    """Marking every agent as new is technically true and useless."""
+    page = render(result([agent()]), "acme", T0, diff=_diff(previous=None))
+    assert "Since the last scan" not in page
+
+
+def test_a_quiet_week_says_so_rather_than_rendering_empty():
+    page = render(result([agent()]), "acme", T0, diff=_diff())
+    assert "Nothing changed" in page
+
+
+def test_an_escalation_is_called_out_above_the_inventory():
+    from custos.diff import ChangeKind
+
+    page = render(
+        result([agent()]), "acme", T0,
+        diff=_diff([_change(ChangeKind.BLAST_RADIUS_INCREASED)]),
+    )
+    assert page.index("Since the last scan") < page.index("Unsanctioned agents")
+    assert "most worth acting on today" in page
+    assert "went from write to destructive" in page
+    assert "finance" in page
+
+
+def test_a_new_agent_is_listed_without_the_alarm():
+    from custos.diff import ChangeKind
+
+    page = render(
+        result([agent()]), "acme", T0,
+        diff=_diff([_change(ChangeKind.APPEARED, "kb-indexer appeared for the first time")]),
+    )
+    assert "kb-indexer appeared" in page
+    assert "most worth acting on today" not in page
+
+
+def test_drift_is_phrased_as_questions_and_claims_nothing():
+    from custos.baseline import Drift, DriftKind
+
+    page = render(
+        result([agent()]), "acme", T0,
+        drift=[Drift(kind=DriftKind.NEW_TOOL, agent_id="agt_1", observed_at=T0,
+                     detail="reached deploy-ctl for the first time in 9 scans")],
+    )
+    assert "Behaviour worth asking about" in page
+    assert "Is that expected?" in page
+    assert "None of it is evidence of a problem" in page
+    for word in ("compromised", "malicious", "breach", "attack"):
+        assert word not in page.lower()
+
+
+def test_no_drift_section_when_there_is_no_drift():
+    page = render(result([agent()]), "acme", T0, drift=[])
+    assert "Behaviour worth asking about" not in page
+
+
+def test_change_details_are_escaped():
+    from custos.diff import ChangeKind
+
+    page = render(
+        result([agent()]), "acme", T0,
+        diff=_diff([_change(ChangeKind.APPEARED, "<script>alert('x')</script>")]),
+    )
+    assert "<script>alert" not in page
+    assert "&lt;script&gt;" in page

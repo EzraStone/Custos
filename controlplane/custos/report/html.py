@@ -23,7 +23,9 @@ from __future__ import annotations
 import html
 from datetime import datetime
 
+from ..baseline import Drift
 from ..classify import Verdict
+from ..diff import Change, ChangeKind, ScanDiff
 from ..register.model import Agent, BlastRadius
 from ..scan import ScanResult
 from ..spend import PRICES_REVISION
@@ -132,7 +134,87 @@ def _limitations(result: ScanResult, degraded: list[str]) -> str:
     return "".join(f"<li>{item}</li>" for item in items)
 
 
-def render(result: ScanResult, account_label: str, generated_at: datetime) -> str:
+def _change_row(change: Change) -> str:
+    owner = change.owner_team or "unattributed"
+    return f"""
+    <li class="change change-{_e(change.kind)}">
+      <span class="what">{_e(change.detail)}</span>
+      <span class="who">{_e(owner)}</span>
+    </li>"""
+
+
+def _changes_section(diff: ScanDiff) -> str:
+    """What is different since the last scan.
+
+    Placed above the register, because a reader who has seen last week's report
+    is here for this section. Putting the full inventory first is how the third
+    report goes unread.
+    """
+    if diff.previous_scan_id is None:
+        return ""
+
+    if not diff.actionable:
+        return """
+<section>
+  <h2>Since the last scan</h2>
+  <p class="lede">Nothing changed. The same agents, the same reach, the same
+  permissions.</p>
+</section>"""
+
+    escalations = [c for c in diff.actionable if c.kind is ChangeKind.BLAST_RADIUS_INCREASED]
+    lead = (
+        "<p class='alarm'>A credential gained permissions that increase what it "
+        "could destroy. That is the finding on this page most worth acting on "
+        "today.</p>"
+        if escalations else ""
+    )
+    return f"""
+<section>
+  <h2>Since the last scan</h2>
+  <p class="lede">{_e(diff.headline)}</p>
+  {lead}
+  <ul class="changes">{"".join(_change_row(c) for c in diff.actionable)}</ul>
+</section>"""
+
+
+def _drift_section(drift: list[Drift], agents: dict[str, Agent]) -> str:
+    """Departures from each agent's own established baseline.
+
+    Deliberately phrased as questions. Custos does not know whether an agent is
+    compromised, and a section that implied otherwise would be the one claim on
+    this page the customer could disprove.
+    """
+    if not drift:
+        return ""
+
+    rows = []
+    for d in drift:
+        agent = agents.get(d.agent_id)
+        name = _short_principal(agent.identity.principal) if agent else d.agent_id
+        owner = (agent.identity.owner_team if agent else "") or "unattributed"
+        rows.append(
+            f'<li class="change"><span class="what">{_e(name)} {_e(d.question)}</span>'
+            f'<span class="who">{_e(owner)}</span></li>'
+        )
+
+    return f"""
+<section>
+  <h2>Behaviour worth asking about</h2>
+  <p class="lede">Each of these is an agent doing something it has not done
+  before, measured against its own history. None of it is evidence of a
+  problem — it is a list of questions worth putting to the people who own these
+  workloads.</p>
+  <ul class="changes">{"".join(rows)}</ul>
+</section>"""
+
+
+def render(
+    result: ScanResult,
+    account_label: str,
+    generated_at: datetime,
+    diff: ScanDiff | None = None,
+    drift: list[Drift] | None = None,
+) -> str:
     """Render the scan report as a single self-contained HTML document."""
     findings = result.register.attributed_findings
     unattributed = result.register.unattributed_findings
@@ -165,6 +247,8 @@ def render(result: ScanResult, account_label: str, generated_at: datetime) -> st
   </dl>
 </header>
 
+{_changes_section(diff) if diff is not None else ""}
+
 <section>
   <h2>Unsanctioned agents</h2>
   <p class="lede">Workloads making autonomous model calls that nobody has
@@ -174,6 +258,7 @@ def render(result: ScanResult, account_label: str, generated_at: datetime) -> st
 </section>
 
 {_unattributed_section(unattributed)}
+{_drift_section(drift or [], result.register.agents)}
 {_review_section(reviews)}
 
 <section>
@@ -283,6 +368,18 @@ details summary{cursor:pointer;font-family:var(--mono);font-size:.7rem;
 .evidence{margin:.85rem 0 0;padding-left:1.1rem;font-size:.86rem;
   color:var(--ink-soft);max-width:44rem}
 .evidence li{margin-bottom:.5rem}
+.alarm{max-width:42rem;border-left:3px solid var(--seal);padding-left:1.1rem;
+  color:var(--ink);font-family:var(--display);font-size:1.1rem}
+.changes{list-style:none;margin:0;padding:0;max-width:48rem}
+.change{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:baseline;
+  padding:.75rem 0;border-bottom:1px solid var(--hair);font-size:.9rem}
+.change .what{flex:1 1 22rem}
+.change .who{font-family:var(--mono);font-size:.66rem;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-faint)}
+.change-blast_radius_increased{border-left:3px solid var(--seal);
+  padding-left:.9rem;margin-left:-1.2rem}
+.change-appeared{border-left:3px solid var(--amber);padding-left:.9rem;
+  margin-left:-1.2rem}
 .limits{max-width:44rem;color:var(--ink-soft);padding-left:1.1rem}
 .limits li{margin-bottom:.7rem}
 footer{margin-top:4rem;padding-top:1.5rem;border-top:2px solid var(--ink);
