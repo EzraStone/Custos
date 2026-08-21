@@ -5,7 +5,9 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
@@ -69,6 +71,23 @@ type IdentityAPI interface {
 		...func(*iam.Options)) (*iam.GetPolicyVersionOutput, error)
 }
 
+// ServerlessAPI resolves the execution role behind a Lambda or ECS interface.
+//
+// These exist because attribution without them stops at "something on this
+// interface is an agent", which is a finding nobody can action. On an account
+// that runs its agents on Lambda — and many do — that is the difference between
+// a useful report and a curiosity.
+type ServerlessAPI interface {
+	GetFunctionConfiguration(context.Context, *lambda.GetFunctionConfigurationInput,
+		...func(*lambda.Options)) (*lambda.GetFunctionConfigurationOutput, error)
+	DescribeTasks(context.Context, *ecs.DescribeTasksInput,
+		...func(*ecs.Options)) (*ecs.DescribeTasksOutput, error)
+	DescribeTaskDefinition(context.Context, *ecs.DescribeTaskDefinitionInput,
+		...func(*ecs.Options)) (*ecs.DescribeTaskDefinitionOutput, error)
+	ListClusters(context.Context, *ecs.ListClustersInput,
+		...func(*ecs.Options)) (*ecs.ListClustersOutput, error)
+}
+
 // Compile-time assertions that the real SDK clients satisfy these interfaces.
 // If AWS changes a signature, this fails at build time rather than at 3am in a
 // customer's account.
@@ -77,4 +96,19 @@ var (
 	_ ObjectAPI   = (*s3.Client)(nil)
 	_ NetworkAPI  = (*ec2.Client)(nil)
 	_ IdentityAPI = (*iam.Client)(nil)
+)
+
+// ServerlessAPI is satisfied by a pair of clients rather than one, so it has
+// no single compile-time assertion. `Serverless` in package ingest composes
+// them; these assertions cover each half.
+var (
+	_ interface {
+		GetFunctionConfiguration(context.Context, *lambda.GetFunctionConfigurationInput,
+			...func(*lambda.Options)) (*lambda.GetFunctionConfigurationOutput, error)
+	} = (*lambda.Client)(nil)
+
+	_ interface {
+		DescribeTasks(context.Context, *ecs.DescribeTasksInput,
+			...func(*ecs.Options)) (*ecs.DescribeTasksOutput, error)
+	} = (*ecs.Client)(nil)
 )

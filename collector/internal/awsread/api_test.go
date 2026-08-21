@@ -15,10 +15,11 @@ import (
 // because they need it, and it happens to mutate.
 func TestEveryAWSMethodIsReadOnly(t *testing.T) {
 	surfaces := map[string]reflect.Type{
-		"LogsAPI":     reflect.TypeOf((*LogsAPI)(nil)).Elem(),
-		"ObjectAPI":   reflect.TypeOf((*ObjectAPI)(nil)).Elem(),
-		"NetworkAPI":  reflect.TypeOf((*NetworkAPI)(nil)).Elem(),
-		"IdentityAPI": reflect.TypeOf((*IdentityAPI)(nil)).Elem(),
+		"LogsAPI":       reflect.TypeOf((*LogsAPI)(nil)).Elem(),
+		"ObjectAPI":     reflect.TypeOf((*ObjectAPI)(nil)).Elem(),
+		"NetworkAPI":    reflect.TypeOf((*NetworkAPI)(nil)).Elem(),
+		"IdentityAPI":   reflect.TypeOf((*IdentityAPI)(nil)).Elem(),
+		"ServerlessAPI": reflect.TypeOf((*ServerlessAPI)(nil)).Elem(),
 	}
 
 	total := 0
