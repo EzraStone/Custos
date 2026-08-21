@@ -275,3 +275,66 @@ def test_report_on_an_empty_account_renders_rather_than_failing(client):
     response = client.get("/v1/report", headers=AUTH)
     assert response.status_code == 200
     assert "None found" in response.text
+
+
+# --- logging ------------------------------------------------------------------
+
+def _log_stream():
+    import io
+
+    from custos.logging import configure
+
+    stream = io.StringIO()
+    configure(stream=stream)
+    return stream
+
+
+def _events(stream):
+    import json
+
+    return [json.loads(ln) for ln in stream.getvalue().strip().splitlines() if ln]
+
+
+def test_requests_are_logged_without_query_strings(client):
+    """A path is a route template we wrote; a query string is caller-supplied
+    and could hold anything."""
+    stream = _log_stream()
+    client.get("/v1/register?unsanctioned_only=true", headers=AUTH)
+
+    requests = [e for e in _events(stream) if e["event"] == "http.request"]
+    assert requests
+    assert requests[0]["path"] == "/v1/register"
+    assert "unsanctioned_only" not in stream.getvalue()
+    assert "client_ip" not in stream.getvalue()
+
+
+def test_sanctioning_is_logged_as_its_own_event(client, realistic_payload):
+    """The only action that grants authority. It must survive a log level that
+    drops request noise."""
+    agents = _ingest_real_batch(client, realistic_payload)
+    stream = _log_stream()
+
+    client.post(
+        f"/v1/agents/{agents[0]['id']}/imprimatur",
+        json={"operator": "ezra@custos.dev"}, headers=AUTH,
+    )
+
+    sanctioned = [e for e in _events(stream) if e["event"] == "agent.sanctioned"]
+    assert len(sanctioned) == 1
+    assert sanctioned[0]["operator"] == "ezra@custos.dev"
+
+
+def test_credentials_never_appear_in_a_log_line(client):
+    stream = _log_stream()
+    client.get("/v1/register", headers={"Authorization": "Bearer super-secret-token"})
+    assert "super-secret-token" not in stream.getvalue()
+
+
+def test_ingestion_logs_what_it_found(client, realistic_payload):
+    stream = _log_stream()
+    client.post("/v1/batches", json=realistic_payload, headers=AUTH)
+
+    ingested = [e for e in _events(stream) if e["event"] == "batch.ingested"]
+    assert len(ingested) == 1
+    assert ingested[0]["agents_found"] == 5
+    assert "coverage" in ingested[0]
