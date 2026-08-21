@@ -5,6 +5,9 @@ description = "Custos control plane: classifier, register, attribution, reach."
 requires-python = ">=3.11"
 dependencies = []
 
+[project.scripts]
+custos = "custos.cli:main"
+
 [project.optional-dependencies]
 api = ["fastapi>=0.115", "uvicorn>=0.32", "pydantic>=2.9"]
 dev = ["pytest>=8.3", "ruff>=0.7"]
