@@ -32,7 +32,7 @@ is a research problem rather than a port.
 **Consequence:** target profile stays AWS-first. Do not accept a GCP design
 partner before the AWS path has produced one real scan.
 
-## 4 — Kubernetes: not in v1
+## 4 — Kubernetes: not in v1, and the caveat is now implemented
 
 Pod-level attribution needs eBPF or Kubernetes audit logs, both materially more
 invasive than a cross-account role, and invasiveness is exactly what the entry
@@ -48,6 +48,11 @@ workload per node it is exact.
 do not claim pod attribution. Revisit when a design partner's agents are
 predominantly on Kubernetes.
 
+**Now built.** The resolver recognises EKS node interfaces and reports them
+with the reason attribution stopped there, in report language. Lambda and ECS
+resolve fully — Lambda through the function's execution role, ECS through the
+task definition's task role, not its execution role. EC2 was already complete.
+
 ## 5 — Open-source the collector: done
 
 Apache-2.0, in `collector/`. Everything else proprietary.
@@ -61,25 +66,40 @@ do not.
 
 ---
 
-## 1 — Team size (open, and it dominates everything)
+## 1 — Team size: one engineer, one non-technical co-founder
 
-Every duration in the build sequence doubles if solo. A0 is done either way. A2
-— persistent store, console, auth, tenant isolation, scheduled re-scans — is
-where solo starts to hurt, because it is broad rather than deep and there is no
-part of it that benefits from being thought about harder.
+Resolved in practice rather than by decision.
 
-The honest framing: A0 and A1 are a solo project. A2 onward is not, and the
-decision is better made before A2 starts than during it.
+The consequence for the codebase is that it is optimised for one person's
+throughput: two languages rather than four, no service mesh, no Kubernetes, one
+SQLite file instead of a database to operate, and invariants enforced by tests
+that fail loudly rather than by review discipline that requires a second pair
+of eyes.
 
-## 3 — Design partners (open, and now the critical path)
+The consequence for the split is that the non-technical half owns distribution,
+and three documents exist for that purpose rather than for engineers:
+`docs/SECURITY-REVIEW.md` answers a security questionnaire from the code,
+`collector/README.md` gets a platform engineer to a role ARN without a meeting,
+and `docs/A0-FINDINGS.md` is the technical credibility artifact.
 
-This was one blocker among several. It is now **the** blocker.
+What is genuinely at risk: A2's breadth — console, auth, tenant isolation,
+scheduled re-scans — is work that does not benefit from being thought about
+harder, only from more hands. That is the point where a second engineer stops
+being optional.
+
+## 3 — Design partners: one or two soft leads, and still the critical path
+
+This was one blocker among several. It is now **the** blocker, and the position
+has improved in one specific way: when a lead converts, the collector works.
+Terraform to role ARN to report is a path that runs today rather than one that
+needs a week of building first.
 
 The technical risk that justified building first is resolved: G0 passed and the
 scanner runs end to end. Every remaining question is answerable only by pointing
 this at an environment nobody in this repository has seen. Specifically:
 
-- Do the byte ratios hold against real provider endpoints?
+- Do the byte ratios hold against real provider endpoints? This is the only
+  remaining technical unknown, and one real scan answers it.
 - Is tag hygiene good enough that attribution resolves? A0 assumed uneven
   hygiene deliberately, and reality may be worse.
 - Does a real account contain workloads whose shape the corpus does not
