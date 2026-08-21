@@ -226,3 +226,48 @@ def test_openapi_schema_is_not_served(client):
     """A public schema browser on a security product is an invitation."""
     for path in ("/docs", "/redoc", "/openapi.json"):
         assert client.get(path).status_code == 404
+
+
+# --- rendered report ----------------------------------------------------------
+
+def test_report_renders_the_current_register(client, realistic_payload):
+    _ingest_real_batch(client, realistic_payload)
+    response = client.get("/v1/report", headers=AUTH)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "unsanctioned agent" in response.text
+
+
+def test_report_requires_a_credential(client):
+    assert client.get("/v1/report").status_code == 401
+
+
+# Caching the rendered page at ingestion would mean a report that silently goes
+# stale after a sanction and keeps showing an agent as unsanctioned after
+# someone approved it.
+def test_report_reflects_a_sanction_immediately(client, realistic_payload):
+    agents = _ingest_real_batch(client, realistic_payload)
+    before = client.get("/v1/report", headers=AUTH).text
+
+    client.post(
+        f"/v1/agents/{agents[0]['id']}/imprimatur",
+        json={"operator": "ezra@custos.dev"}, headers=AUTH,
+    )
+    after = client.get("/v1/report", headers=AUTH).text
+
+    assert before != after
+    assert after.count("unsanctioned") < before.count("unsanctioned")
+
+
+def test_report_is_self_contained(client, realistic_payload):
+    _ingest_real_batch(client, realistic_payload)
+    page = client.get("/v1/report", headers=AUTH).text
+    for external in ("http://", "https://", "<script", "src="):
+        assert external not in page, external
+
+
+def test_report_on_an_empty_account_renders_rather_than_failing(client):
+    response = client.get("/v1/report", headers=AUTH)
+    assert response.status_code == 200
+    assert "None found" in response.text

@@ -12,13 +12,17 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from .. import __version__
 from ..catalog import RANGES_REVISION
+from ..diff import ScanDiff, compare
 from ..pipeline import ingest
 from ..register.model import Status
-from ..register.store import TransitionError
+from ..register.store import Register, TransitionError
+from ..report import Coverage, render
+from ..scan import ScanResult
 from ..spend import PRICES_REVISION
 from ..store.agents import AgentStore
 from ..store.db import now, open_database
@@ -199,6 +203,52 @@ def create_app(
                 status_code=status.HTTP_409_CONFLICT, detail=str(exc)
             ) from exc
         return _render(agent)
+
+    @app.get("/v1/report", response_class=HTMLResponse)
+    def get_report(principal: Auth) -> HTMLResponse:
+        """Render the current register as the report a customer reads.
+
+        Served rather than only written to a file because the second scan
+        onward, someone wants a link rather than an attachment — and an
+        attachment that has to be re-sent every week is a report that stops
+        being sent.
+
+        Rebuilt from stored state on each request. The alternative, caching the
+        rendered page at ingestion, means a report that silently goes stale
+        after a sanction and shows an agent as unsanctioned after someone
+        approved it.
+        """
+        agents = AgentStore(app.state.db)
+        scans = ScanStore(app.state.db)
+
+        register = Register()
+        for agent in agents.list_for_account(principal.account_id):
+            register.agents[agent.id] = agent
+
+        latest = scans.latest_scan(principal.account_id)
+        result = ScanResult(
+            register=register, verdicts=[], telemetry=[],
+            principals_seen=latest.principals_seen if latest else 0,
+        )
+        coverage = Coverage(
+            parsed_fraction=latest.coverage if latest else 1.0,
+            truncated=latest.truncated if latest else False,
+        ) if latest else None
+
+        diff = ScanDiff()
+        previous = scans.latest_scan_before(principal.account_id, latest.id) if latest else None
+        if latest and previous:
+            diff = compare(
+                register.agents,
+                scans.observations_for_scan(latest.id),
+                scans.observations_for_scan(previous.id),
+                previous_scan_id=previous.id, current_scan_id=latest.id,
+            )
+
+        return HTMLResponse(render(
+            result, account_label=principal.account_id,
+            generated_at=now(), diff=diff, coverage=coverage,
+        ))
 
     @app.get("/v1/agents/{agent_id}/audit")
     def get_audit(agent_id: str, principal: Auth) -> dict:
