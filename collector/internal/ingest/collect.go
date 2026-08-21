@@ -27,10 +27,11 @@ type FlowSource interface {
 // API calls proportional to the number of workloads rather than to the size of
 // the account.
 type Collector struct {
-	Flows    FlowSource
-	Requests RequestSource
-	Network  awsread.NetworkAPI
-	Identity awsread.IdentityAPI
+	Flows      FlowSource
+	Requests   RequestSource
+	Network    awsread.NetworkAPI
+	Identity   awsread.IdentityAPI
+	Serverless awsread.ServerlessAPI
 
 	AccountID string
 	Region    string
@@ -155,6 +156,13 @@ func (c *Collector) Collect(ctx context.Context, w awsread.Window) (wire.Batch, 
 	attributions, err := resolver.Resolve(ctx, interfaceIDs)
 	if err != nil {
 		report.Errors = append(report.Errors, err.Error())
+	}
+
+	// Lambda and ECS interfaces need extra calls that EC2 does not. Doing it
+	// here rather than inside Resolve keeps the EC2 path free of the API
+	// surface it does not use.
+	if c.Serverless != nil {
+		attributions = NewServerless(c.Serverless).Enrich(ctx, attributions)
 	}
 
 	resolved, degraded := Attachments(attributions)

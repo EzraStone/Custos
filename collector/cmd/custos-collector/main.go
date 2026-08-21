@@ -159,12 +159,13 @@ func fromAWS(ctx context.Context, cfg *config.Config) (wire.Batch, ingest.Report
 	}
 
 	collector := &ingest.Collector{
-		Flows:     source,
-		Requests:  accessLogSource(cfg, clients),
-		Network:   clients.Network,
-		Identity:  clients.Identity,
-		AccountID: cfg.AccountID,
-		Region:    cfg.Region,
+		Flows:      source,
+		Requests:   accessLogSource(cfg, clients),
+		Network:    clients.Network,
+		Identity:   clients.Identity,
+		Serverless: clients.Serverless,
+		AccountID:  cfg.AccountID,
+		Region:     cfg.Region,
 	}
 	return collector.Collect(ctx, ingest.Window(cfg.Window))
 }

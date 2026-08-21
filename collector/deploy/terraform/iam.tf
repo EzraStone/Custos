@@ -84,6 +84,8 @@ data "aws_iam_policy_document" "read_only" {
       "ecs:DescribeTaskDefinition",
       "lambda:ListFunctions",
       "lambda:GetFunctionConfiguration",
+      "ecs:ListTasks",
+      "ecs:DescribeTasks",
       "eks:ListClusters",
       "eks:DescribeCluster",
     ]
