@@ -114,39 +114,57 @@ def test_coverage_note_states_what_the_scan_could_not_see(client):
     assert "blast radius" in note
 
 
-def _ingest_real_batch(client):
+@pytest.fixture(scope="module")
+def realistic_payload():
+    """The synthetic corpus, built once.
+
+    Generating it costs a couple of seconds and every test that needs a
+    realistic batch needs the same one. Rebuilding per test made this module
+    the slowest in the suite, and a slow suite is one that stops being run
+    before a commit.
+    """
+    from custos_a0 import corpus
     from custos_a0.batchbridge import build_batch
 
-    payload = build_batch().model_dump(mode="json")
+    # One day rather than the full three. These tests exercise API behaviour,
+    # not classifier accuracy — that is a0/tests/test_g0.py's job, against the
+    # full corpus — so the extra volume buys nothing here and costs seconds on
+    # every run.
+    small = corpus.build(corpus.CorpusSpec(days=1))
+    payload = build_batch(small).model_dump(mode="json")
     payload["account_id"] = ACCOUNT
+    return payload
+
+
+def _ingest_real_batch(client, payload):
     assert client.post("/v1/batches", json=payload, headers=AUTH).status_code == 202
     return client.get("/v1/register?unsanctioned_only=true", headers=AUTH).json()["agents"]
 
 
-def test_register_returns_findings_worst_first_with_evidence(client):
-    agents = _ingest_real_batch(client)
+def test_register_returns_findings_worst_first_with_evidence(client, realistic_payload):
+    agents = _ingest_real_batch(client, realistic_payload)
     assert agents
     assert agents[0]["blast_radius"] == "destructive"
     assert agents[0]["evidence"], "a finding without its evidence is just a score"
 
 
-def test_sec17_discovered_agents_are_never_sanctioned_by_ingestion(client):
-    for agent in _ingest_real_batch(client):
+def test_sec17_discovered_agents_are_never_sanctioned_by_ingestion(client, realistic_payload):
+    for agent in _ingest_real_batch(client, realistic_payload):
         assert agent["status"] == "discovered"
         assert agent["imprimatur"] is None
         assert agent["unsanctioned"] is True
 
 
-def test_granting_imprimatur_requires_an_operator(client):
-    agent = _ingest_real_batch(client)[0]
+def test_granting_imprimatur_requires_an_operator(client, realistic_payload):
+    agent = _ingest_real_batch(client, realistic_payload)[0]
     response = client.post(
         f"/v1/agents/{agent['id']}/imprimatur", json={"operator": ""}, headers=AUTH
     )
     assert response.status_code == 422
 
 
-def test_granting_imprimatur_records_the_human(client):
-    agent = _ingest_real_batch(client)[0]
+def test_granting_imprimatur_records_the_human(client, realistic_payload):
+    agent = _ingest_real_batch(client, realistic_payload)[0]
     response = client.post(
         f"/v1/agents/{agent['id']}/imprimatur",
         json={"operator": "ezra@custos.dev"}, headers=AUTH,
@@ -158,8 +176,8 @@ def test_granting_imprimatur_records_the_human(client):
     assert body["unsanctioned"] is False
 
 
-def test_sanctioning_removes_an_agent_from_the_unsanctioned_set(client):
-    before = _ingest_real_batch(client)
+def test_sanctioning_removes_an_agent_from_the_unsanctioned_set(client, realistic_payload):
+    before = _ingest_real_batch(client, realistic_payload)
     client.post(
         f"/v1/agents/{before[0]['id']}/imprimatur",
         json={"operator": "ezra"}, headers=AUTH,
@@ -168,9 +186,9 @@ def test_sanctioning_removes_an_agent_from_the_unsanctioned_set(client):
     assert len(after) == len(before) - 1
 
 
-def test_status_endpoint_cannot_reach_sanctioned(client):
+def test_status_endpoint_cannot_reach_sanctioned(client, realistic_payload):
     """SEC-17 over HTTP: there is one door, and this is not it."""
-    agent = _ingest_real_batch(client)[0]
+    agent = _ingest_real_batch(client, realistic_payload)[0]
     response = client.post(
         f"/v1/agents/{agent['id']}/status",
         json={"status": "sanctioned", "operator": "ezra"}, headers=AUTH,
@@ -187,8 +205,8 @@ def test_unknown_agent_is_not_found(client):
     assert response.status_code == 404
 
 
-def test_audit_trail_names_who_did_what(client):
-    agent = _ingest_real_batch(client)[0]
+def test_audit_trail_names_who_did_what(client, realistic_payload):
+    agent = _ingest_real_batch(client, realistic_payload)[0]
     client.post(
         f"/v1/agents/{agent['id']}/imprimatur",
         json={"operator": "ezra@custos.dev"}, headers=AUTH,
