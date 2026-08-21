@@ -17,11 +17,11 @@ disagree, the code is right and this document is a bug.
 YOUR AWS ACCOUNT                             │  CUSTOS
                                              │
   VPC Flow Logs ──┐                          │
-  CloudTrail ─────┤                          │
-  IAM (read) ─────┼──▶ collector ────────────┼──▶ control plane
-  ALB logs ───────┘    read-only role        │      classifier
-   (optional)          no host agent         │      register
-                       no compute created    │      report
+  CloudTrail ─────┤                          │      classifier
+  IAM (read) ─────┼──▶ collector ────────────┼──▶   register (SQLite)
+  ALB logs ───────┘    read-only role        │      baselines
+   (optional)          no host agent         │      report
+                       no compute created    │
                                              │
                        ── metadata only ──▶  │
                        addresses, ports,     │
@@ -133,6 +133,37 @@ The honest framing: this is inventory data about your software. It would be
 useful to an attacker who was already inside, and it would not get them inside.
 The collector cannot be pointed at an account whose operator lacks legitimate
 access to it.
+
+### How long do you keep our data?
+
+Three windows, and the split is deliberate.
+
+| | Retention | Why |
+|---|---|---|
+| Flow and request telemetry | Not stored | Classified on arrival; only the derived observation is kept |
+| Observations | 90 days | They feed behavioural baselines, and a baseline built from year-old behaviour is not describing the workload that runs today |
+| Scan history | 365 days | Answers "when did this start", which is the first question after any finding |
+| The register and its audit trail | Kept | Deleting a register entry loses a sanction decision; deleting an audit entry loses the answer to why one was made |
+
+Enforced by `custos prune`, which runs on a schedule. It cannot delete agents or
+audit entries — that is a property of the code, not a policy — because it is
+built to run unattended.
+
+**Backed by:** `custos/store/retention.py`, `test_agents_are_never_pruned`,
+`test_audit_entries_are_never_pruned`.
+
+### What ends up in your logs?
+
+The same rule as the wire: nothing that describes a person. Principals,
+endpoints, byte counts, and agent identifiers are logged because they describe
+software. URLs, user agents, client addresses, and anything credential-shaped
+are dropped by key before a line is written.
+
+Keys are filtered, never values. Inspecting values means deciding what a string
+is, and the only reliable way to keep sensitive text out of a log is to have no
+field that could hold it.
+
+**Backed by:** `custos/logging.py`, `test_forbidden_keys_never_reach_a_log_line`.
 
 ### Who can access our data internally?
 
