@@ -16,7 +16,7 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install -e ./controlplane -e ./a0 pytest ruff
+          pip install -e "./controlplane[api]" -e ./a0 pytest ruff httpx
       - name: Lint
         run: ruff check controlplane a0
       - name: Test control plane
@@ -38,6 +38,44 @@ jobs:
       - name: Run the A0 experiment
         run: python -m custos_a0.cli experiment
 
+  contract:
+    # The Python schema and the Go wire types describe the same bytes and
+    # cannot share a definition. Drift between them is silent — a field the API
+    # ignores looks exactly like a field the collector never sent — so the
+    # contract test runs on its own and blocks the merge.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e "./controlplane[api]" pytest
+      - name: Wire contract
+        run: cd controlplane && pytest -q tests/test_wire_contract.py
+
+  invariants:
+    # SEC-16 through SEC-20 have named tests. They run as their own job so a
+    # failure reads as "an invariant broke" in the checks list rather than
+    # being one line inside a suite of two hundred.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - run: pip install -e "./controlplane[api]" -e ./a0 pytest
+      - name: SEC-16, SEC-18, SEC-19 (collector)
+        run: |
+          cd collector
+          go test ./internal/wire/ ./internal/awsread/ ./internal/config/             -run 'TestWireTypesCarryNoPayload|TestNoPayloadShapedFieldNames|TestNoMutatingAPIs|TestStartQuery|TestEveryAWSMethodIsReadOnly|TestZeroConfigIsInert' -v
+      - name: SEC-17, SEC-18, SEC-20 (control plane)
+        run: |
+          cd controlplane
+          pytest -q -k "sec17 or sec18 or sec20 or leakage or unattributed"
+
   go:
     runs-on: ubuntu-latest
     steps:
@@ -51,6 +89,8 @@ jobs:
         run: cd collector && go vet ./...
       - name: Test
         run: cd collector && go test -race ./...
+      - name: Image builds
+        run: docker build -f deploy/Dockerfile -t custos-controlplane:ci .
       - name: Build
         run: cd collector && CGO_ENABLED=0 go build -trimpath ./cmd/custos-collector
 
