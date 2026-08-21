@@ -40,6 +40,22 @@ make check       # lint and test everything
 make experiment  # run A0, print the G0 verdict, write a sample scan report
 ```
 
+## The loop, end to end
+
+```
+# In the customer's account: one Terraform apply, read-only role.
+# Then, holding their role ARN:
+CUSTOS_DRY_RUN=1 ./custos-collector > batch.json    # prints, sends nothing
+
+custos --db acme.db scan batch.json --out report.html
+custos --db acme.db register --account 447120043318 --unsanctioned-only
+custos --db acme.db diff --account 447120043318     # after the second scan
+```
+
+No server is needed for a first scan. `docs/OPERATIONS.md` walks the whole
+thing; the control plane API and container image exist for when a customer
+wants continuous monitoring.
+
 ## Layout
 
 | Path | Language | What it is |
@@ -49,6 +65,12 @@ make experiment  # run A0, print the G0 verdict, write a sample scan report
 | `a0/` | Python | The G0 experiment: synthetic telemetry and evaluation. |
 | `checkpoint/` | Go | Inline enforcement gateway. Not started. |
 | `console/` | TypeScript | Operator UI. Not started. |
+
+The control plane holds the classifier, the register and its SQLite store,
+attribution, reach, baselines, scan comparison, the HTTP API, and the `custos`
+CLI. The collector reads VPC Flow Logs from CloudWatch or S3, resolves network
+interfaces to principals across EC2, Lambda, and ECS, and enumerates IAM
+capability.
 
 Language choices and their reasoning: [docs/adr/0001-language-choices.md](docs/adr/0001-language-choices.md).
 
@@ -69,6 +91,9 @@ that enforces it in [docs/SECURITY-INVARIANTS.md](docs/SECURITY-INVARIANTS.md).
 | **SEC-18** | Metadata only. Enforced by wire types having no field that can hold a payload. |
 | **SEC-19** | The collector is inert without an explicit destination. |
 | **SEC-20** | A finding without an owner is segregated, never mixed into owned findings. |
+
+CI runs those five as their own job, so a failure reads as "an invariant broke"
+rather than as one line inside two hundred passing tests.
 
 SEC-18 is worth reading the code for. It is not a redaction step — a redaction
 step is a filter, filters have bugs and configuration, and a reviewer is right
