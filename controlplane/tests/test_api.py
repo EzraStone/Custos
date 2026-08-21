@@ -1,0 +1,210 @@
+"""API behaviour, with emphasis on the ways it must refuse."""
+
+from datetime import UTC, datetime, timedelta
+
+import pytest
+from fastapi.testclient import TestClient
+
+from custos.api import TokenStore, create_app
+from custos.store.db import open_database
+
+ACCOUNT = "447120043318"
+OTHER = "999999999999"
+TOKEN = "tok-acme"
+AUTH = {"Authorization": f"Bearer {TOKEN}"}
+W0 = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+
+
+@pytest.fixture
+def client():
+    app = create_app(conn=open_database(), tokens=TokenStore({TOKEN: ACCOUNT}))
+    return TestClient(app)
+
+
+def batch(account=ACCOUNT, start=W0, end=None, flows=None):
+    return {
+        "account_id": account,
+        "region": "us-east-1",
+        "window_start": start.isoformat(),
+        "window_end": (end or start + timedelta(hours=1)).isoformat(),
+        "collector_version": "test",
+        "flows": flows or [],
+        "requests": [],
+        "principals": [],
+        "attachments": [],
+    }
+
+
+def test_health_reports_the_revisions_that_decide_what_a_finding_means(client):
+    body = client.get("/healthz").json()
+    assert body["status"] == "ok"
+    assert body["catalogue_revision"]
+    assert body["prices_revision"]
+
+
+@pytest.mark.parametrize("path", ["/v1/register", "/v1/scans"])
+def test_read_endpoints_require_a_credential(client, path):
+    assert client.get(path).status_code == 401
+
+
+def test_ingestion_requires_a_credential(client):
+    assert client.post("/v1/batches", json=batch()).status_code == 401
+
+
+def test_mutating_endpoints_require_a_credential(client):
+    assert client.post(
+        "/v1/agents/agt_x/imprimatur", json={"operator": "ezra"}
+    ).status_code == 401
+    assert client.post(
+        "/v1/agents/agt_x/status", json={"status": "retired", "operator": "ezra"}
+    ).status_code == 401
+
+
+def test_missing_and_wrong_credentials_are_indistinguishable(client):
+    missing = client.get("/v1/register")
+    wrong = client.get("/v1/register", headers={"Authorization": "Bearer nope"})
+    assert missing.status_code == wrong.status_code == 401
+    assert missing.json() == wrong.json()
+
+
+# A token names one account. Shipping telemetry for another is either a
+# misconfiguration or an attempt to poison someone else's register.
+def test_a_token_cannot_ship_telemetry_for_another_account(client):
+    response = client.post("/v1/batches", json=batch(account=OTHER), headers=AUTH)
+    assert response.status_code == 403
+
+
+def test_a_token_cannot_read_another_accounts_register(client):
+    client.post("/v1/batches", json=batch(), headers=AUTH)
+    body = client.get("/v1/register", headers=AUTH).json()
+    assert body["account_id"] == ACCOUNT
+
+
+def test_batch_is_accepted_and_reports_what_it_found(client):
+    response = client.post("/v1/batches", json=batch(), headers=AUTH)
+    assert response.status_code == 202
+    body = response.json()
+    assert body["duplicate"] is False
+    assert "batch_id" in body and "scan_id" in body
+
+
+def test_redelivered_window_is_reported_as_a_duplicate(client):
+    client.post("/v1/batches", json=batch(), headers=AUTH)
+    again = client.post("/v1/batches", json=batch(), headers=AUTH)
+    assert again.json()["duplicate"] is True
+
+
+def test_inverted_window_is_refused(client):
+    bad = batch(start=W0, end=W0 - timedelta(hours=1))
+    assert client.post("/v1/batches", json=bad, headers=AUTH).status_code == 422
+
+
+def test_unknown_fields_are_refused_rather_than_ignored(client):
+    """SEC-18 at the HTTP boundary: a modified collector shipping prompts gets
+    an error, not a silent accept."""
+    payload = batch() | {"prompt": "you are a helpful assistant"}
+    assert client.post("/v1/batches", json=payload, headers=AUTH).status_code == 422
+
+
+def test_coverage_note_states_what_the_scan_could_not_see(client):
+    """A scan that found nothing because it could not see is not a clean
+    account, and the response has to say which one it was."""
+    note = client.post("/v1/batches", json=batch(), headers=AUTH).json()["coverage_note"]
+    assert "load balancer" in note
+    assert "blast radius" in note
+
+
+def _ingest_real_batch(client):
+    from custos_a0.batchbridge import build_batch
+
+    payload = build_batch().model_dump(mode="json")
+    payload["account_id"] = ACCOUNT
+    assert client.post("/v1/batches", json=payload, headers=AUTH).status_code == 202
+    return client.get("/v1/register?unsanctioned_only=true", headers=AUTH).json()["agents"]
+
+
+def test_register_returns_findings_worst_first_with_evidence(client):
+    agents = _ingest_real_batch(client)
+    assert agents
+    assert agents[0]["blast_radius"] == "destructive"
+    assert agents[0]["evidence"], "a finding without its evidence is just a score"
+
+
+def test_sec17_discovered_agents_are_never_sanctioned_by_ingestion(client):
+    for agent in _ingest_real_batch(client):
+        assert agent["status"] == "discovered"
+        assert agent["imprimatur"] is None
+        assert agent["unsanctioned"] is True
+
+
+def test_granting_imprimatur_requires_an_operator(client):
+    agent = _ingest_real_batch(client)[0]
+    response = client.post(
+        f"/v1/agents/{agent['id']}/imprimatur", json={"operator": ""}, headers=AUTH
+    )
+    assert response.status_code == 422
+
+
+def test_granting_imprimatur_records_the_human(client):
+    agent = _ingest_real_batch(client)[0]
+    response = client.post(
+        f"/v1/agents/{agent['id']}/imprimatur",
+        json={"operator": "ezra@custos.dev"}, headers=AUTH,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "sanctioned"
+    assert body["imprimatur"]["granted_by"] == "ezra@custos.dev"
+    assert body["unsanctioned"] is False
+
+
+def test_sanctioning_removes_an_agent_from_the_unsanctioned_set(client):
+    before = _ingest_real_batch(client)
+    client.post(
+        f"/v1/agents/{before[0]['id']}/imprimatur",
+        json={"operator": "ezra"}, headers=AUTH,
+    )
+    after = client.get("/v1/register?unsanctioned_only=true", headers=AUTH).json()["agents"]
+    assert len(after) == len(before) - 1
+
+
+def test_status_endpoint_cannot_reach_sanctioned(client):
+    """SEC-17 over HTTP: there is one door, and this is not it."""
+    agent = _ingest_real_batch(client)[0]
+    response = client.post(
+        f"/v1/agents/{agent['id']}/status",
+        json={"status": "sanctioned", "operator": "ezra"}, headers=AUTH,
+    )
+    assert response.status_code == 409
+    assert "grant_imprimatur" in response.json()["detail"]
+
+
+def test_unknown_agent_is_not_found(client):
+    response = client.post(
+        "/v1/agents/agt_nonexistent/imprimatur",
+        json={"operator": "ezra"}, headers=AUTH,
+    )
+    assert response.status_code == 404
+
+
+def test_audit_trail_names_who_did_what(client):
+    agent = _ingest_real_batch(client)[0]
+    client.post(
+        f"/v1/agents/{agent['id']}/imprimatur",
+        json={"operator": "ezra@custos.dev"}, headers=AUTH,
+    )
+    entries = client.get(f"/v1/agents/{agent['id']}/audit", headers=AUTH).json()["entries"]
+    assert [e["action"] for e in entries] == ["discovered", "sanctioned"]
+    assert entries[-1]["actor"] == "ezra@custos.dev"
+
+
+def test_scans_are_listed(client):
+    client.post("/v1/batches", json=batch(), headers=AUTH)
+    body = client.get("/v1/scans", headers=AUTH).json()
+    assert len(body["scans"]) == 1
+
+
+def test_openapi_schema_is_not_served(client):
+    """A public schema browser on a security product is an invitation."""
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        assert client.get(path).status_code == 404
