@@ -248,16 +248,20 @@ def test_report_requires_a_credential(client):
 # someone approved it.
 def test_report_reflects_a_sanction_immediately(client, realistic_payload):
     agents = _ingest_real_batch(client, realistic_payload)
+    sanctioned = agents[0]
+    name = sanctioned["principal"].rsplit("/", 1)[-1]
+
     before = client.get("/v1/report", headers=AUTH).text
+    assert name in before
 
     client.post(
-        f"/v1/agents/{agents[0]['id']}/imprimatur",
+        f"/v1/agents/{sanctioned['id']}/imprimatur",
         json={"operator": "ezra@custos.dev"}, headers=AUTH,
     )
     after = client.get("/v1/report", headers=AUTH).text
 
-    assert before != after
-    assert after.count("unsanctioned") < before.count("unsanctioned")
+    assert name not in after, "a sanctioned agent must leave the findings list"
+    assert before.count("<article") - after.count("<article") == 1
 
 
 def test_report_is_self_contained(client, realistic_payload):
