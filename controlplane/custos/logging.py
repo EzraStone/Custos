@@ -63,6 +63,22 @@ def redact(fields: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# Libraries that log full request URLs at INFO. Their lines route through the
+# root handler, so without this they carry query strings straight into a
+# customer's SIEM — leaking exactly what the middleware is careful not to log.
+#
+# Quieted rather than filtered. A filter has to recognise a URL inside a
+# formatted message, which means pattern-matching on text, which is the
+# approach this module rejects everywhere else.
+NOISY_LOGGERS = (
+    "httpx",
+    "httpcore",
+    "urllib3",
+    "botocore",
+    "uvicorn.access",
+)
+
+
 def configure(level: str = "INFO", stream=None) -> None:
     """Install the JSON formatter on the root logger."""
     handler = logging.StreamHandler(stream or sys.stdout)
@@ -72,6 +88,9 @@ def configure(level: str = "INFO", stream=None) -> None:
     root.handlers.clear()
     root.addHandler(handler)
     root.setLevel(level.upper())
+
+    for name in NOISY_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)
 
 
 def get(name: str) -> logging.Logger:

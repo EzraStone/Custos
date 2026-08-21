@@ -86,3 +86,27 @@ def test_level_is_respected():
     logging.getLogger("test").warning("kept")
     assert "suppressed" not in stream.getvalue()
     assert "kept" in stream.getvalue()
+
+
+# httpx and friends log full request URLs at INFO. Their records route through
+# the root handler, so without quieting them a query string reaches a
+# customer's SIEM by a path the middleware never touches.
+def test_url_logging_libraries_are_quieted():
+    import logging
+
+    from custos.logging import NOISY_LOGGERS
+
+    capture()
+    for name in NOISY_LOGGERS:
+        assert logging.getLogger(name).level >= logging.WARNING, name
+
+
+def test_a_noisy_library_cannot_leak_a_query_string():
+    import logging
+
+    stream = capture()
+    logging.getLogger("httpx").info(
+        'HTTP Request: GET /v1/chat?user_email=alice@acme.com&token=sk-live-9f2'
+    )
+    assert "alice@acme.com" not in stream.getvalue()
+    assert "sk-live" not in stream.getvalue()
