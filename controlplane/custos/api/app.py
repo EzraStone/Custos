@@ -8,6 +8,7 @@ mutates state names the human who did it.
 from __future__ import annotations
 
 import sqlite3
+import time
 from datetime import datetime
 from typing import Annotated
 
@@ -18,6 +19,7 @@ from pydantic import BaseModel, Field
 from .. import __version__
 from ..catalog import RANGES_REVISION
 from ..diff import ScanDiff, compare
+from ..logging import event, get
 from ..pipeline import ingest
 from ..register.model import Status
 from ..register.store import Register, TransitionError
@@ -29,6 +31,8 @@ from ..store.db import now, open_database
 from ..store.scans import ScanStore
 from .auth import Principal, TokenStore, parse_bearer
 from .schema import Batch, BatchAccepted
+
+log = get("custos.api")
 
 MAX_FLOWS_PER_BATCH = 2_000_000
 """Matches the collector's own event cap. A batch larger than this did not come
@@ -87,6 +91,30 @@ def create_app(
     app.state.db = database
     app.state.tokens = token_store
 
+    @app.middleware("http")
+    async def log_requests(request: Request, call_next):
+        """Log every request as a structured event.
+
+        The path is logged and the query string is not. A path is a fixed set
+        of route templates we wrote; a query string is caller-supplied and
+        could hold anything. That is the same reasoning as the absent fields on
+        the wire types, applied to the one place where request data reaches a
+        log line.
+
+        Client addresses are not logged either. They describe whoever operates
+        the collector, and this system inventories software.
+        """
+        started = time.monotonic()
+        response = await call_next(request)
+        event(
+            log, "http.request",
+            method=request.method,
+            path=request.url.path,
+            status=response.status_code,
+            duration_ms=round((time.monotonic() - started) * 1000, 1),
+        )
+        return response
+
     @app.get("/healthz")
     def healthz() -> dict[str, object]:
         """Liveness, plus the two revisions that decide what a finding means."""
@@ -119,6 +147,18 @@ def create_app(
             )
 
         outcome = ingest(app.state.db, batch)
+        event(
+            log, "batch.ingested",
+            account_id=batch.account_id,
+            scan_id=outcome.scan_id,
+            duplicate=outcome.batch.duplicate,
+            flow_records=len(batch.flows),
+            agents_found=len(outcome.result.register.agents),
+            review_candidates=len(outcome.result.review_candidates),
+            changes=len(outcome.diff.actionable),
+            drift_findings=len(outcome.drift),
+            coverage=round(outcome.coverage.parsed_fraction, 3),
+        )
         return BatchAccepted(
             batch_id=outcome.batch.id,
             scan_id=outcome.scan_id,
@@ -184,6 +224,15 @@ def create_app(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail=str(exc)
             ) from exc
+
+        # Sanctioning is the only action in the system that grants authority.
+        # It is logged separately from the request so it survives a log level
+        # that drops request noise.
+        event(
+            log, "agent.sanctioned",
+            account_id=principal.account_id, agent_id=agent_id,
+            operator=body.operator, principal=agent.identity.principal,
+        )
         return _render(agent)
 
     @app.post("/v1/agents/{agent_id}/status")
