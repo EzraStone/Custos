@@ -10,12 +10,14 @@ and the store testable without a classifier.
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from .api.schema import Batch
 from .attribute import PrincipalFacts
+from .baseline import Drift, detect_from_history
 from .classify import Disposition
+from .diff import ScanDiff, compare
 from .reach import IamCapability
 from .scan import ScanInput, ScanResult
 from .scan import run as run_scan
@@ -39,6 +41,11 @@ class IngestResult:
     scan_id: int
     result: ScanResult
     coverage_note: str = ""
+    diff: ScanDiff = field(default_factory=ScanDiff)
+    """What changed since the previous scan. Empty on a first scan."""
+    drift: list[Drift] = field(default_factory=list)
+    """Departures from each agent's established baseline. Empty until an agent
+    has enough history for a baseline to mean anything."""
 
 
 def _to_telemetry(batch: Batch) -> tuple[list[FlowRecord], dict[str, list[InboundRequest]]]:
@@ -163,10 +170,19 @@ def ingest(
             catalogue_revision=result.catalogue_revision,
         )
 
+        # Captured before this scan's observations are written, so the
+        # comparison is against the previous scan rather than against itself.
+        previous = scans.latest_scan_before(batch.account_id, scan_id)
+        previous_obs = (
+            scans.observations_for_scan(previous.id) if previous is not None else {}
+        )
+
         window_hours = max(
             (batch.window_end - batch.window_start).total_seconds() / 3600, 1e-9
         )
         telemetry = {t.principal: t for t in result.telemetry}
+        current_obs: dict[str, dict] = {}
+        stored_agents = {}
 
         for agent in result.register.agents.values():
             stored = agents.upsert(agent)
@@ -180,20 +196,48 @@ def ingest(
             for w in t.model_windows:
                 active_hours[w.start.hour] = active_hours.get(w.start.hour, 0.0) + 1.0
 
+            observation = {
+                "blast_radius": str(agent.reach.blast_radius),
+                "tools": set(agent.reach.tools) | set(agent.reach.data_stores),
+                "calls_per_hour": len(t.model_windows) / window_hours,
+                "active_hours": active_hours,
+                "observed_at": batch.window_end,
+            }
+            current_obs[stored.id] = observation
+            stored_agents[stored.id] = stored
+
             scans.record_observation(
                 scan_id=scan_id, agent_id=stored.id, observed_at=batch.window_end,
                 confidence=agent.provenance.confidence,
                 model_egress=egress, model_ingress=ingress,
                 episodes=len(t.episodes),
-                calls_per_hour=len(t.model_windows) / window_hours,
-                tools=set(agent.reach.tools) | set(agent.reach.data_stores),
+                calls_per_hour=observation["calls_per_hour"],
+                tools=observation["tools"],
                 active_hours=active_hours,
-                blast_radius=str(agent.reach.blast_radius),
+                blast_radius=observation["blast_radius"],
             )
+
+        diff = compare(
+            stored_agents, current_obs, previous_obs,
+            previous_scan_id=previous.id if previous else None,
+            current_scan_id=scan_id,
+        )
+
+        # Drift needs history, so it runs after this scan's observations are
+        # written — detect_from_history excludes the latest row from the
+        # baseline it builds.
+        drift: list[Drift] = []
+        for agent_id in current_obs:
+            _, findings = detect_from_history(
+                agent_id, scans.observation_history(agent_id)
+            )
+            drift.extend(findings)
+        drift.sort(key=lambda d: d.severity)
 
     return IngestResult(
         batch=record, scan_id=scan_id, result=result,
         coverage_note=_coverage_note(batch, result),
+        diff=diff, drift=drift,
     )
 
 

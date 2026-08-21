@@ -165,6 +165,28 @@ class ScanStore:
         scans = self.scans_for(account_id, limit=1)
         return scans[0] if scans else None
 
+    def latest_scan_before(self, account_id: str, scan_id: int) -> ScanRecord | None:
+        """The most recent scan preceding `scan_id`.
+
+        Used to pick the comparison baseline during ingestion, where the
+        current scan row already exists. Taking `latest_scan` there would
+        compare a scan against itself and report that nothing ever changes.
+        """
+        row = self.conn.execute(
+            "SELECT * FROM scans WHERE account_id = ? AND id < ? "
+            "ORDER BY started_at DESC, id DESC LIMIT 1",
+            (account_id, scan_id),
+        ).fetchone()
+        if row is None:
+            return None
+        return ScanRecord(
+            id=row["id"], batch_id=row["batch_id"], account_id=row["account_id"],
+            started_at=parse(row["started_at"]),
+            principals_seen=row["principals_seen"], agents_found=row["agents_found"],
+            review_candidates=row["review_candidates"],
+            coverage=row["coverage"], truncated=bool(row["truncated"]),
+        )
+
     def observations_for_scan(self, scan_id: int) -> dict[str, dict]:
         """Observations from one scan, keyed by agent id."""
         out: dict[str, dict] = {}
