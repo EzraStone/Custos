@@ -11,7 +11,10 @@ RUFF := $(VENV)/bin/ruff
 PYTEST := $(VENV)/bin/pytest
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check lint test test-py test-go fmt experiment collector clean
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+
+.PHONY: help setup check lint test test-py test-go fmt experiment collector \
+        serve scan image prune clean
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -50,8 +53,26 @@ test-go: ## Go tests
 experiment: ## Run the A0 experiment and write the report
 	$(PY) -m custos_a0.cli experiment --out a0/out
 
-collector: ## Build the collector binary
-	cd collector && CGO_ENABLED=0 go build -trimpath -o bin/custos-collector ./cmd/custos-collector
+collector: ## Build the collector binary, stamped with the version
+	cd collector && CGO_ENABLED=0 go build -trimpath \
+	  -ldflags "-s -w -X main.Version=$(VERSION)" \
+	  -o bin/custos-collector ./cmd/custos-collector
+	@echo "built collector/bin/custos-collector $(VERSION)"
+
+serve: ## Run the control plane locally
+	@test -n "$$CUSTOS_TOKENS" || \
+	  (echo "set CUSTOS_TOKENS, e.g. CUSTOS_TOKENS=447120043318:dev-token" && exit 1)
+	$(VENV)/bin/uvicorn custos.api.main:app --host 127.0.0.1 --port 8080 --reload
+
+scan: ## Scan a batch file: make scan BATCH=batch.json DB=acme.db
+	@test -n "$(BATCH)" || (echo "usage: make scan BATCH=batch.json [DB=custos.db]" && exit 1)
+	$(VENV)/bin/custos --db $(or $(DB),custos.db) scan $(BATCH) --out scan-report.html
+
+image: ## Build the control plane container image
+	docker build -f deploy/Dockerfile -t custos-controlplane:$(VERSION) .
+
+prune: ## Drop telemetry past its retention window
+	$(VENV)/bin/custos --db $(or $(DB),custos.db) prune
 
 clean:
 	rm -rf a0/out collector/bin checkpoint/bin
