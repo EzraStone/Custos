@@ -82,6 +82,35 @@ class Attachment(BaseModel):
     compute: str = ""
 
 
+class Collection(BaseModel):
+    """How the collection itself went, as opposed to what it found.
+
+    Ships because the control plane cannot otherwise tell "this account is
+    clean" from "this scan read a third of the traffic". Those produce
+    identical findings and mean entirely different things.
+
+    Nothing here describes customer infrastructure — they are counters about
+    our own reading — so it adds no SEC-18 surface.
+    """
+
+    model_config = STRICT
+
+    lines_read: int = 0
+    lines_parsed: int = 0
+    lines_malformed: int = 0
+    records_skipped: int = 0
+    truncated: bool = False
+    have_access_logs: bool = False
+
+    @property
+    def parsed_fraction(self) -> float:
+        if self.lines_read <= 0:
+            # No lines read is not full coverage. Reporting 1.0 here would put
+            # a green banner on a scan that read nothing.
+            return 0.0
+        return self.lines_parsed / self.lines_read
+
+
 class Batch(BaseModel):
     """One collection window, as shipped.
 
@@ -95,6 +124,7 @@ class Batch(BaseModel):
     window_start: datetime
     window_end: datetime
     collector_version: str = ""
+    collection: Collection = Field(default_factory=Collection)
     flows: list[FlowRecord] = Field(default_factory=list)
     requests: list[InboundRequest] = Field(default_factory=list)
     principals: list[PrincipalFacts] = Field(default_factory=list)
@@ -109,7 +139,7 @@ class Batch(BaseModel):
         when unconfigured, and a configured collector on an account with zero
         inbound traffic has nothing to classify anyway.
         """
-        return bool(self.requests)
+        return self.collection.have_access_logs or bool(self.requests)
 
 
 class BatchAccepted(BaseModel):

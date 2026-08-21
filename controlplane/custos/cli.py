@@ -82,6 +82,7 @@ def _write_report(
         generated_at=datetime.now(UTC),
         diff=diff if diff is not None else outcome.diff,
         drift=drift if drift is not None else outcome.drift,
+        coverage=outcome.coverage,
     ))
 
 

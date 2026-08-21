@@ -19,6 +19,7 @@ from .baseline import Drift, detect_from_history
 from .classify import Disposition
 from .diff import ScanDiff, compare
 from .reach import IamCapability
+from .report import Coverage
 from .scan import ScanInput, ScanResult
 from .scan import run as run_scan
 from .store.agents import AgentStore
@@ -41,6 +42,8 @@ class IngestResult:
     scan_id: int
     result: ScanResult
     coverage_note: str = ""
+    coverage: Coverage = field(default_factory=Coverage)
+    """How much of the account this scan saw. Rendered above the findings."""
     diff: ScanDiff = field(default_factory=ScanDiff)
     """What changed since the previous scan. Empty on a first scan."""
     drift: list[Drift] = field(default_factory=list)
@@ -111,6 +114,24 @@ def to_scan_input(batch: Batch, interval: timedelta = DEFAULT_INTERVAL) -> ScanI
     )
 
 
+def _coverage(batch: Batch) -> Coverage:
+    """Build the report's coverage summary from what the collector reported.
+
+    A batch carrying no collection statistics gets the default, which renders
+    no banner. Absent statistics mean unknown, not incomplete — an older
+    collector that never reported them would otherwise put a red banner on
+    every scan, and a warning that is always present is one nobody reads.
+    """
+    stats = batch.collection
+    if stats.lines_read <= 0:
+        return Coverage()
+    return Coverage(
+        parsed_fraction=stats.parsed_fraction,
+        truncated=stats.truncated,
+        skipped_records=stats.records_skipped,
+    )
+
+
 def _coverage_note(batch: Batch, result: ScanResult) -> str:
     """A sentence about what this scan could not see, or empty.
 
@@ -165,8 +186,8 @@ def ingest(
             principals_seen=result.principals_seen,
             agents_found=len(result.register.agents),
             review_candidates=len(result.review_candidates),
-            coverage=1.0 if batch.flows else 0.0,
-            truncated=False,
+            coverage=batch.collection.parsed_fraction,
+            truncated=batch.collection.truncated,
             catalogue_revision=result.catalogue_revision,
         )
 
@@ -237,6 +258,7 @@ def ingest(
     return IngestResult(
         batch=record, scan_id=scan_id, result=result,
         coverage_note=_coverage_note(batch, result),
+        coverage=_coverage(batch),
         diff=diff, drift=drift,
     )
 

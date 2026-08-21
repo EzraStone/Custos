@@ -9,7 +9,14 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from custos.api.schema import Attachment, Batch, FlowRecord, InboundRequest, PrincipalFacts
+from custos.api.schema import (
+    Attachment,
+    Batch,
+    Collection,
+    FlowRecord,
+    InboundRequest,
+    PrincipalFacts,
+)
 
 from . import corpus as corpus_mod
 from .scanbridge import CAPABILITIES, FACTS, _short
@@ -76,6 +83,14 @@ def build_batch(
         window_start=c.start,
         window_end=c.end,
         collector_version="a0-synthetic",
+        # Synthetic telemetry is lossless by construction: every generated
+        # record is one the collector would have parsed. Saying so explicitly
+        # keeps the coverage banner honest rather than leaving it to a default.
+        collection=Collection(
+            lines_read=len(flows),
+            lines_parsed=len(flows),
+            have_access_logs=have_alb_logs,
+        ),
         flows=flows,
         requests=requests,
         principals=principals,

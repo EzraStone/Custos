@@ -27,6 +27,7 @@ PAIRS = {
     "PrincipalFacts": schema.PrincipalFacts,
     "Attachment": schema.Attachment,
     "Batch": schema.Batch,
+    "Collection": schema.Collection,
 }
 
 _STRUCT = re.compile(r"type (\w+) struct \{(.*?)\n\}", re.DOTALL)
