@@ -103,7 +103,7 @@ def extend(ranges: list[str], aws_services: list[str] | None = None) -> None:
     Caches are cleared, because a classification made before the extension
     would otherwise outlive it.
     """
-    global _MODEL_NETS
+    global _MODEL_NETS, _EXTRA_AWS_SERVICES
 
     parsed = []
     for entry in ranges:
@@ -114,14 +114,35 @@ def extend(ranges: list[str], aws_services: list[str] | None = None) -> None:
 
     _MODEL_NETS = _MODEL_NETS + tuple(parsed)
     if aws_services:
-        globals()["MODEL_AWS_SERVICES"] = MODEL_AWS_SERVICES | frozenset(aws_services)
+        _EXTRA_AWS_SERVICES = _EXTRA_AWS_SERVICES | frozenset(aws_services)
+    clear_caches()
 
+
+def reset() -> None:
+    """Restore the built-in catalogue, discarding every extension.
+
+    Exists for tests and for a control plane that reloads configuration
+    without restarting. Deliberately not implemented by reloading the module:
+    other modules import these functions by reference at import time, so a
+    reload leaves them pointing at pre-reload objects whose caches still hold
+    the extended answers — which silently corrupts classification for
+    everything that imported the catalogue before the reload.
+    """
+    global _MODEL_NETS, _EXTRA_AWS_SERVICES
+
+    _MODEL_NETS = tuple(ipaddress.ip_network(c) for c in MODEL_RANGES)
+    _EXTRA_AWS_SERVICES = frozenset()
+    clear_caches()
+
+
+def clear_caches() -> None:
+    """Drop memoised destination lookups.
+
+    Both caches, always. A classification memoised before an extension would
+    otherwise outlive it, and a stale 'not a model endpoint' is an agent that
+    stays invisible after the customer told us where to look.
+    """
     is_model_endpoint.cache_clear()
-    classify_cache_clear()
-
-
-def classify_cache_clear() -> None:
-    """Clear the memoised destination lookups."""
     is_private.cache_clear()
 
 
@@ -135,10 +156,14 @@ def configured_ranges() -> tuple[str, ...]:
     return tuple(str(net) for net in _MODEL_NETS)
 
 
+_EXTRA_AWS_SERVICES: frozenset[str] = frozenset()
+"""AWS services declared as model endpoints by a customer's configuration."""
+
+
 @lru_cache(maxsize=8192)
 def is_model_endpoint(addr: str, aws_service: str = "") -> bool:
     """True if this destination is a model inference endpoint."""
-    if aws_service in MODEL_AWS_SERVICES:
+    if aws_service in MODEL_AWS_SERVICES or aws_service in _EXTRA_AWS_SERVICES:
         return True
     try:
         ip = ipaddress.ip_address(addr)

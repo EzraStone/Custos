@@ -1,3 +1,5 @@
+import pytest
+
 from custos.catalog import DestinationClass, classify, is_model_endpoint, is_private
 
 
@@ -43,58 +45,69 @@ def test_private_detection():
 
 # --- extension ----------------------------------------------------------------
 
-def test_a_self_hosted_gateway_can_be_declared_a_model_endpoint():
+
+@pytest.fixture
+def clean_catalog():
+    """Restore the built-in catalogue after a test extends it.
+
+    Not importlib.reload: other modules import these functions by reference at
+    import time, so a reload leaves them pointing at pre-reload objects whose
+    caches still hold the extended answers. That silently corrupted
+    classification for every test that ran afterwards.
+    """
+    from custos import catalog
+
+    catalog.reset()
+    yield catalog
+    catalog.reset()
+
+
+def test_a_self_hosted_gateway_can_be_declared_a_model_endpoint(clean_catalog):
     """Many teams front every provider behind one internal endpoint, which
     otherwise classifies as an internal API and takes all its model traffic
     with it."""
-    import importlib
-
-    from custos import catalog
-
-    importlib.reload(catalog)
-    assert catalog.classify("10.9.9.9", 443) is not catalog.DestinationClass.MODEL
-
-    catalog.extend(["10.9.9.0/24"])
-    assert catalog.classify("10.9.9.9", 443) is catalog.DestinationClass.MODEL
-    importlib.reload(catalog)
+    assert clean_catalog.classify("10.9.9.9", 443) is not DestinationClass.MODEL
+    clean_catalog.extend(["10.9.9.0/24"])
+    assert clean_catalog.classify("10.9.9.9", 443) is DestinationClass.MODEL
 
 
-def test_extension_does_not_remove_built_in_ranges():
+def test_extension_does_not_remove_built_in_ranges(clean_catalog):
     """A security tool that can be configured blind is worse than one that
     cannot be configured at all."""
-    import importlib
-
-    from custos import catalog
-
-    importlib.reload(catalog)
-    catalog.extend(["10.9.9.0/24"])
-    assert catalog.is_model_endpoint("160.79.104.10")
-    importlib.reload(catalog)
+    clean_catalog.extend(["10.9.9.0/24"])
+    assert clean_catalog.is_model_endpoint("160.79.104.10")
 
 
-def test_invalid_ranges_are_refused_with_the_offending_value():
-    import importlib
+def test_an_extra_aws_service_can_be_declared(clean_catalog):
+    assert not clean_catalog.is_model_endpoint("10.0.0.5", "MYGATEWAY")
+    clean_catalog.extend([], aws_services=["MYGATEWAY"])
+    assert clean_catalog.is_model_endpoint("10.0.0.5", "MYGATEWAY")
 
-    import pytest
 
-    from custos import catalog
-
-    importlib.reload(catalog)
+def test_invalid_ranges_are_refused_with_the_offending_value(clean_catalog):
     with pytest.raises(ValueError, match="not-a-cidr"):
-        catalog.extend(["not-a-cidr"])
-    importlib.reload(catalog)
+        clean_catalog.extend(["not-a-cidr"])
 
 
-def test_configured_ranges_reflect_extensions():
+def test_configured_ranges_reflect_extensions(clean_catalog):
     """A customer who extended the catalogue should see that in the report
     rather than reading the built-in revision and assuming it was all we used."""
-    import importlib
+    before = len(clean_catalog.configured_ranges())
+    clean_catalog.extend(["10.9.9.0/24"])
+    assert len(clean_catalog.configured_ranges()) == before + 1
+    assert "10.9.9.0/24" in clean_catalog.configured_ranges()
 
-    from custos import catalog
 
-    importlib.reload(catalog)
-    before = len(catalog.configured_ranges())
-    catalog.extend(["10.9.9.0/24"])
-    assert len(catalog.configured_ranges()) == before + 1
-    assert "10.9.9.0/24" in catalog.configured_ranges()
-    importlib.reload(catalog)
+def test_reset_restores_the_built_in_catalogue(clean_catalog):
+    clean_catalog.extend(["10.9.9.0/24"])
+    clean_catalog.reset()
+    assert clean_catalog.classify("10.9.9.9", 443) is not DestinationClass.MODEL
+    assert clean_catalog.is_model_endpoint("160.79.104.10")
+
+
+def test_extension_invalidates_memoised_classifications(clean_catalog):
+    """A stale 'not a model endpoint' is an agent that stays invisible after
+    the customer told us where to look."""
+    assert not clean_catalog.is_model_endpoint("10.9.9.9")
+    clean_catalog.extend(["10.9.9.0/24"])
+    assert clean_catalog.is_model_endpoint("10.9.9.9")
