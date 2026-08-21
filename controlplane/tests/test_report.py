@@ -217,3 +217,40 @@ def test_change_details_are_escaped():
     )
     assert "<script>alert" not in page
     assert "&lt;script&gt;" in page
+
+
+# --- coverage -----------------------------------------------------------------
+
+def test_complete_coverage_shows_no_banner():
+    from custos.report import Coverage
+
+    page = render(result([agent()]), "acme", T0, coverage=Coverage())
+    assert "Incomplete coverage" not in page
+
+
+def test_partial_parsing_is_banner_worthy():
+    """A caveat at the bottom is a caveat nobody reads before concluding."""
+    from custos.report import Coverage
+
+    page = render(result([agent()]), "acme", T0, coverage=Coverage(parsed_fraction=0.4))
+    assert "Incomplete coverage" in page
+    assert "40% of flow log lines parsed" in prose(page)
+    assert page.index("Incomplete coverage") < page.index("Unsanctioned agents")
+
+
+def test_truncation_and_dropped_records_are_both_named():
+    from custos.report import Coverage
+
+    page = prose(render(
+        result([agent()]), "acme", T0,
+        coverage=Coverage(truncated=True, skipped_records=1234),
+    ))
+    assert "truncated at its record limit" in page
+    assert "dropped 1,234 records" in page
+
+
+def test_the_banner_says_what_incompleteness_means():
+    from custos.report import Coverage
+
+    page = prose(render(result([agent()]), "acme", T0, coverage=Coverage(truncated=True)))
+    assert "an absence of findings means less here" in page

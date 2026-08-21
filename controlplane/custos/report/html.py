@@ -21,6 +21,7 @@ reports like this fail:
 from __future__ import annotations
 
 import html
+from dataclasses import dataclass
 from datetime import datetime
 
 from ..baseline import Drift
@@ -208,12 +209,60 @@ def _drift_section(drift: list[Drift], agents: dict[str, Agent]) -> str:
 </section>"""
 
 
+@dataclass(frozen=True, slots=True)
+class Coverage:
+    """How much of the account this scan actually saw.
+
+    Carried into the report rather than kept in a log, because it changes what
+    the report means. "We found nothing" and "we found nothing in the 40% of
+    your traffic we could read" are different sentences, and only one of them
+    is worth acting on.
+    """
+
+    parsed_fraction: float = 1.0
+    truncated: bool = False
+    skipped_records: int = 0
+
+    @property
+    def complete(self) -> bool:
+        return self.parsed_fraction >= 0.95 and not self.truncated and not self.skipped_records
+
+
+def _coverage_banner(coverage: Coverage | None) -> str:
+    """A banner above everything when the scan could not see the whole account.
+
+    Above everything deliberately. A caveat in a limitations section at the
+    bottom is a caveat nobody reads before forming a conclusion.
+    """
+    if coverage is None or coverage.complete:
+        return ""
+
+    reasons = []
+    if coverage.parsed_fraction < 0.95:
+        reasons.append(f"only {coverage.parsed_fraction:.0%} of flow log lines parsed")
+    if coverage.truncated:
+        reasons.append("the collection window was truncated at its record limit")
+    if coverage.skipped_records:
+        reasons.append(
+            f"AWS dropped {coverage.skipped_records:,} records it could not capture"
+        )
+
+    return f"""
+<div class="banner">
+  <span class="tag">Incomplete coverage</span>
+  <p>This scan did not see the whole account: {_e("; ".join(reasons))}. Agents
+  running in the traffic we could not read would not appear below, so an
+  absence of findings means less here than it usually would.</p>
+</div>"""
+
+
 def render(
     result: ScanResult,
     account_label: str,
     generated_at: datetime,
     diff: ScanDiff | None = None,
     drift: list[Drift] | None = None,
+    coverage: Coverage | None = None,
 ) -> str:
     """Render the scan report as a single self-contained HTML document."""
     findings = result.register.attributed_findings
@@ -232,6 +281,8 @@ def render(
 <title>Custos scan — {_e(account_label)}</title>
 <style>{_CSS}</style>
 </head><body><main class="sheet">
+
+{_coverage_banner(coverage)}
 
 <header class="masthead">
   <p class="gloss">Agent discovery scan</p>
@@ -368,6 +419,11 @@ details summary{cursor:pointer;font-family:var(--mono);font-size:.7rem;
 .evidence{margin:.85rem 0 0;padding-left:1.1rem;font-size:.86rem;
   color:var(--ink-soft);max-width:44rem}
 .evidence li{margin-bottom:.5rem}
+.banner{border:1px solid var(--seal);border-left-width:3px;background:var(--raised);
+  padding:1.1rem 1.3rem;margin:2.5rem 0 0;max-width:46rem}
+.banner .tag{font-family:var(--mono);font-size:.66rem;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--seal);display:block;margin-bottom:.5rem}
+.banner p{margin:0;font-size:.92rem}
 .alarm{max-width:42rem;border-left:3px solid var(--seal);padding-left:1.1rem;
   color:var(--ink);font-family:var(--display);font-size:1.1rem}
 .changes{list-style:none;margin:0;padding:0;max-width:48rem}
