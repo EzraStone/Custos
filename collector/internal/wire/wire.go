@@ -79,6 +79,24 @@ type Attachment struct {
 	Compute     string `json:"compute"`
 }
 
+// Collection describes the collection itself rather than the account.
+//
+// It ships because the control plane cannot otherwise tell "this account is
+// clean" from "this scan read a third of the traffic". Those produce identical
+// findings and mean entirely different things, and the difference has to
+// travel with the data rather than living in a log the customer never sees.
+//
+// Nothing here describes customer infrastructure, so it adds no SEC-18
+// surface: they are counters about our own reading.
+type Collection struct {
+	LinesRead      int64 `json:"lines_read"`
+	LinesParsed    int64 `json:"lines_parsed"`
+	LinesMalformed int64 `json:"lines_malformed"`
+	RecordsSkipped int64 `json:"records_skipped"`
+	Truncated      bool  `json:"truncated"`
+	HaveAccessLogs bool  `json:"have_access_logs"`
+}
+
 // Batch is the unit of shipment. This is the complete set of things that ever
 // leaves a customer account.
 type Batch struct {
@@ -87,6 +105,7 @@ type Batch struct {
 	WindowStart time.Time        `json:"window_start"`
 	WindowEnd   time.Time        `json:"window_end"`
 	Collector   string           `json:"collector_version"`
+	Collection  Collection       `json:"collection"`
 	Flows       []FlowRecord     `json:"flows"`
 	Requests    []InboundRequest `json:"requests"`
 	Principals  []PrincipalFacts `json:"principals"`

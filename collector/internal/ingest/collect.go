@@ -129,6 +129,13 @@ func (c *Collector) Collect(ctx context.Context, w awsread.Window) (wire.Batch, 
 
 	records, stats, err := c.Flows.Read(ctx, w)
 	report.Stats = stats
+	batch.Collection = wire.Collection{
+		LinesRead:      int64(stats.Lines),
+		LinesParsed:    int64(stats.Parsed),
+		LinesMalformed: int64(stats.Malformed),
+		RecordsSkipped: int64(stats.SkipData + stats.NoData),
+		Truncated:      stats.Truncated,
+	}
 	if err != nil {
 		// Keep what was read. The caller decides whether a partial window is
 		// worth shipping.
@@ -144,6 +151,7 @@ func (c *Collector) Collect(ctx context.Context, w awsread.Window) (wire.Batch, 
 		batch.Requests = requests
 		report.Requests = len(requests)
 		report.HaveALBLogs = true
+		batch.Collection.HaveAccessLogs = true
 	}
 
 	interfaceIDs := distinctInterfaces(records)

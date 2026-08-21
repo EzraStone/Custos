@@ -33,14 +33,21 @@ var allowedFields = map[string]map[string]bool{
 	},
 	"Batch": {
 		"AccountID": true, "Region": true, "WindowStart": true, "WindowEnd": true,
-		"Collector": true, "Flows": true, "Requests": true, "Principals": true,
-		"Attachments": true,
+		"Collector": true, "Collection": true, "Flows": true, "Requests": true,
+		"Principals": true, "Attachments": true,
+	},
+	"Collection": {
+		"LinesRead": true, "LinesParsed": true, "LinesMalformed": true,
+		"RecordsSkipped": true, "Truncated": true, "HaveAccessLogs": true,
 	},
 }
 
 // TestWireTypesCarryNoPayload enforces SEC-18 by reflection.
 func TestWireTypesCarryNoPayload(t *testing.T) {
-	types := []any{FlowRecord{}, InboundRequest{}, PrincipalFacts{}, Attachment{}, Batch{}}
+	types := []any{
+		FlowRecord{}, InboundRequest{}, PrincipalFacts{},
+		Attachment{}, Collection{}, Batch{},
+	}
 
 	for _, v := range types {
 		rt := reflect.TypeOf(v)
