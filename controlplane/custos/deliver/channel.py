@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
@@ -45,6 +46,16 @@ class Channel(Protocol):
     name: str
 
     def send(self, findings: list[Finding], at: datetime) -> Delivery: ...
+
+
+Poster = Callable[[str, dict, dict[str, str] | None], None]
+"""How a channel puts bytes on the network.
+
+An injected field rather than a module-level call, so a test can assert what
+would have been sent without a live endpoint. Delivery formatting is the part
+most likely to be wrong and the part least likely to be exercised in
+production, so it needs to be cheap to test.
+"""
 
 
 def _post(url: str, payload: dict, headers: dict[str, str] | None = None) -> None:
@@ -87,7 +98,7 @@ class SlackChannel:
 
     webhook_url: str
     name: str = "slack"
-    post = staticmethod(_post)
+    post: Poster = _post
 
     def send(self, findings: list[Finding], at: datetime) -> Delivery:
         if not findings:
@@ -145,7 +156,7 @@ class WebhookChannel:
     url: str
     headers: dict[str, str] = field(default_factory=dict)
     name: str = "webhook"
-    post = staticmethod(_post)
+    post: Poster = _post
 
     def send(self, findings: list[Finding], at: datetime) -> Delivery:
         if not findings:
