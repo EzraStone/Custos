@@ -1,6 +1,7 @@
 import { useState } from "react";
 
-import { RADIUS_LABEL, type Agent } from "../api/types";
+import { RADIUS_LABEL, type Agent, type AuditEntry } from "../api/types";
+import { History } from "./History";
 
 /**
  * One finding, and the decision attached to it.
@@ -21,6 +22,8 @@ export interface FindingProps {
   /** Null when the session has no operator identity, which disables granting. */
   operator: string | null;
   onGrant: (agent: Agent) => void;
+  /** Fetches the audit trail. Omitted, the history section is not offered. */
+  loadHistory?: (agentId: string) => Promise<AuditEntry[]>;
   busy?: boolean;
   /** Spend figures are estimates whenever pricing is unverified. */
   spendIsEstimate?: boolean;
@@ -30,6 +33,7 @@ export function Finding({
   agent,
   operator,
   onGrant,
+  loadHistory,
   busy = false,
   spendIsEstimate = true,
 }: FindingProps) {
@@ -104,6 +108,8 @@ export function Finding({
           )}
         </ul>
       </details>
+
+      {loadHistory ? <History agentId={agent.id} load={loadHistory} /> : null}
 
       {agent.unsanctioned ? (
         <div className="actions">

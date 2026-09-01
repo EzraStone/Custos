@@ -25,6 +25,14 @@ So three things are deliberate and should not be optimised away:
   approving what it was seen doing, and the tools and data stores in that scope
   are listed on the button's own dialog.
 
+The fourth is not a constraint but a consequence of the same reasoning:
+**every finding carries its history**. Who sanctioned an agent and when is
+recorded whether or not anyone reads it, and a record nobody can read is a
+record nobody can check. The history section is where an operator finds out
+that the agent in front of them was approved last March by someone who has
+since left. It loads on open, because forty findings would otherwise be forty
+audit requests for history nobody asked to see.
+
 ## Running it
 
 ```

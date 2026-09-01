@@ -95,6 +95,16 @@ export function App() {
     }
   }, [client, auth.account, view, signOut]);
 
+  // Passed to every card, so it has to be stable: a new function each render
+  // would hand each History a new prop and defeat its fetch-once behaviour.
+  const loadHistory = useCallback(
+    async (agentId: string) => {
+      if (!client) return [];
+      return (await client.audit(agentId)).entries;
+    },
+    [client],
+  );
+
   // load() raises a spinner before awaiting the API. Fetching from the control
   // plane is the external system this effect exists to synchronise with, which
   // is the case the rule's own guidance carves out; the state it objects to is
@@ -248,6 +258,7 @@ export function App() {
             key={agent.id}
             agent={agent}
             operator={session.canSanction(auth) ? auth.operator : null}
+            loadHistory={loadHistory}
             spendIsEstimate={spendIsEstimate}
             busy={granting?.id === agent.id && grantBusy}
             onGrant={(target) => {

@@ -92,6 +92,17 @@ function backend(config: Backend = {}) {
         }],
       });
     }
+    if (url.includes("/audit")) {
+      return json(200, {
+        agent_id: "agt_1",
+        entries: [{
+          at: "2026-03-14T09:30:00+00:00",
+          actor: "ezra@custos.dev",
+          action: "sanctioned",
+          detail: "",
+        }],
+      });
+    }
     if (url.includes("/imprimatur")) {
       if (config.grantStatus && config.grantStatus !== 200) {
         return json(config.grantStatus, { detail: config.grantDetail ?? "refused" });
@@ -406,5 +417,30 @@ describe("a credential covering several accounts", () => {
     expect(
       screen.queryByRole("heading", { name: /choose an account/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("the audit trail", () => {
+  it("is reachable from a finding and scoped to that agent", async () => {
+    const stub = install();
+    session.save({ token: "tok-abc", operator: "ezra@custos.dev" });
+    render(<App />);
+    await screen.findByText("finance-close");
+
+    await userEvent.click(screen.getByText(/history/i, { selector: "summary" }));
+
+    expect(await screen.findByText("sanctioned")).toBeInTheDocument();
+    expect(
+      stub.calls.some((c) => c.url === "/v1/agents/agt_1/audit"),
+    ).toBe(true);
+  });
+
+  it("is not requested just by rendering the register", async () => {
+    const stub = install();
+    session.save({ token: "tok-abc", operator: "ezra@custos.dev" });
+    render(<App />);
+    await screen.findByText("finance-close");
+
+    expect(stub.calls.some((c) => c.url.includes("/audit"))).toBe(false);
   });
 });
