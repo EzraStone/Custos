@@ -71,16 +71,29 @@ while being nothing of the kind.
   "duplicate": false,
   "agents_found": 5,
   "review_candidates": 2,
+  "delivered": 3,
   "coverage_note": "no load balancer access logs, so low-volume agents surface for review rather than as findings"
 }
 ```
+
+`delivered` counts findings sent to configured channels. Zero is normal — no
+channels configured, or nothing new to say since the last scan. A delivery
+failure never affects the `202`: the batch was accepted and the findings are in
+the register regardless of whether anyone was told.
 
 `coverage_note` names what the scan could not see. A scan that found nothing
 because it was blind is not a clean account, and the response has to say which.
 
 ## `GET /v1/register`
 
-The register for the authenticated account, worst first — by blast radius, then
+Takes `?account=<id>` when the token covers several accounts, and refuses with
+`400` rather than guessing. Defaulting to one of them would attribute one
+account's findings to another — quietly, and in the direction that makes a
+report wrong rather than empty. A requested account the token does not cover is
+`404`, not `403`, so a credential cannot be used to enumerate which accounts
+exist.
+
+The register for the account, worst first — by blast radius, then
 reach surface, then confidence. An unsanctioned agent that can write to
 production outranks a dozen read-only ones regardless of classifier confidence.
 
