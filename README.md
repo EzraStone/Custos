@@ -29,6 +29,12 @@ paying customer asks for it.
 distinguishable from a chatbot backend using metadata alone — is tested and
 holds, with a 0.26 separation margin, full recall, and zero false positives.
 
+Against a harder corpus added afterwards — agents that pause for human
+approval, agents on batch schedules, chatbots with function calling — every
+verdict is still correct and there are still no false positives, but the margin
+falls to **0.14**. That is the number to quote wherever the first one would be
+doing work.
+
 The result and its limitations are in [docs/A0-FINDINGS.md](docs/A0-FINDINGS.md).
 Two signals the original specification expected to carry the classifier were
 measured and rejected; the finding that matters most is that the specification's
@@ -56,6 +62,10 @@ No server is needed for a first scan. `docs/OPERATIONS.md` walks the whole
 thing; the control plane API and container image exist for when a customer
 wants continuous monitoring.
 
+Run `./custos-collector --check` before the first scan. Every onboarding
+failure produces the same symptom — a report with no findings — and `--check`
+names which one it is before an hour is spent reading an empty report.
+
 ## Layout
 
 | Path | Language | What it is |
@@ -67,10 +77,22 @@ wants continuous monitoring.
 | `console/` | TypeScript | Operator UI. Not started. |
 
 The control plane holds the classifier, the register and its SQLite store,
-attribution, reach, baselines, scan comparison, the HTTP API, and the `custos`
-CLI. The collector reads VPC Flow Logs from CloudWatch or S3, resolves network
-interfaces to principals across EC2, Lambda, and ECS, and enumerates IAM
-capability.
+attribution, reach, baselines, scan comparison, delivery to Slack and SIEM, the
+HTTP API, and the `custos` CLI. The collector reads VPC Flow Logs from
+CloudWatch or S3 and load balancer access logs, resolves network interfaces to
+principals across EC2, Lambda, ECS, and CloudTrail, enumerates IAM capability,
+and runs either once or on a schedule.
+
+| Topic | Document |
+|---|---|
+| What A0 measured | [docs/A0-FINDINGS.md](docs/A0-FINDINGS.md) |
+| Where this stands | [docs/STATUS.md](docs/STATUS.md) |
+| Running a scan | [docs/OPERATIONS.md](docs/OPERATIONS.md) |
+| Turning a finding into a ticket | [docs/ATTRIBUTION.md](docs/ATTRIBUTION.md) |
+| Getting findings to a human | [docs/DELIVERY.md](docs/DELIVERY.md) |
+| Running continuously | [docs/SCHEDULING.md](docs/SCHEDULING.md) |
+| Answering a security review | [docs/SECURITY-REVIEW.md](docs/SECURITY-REVIEW.md) |
+| The API | [docs/API.md](docs/API.md) |
 
 Language choices and their reasoning: [docs/adr/0001-language-choices.md](docs/adr/0001-language-choices.md).
 
