@@ -47,6 +47,19 @@ dev`. The proxy exists so development has the same shape as production —
 same origin, relative paths — rather than a base URL that is configured in one
 environment and wrong in the other.
 
+## The smoke
+
+`make smoke` builds a batch from the A0 corpus, scans it into a fresh database,
+serves the control plane with the console mounted, and drives the built bundle
+in a real browser: sign in, read five real findings, open the evidence, load an
+agent's history, grant imprimatur, and confirm the sanction is recorded against
+the operator's name.
+
+It is the only test that touches the built bundle. Everything under `src/`
+mocks `fetch`, which cannot catch a request shape the server rejects or a
+static mount that shadows an API route. It is not in CI — it needs a browser —
+and it skips rather than fails when the pieces are missing.
+
 The console is served by the control plane rather than deployed separately.
 That is one fewer thing to run, and it means the console and the API share an
 origin — so there is no CORS configuration to get wrong, and no second place a

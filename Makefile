@@ -14,7 +14,7 @@ PYTEST := $(VENV)/bin/pytest
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 .PHONY: help setup check lint test test-py test-go test-console fmt experiment \
-        collector console serve scan image prune onboard preflight stress clean
+        collector console serve scan image prune onboard preflight smoke stress clean
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -77,6 +77,9 @@ scan: ## Scan a batch file: make scan BATCH=batch.json DB=acme.db
 
 console: ## Build the console into console/dist, which the control plane serves
 	cd console && npm install --silent && npm run build
+
+smoke: ## Drive the built console in a browser against a real control plane
+	$(PY) scripts/smoke.py
 
 image: ## Build the control plane container image
 	docker build -f deploy/Dockerfile -t custos-controlplane:$(VERSION) .
