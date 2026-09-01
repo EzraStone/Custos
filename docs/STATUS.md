@@ -33,7 +33,7 @@ custos diff                 →  what changed since last week
 | Multi-account tokens | Works. One token covers a named set of accounts |
 | Onboarding and preflight | Works. `custos onboard`, `custos-collector --check` |
 | Enforcement checkpoint | **Not started.** §12: not before a paying customer |
-| Operator console | **Not started.** Same reason |
+| Operator console | Works. Read the register, read the evidence, sanction. Served by the control plane |
 
 ## The one number that matters
 
@@ -74,6 +74,15 @@ weights were fitted on the A0 corpus. What A0 establishes is that a separating
 signal exists and which features carry it — not that these weights generalise.
 One real scan answers it, and the thresholds sit in measured empty space so
 there is room to move them.
+
+**The console was built ahead of the schedule the specification set.** §12
+puts it after a paying customer, and that ordering was right: a UI built before
+anyone has used the product is a guess about what an operator wants to see.
+It exists because it was asked for. Treat its layout as provisional — the
+evidence gate and the consequence ordering are the two decisions in it worth
+defending, and both should be re-argued against a real operator rather than
+assumed. Nothing else depends on it: the CLI and the HTML report still do
+everything the console does.
 
 **Nobody has run this against an account we did not build.** Tag hygiene,
 unanticipated workload shapes, and provider endpoints outside our catalogue are

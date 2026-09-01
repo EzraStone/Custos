@@ -74,14 +74,15 @@ names which one it is before an hour is spent reading an empty report.
 | `controlplane/` | Python | Classifier, register, attribution, reach, report. |
 | `a0/` | Python | The G0 experiment: synthetic telemetry and evaluation. |
 | `checkpoint/` | Go | Inline enforcement gateway. Not started. |
-| `console/` | TypeScript | Operator UI. Not started. |
+| `console/` | TypeScript | The register in a browser: read the findings, read the evidence, sanction an agent. Served by the control plane at `/`. |
 
 The control plane holds the classifier, the register and its SQLite store,
 attribution, reach, baselines, scan comparison, delivery to Slack and SIEM, the
-HTTP API, and the `custos` CLI. The collector reads VPC Flow Logs from
-CloudWatch or S3 and load balancer access logs, resolves network interfaces to
-principals across EC2, Lambda, ECS, and CloudTrail, enumerates IAM capability,
-and runs either once or on a schedule.
+HTTP API, the `custos` CLI, and — when `console/dist` has been built — the
+console itself, mounted at `/` behind every API route. The collector reads VPC
+Flow Logs from CloudWatch or S3 and load balancer access logs, resolves network
+interfaces to principals across EC2, Lambda, ECS, and CloudTrail, enumerates
+IAM capability, and runs either once or on a schedule.
 
 | Topic | Document |
 |---|---|
@@ -93,6 +94,7 @@ and runs either once or on a schedule.
 | Running continuously | [docs/SCHEDULING.md](docs/SCHEDULING.md) |
 | Answering a security review | [docs/SECURITY-REVIEW.md](docs/SECURITY-REVIEW.md) |
 | The API | [docs/API.md](docs/API.md) |
+| The console | [console/README.md](console/README.md) |
 
 Language choices and their reasoning: [docs/adr/0001-language-choices.md](docs/adr/0001-language-choices.md).
 
