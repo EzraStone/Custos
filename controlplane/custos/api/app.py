@@ -17,6 +17,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from .. import __version__
+from ..batch import Batch, BatchAccepted
 from ..catalog import RANGES_REVISION
 from ..diff import ScanDiff, compare
 from ..logging import event, get
@@ -30,7 +31,6 @@ from ..store.agents import AgentStore
 from ..store.db import now, open_database
 from ..store.scans import ScanStore
 from .auth import Principal, TokenStore, parse_bearer
-from .schema import Batch, BatchAccepted
 
 log = get("custos.api")
 

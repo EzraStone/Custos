@@ -15,7 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from custos.api import TokenStore, create_app
-from custos.api.schema import Batch
+from custos.batch import Batch
 from custos.store.db import open_database
 
 ACCOUNT = "447120043318"
@@ -118,7 +118,7 @@ def test_a_redelivered_window_changes_nothing(client, first_batch):
 
 def test_a_scan_without_access_logs_loses_recall_not_precision(client, first_batch):
     """The measured consequence of the onboarding ask, end to end."""
-    from custos.api.schema import Collection
+    from custos.batch import Collection
 
     blind = first_batch.model_copy(update={
         "requests": [],

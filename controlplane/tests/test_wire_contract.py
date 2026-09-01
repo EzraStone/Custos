@@ -7,6 +7,10 @@ quietly going missing rather than as an error.
 
 This test parses the Go source and compares field for field. It is the reason
 the duplication is acceptable.
+
+The Python side lives in `custos.batch` rather than under `api/`, because it is
+a contract with the collector rather than an API concern — the pipeline, the
+API, and the A0 experiment all use it.
 """
 
 from __future__ import annotations
@@ -16,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from custos.api import schema
+from custos import batch as schema
 
 GO_WIRE = Path(__file__).resolve().parents[2] / "collector" / "internal" / "wire" / "wire.go"
 

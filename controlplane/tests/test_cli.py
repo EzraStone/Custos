@@ -120,7 +120,7 @@ def test_diff_needs_two_scans_before_it_says_anything(db, batch_file, capsys):
 
 def test_diff_reports_an_escalation_with_its_owner(db, batch_file, tmp_path, capsys):
     """The sentence the subscription is built on."""
-    from custos.api.schema import Batch
+    from custos.batch import Batch
 
     first = Batch.model_validate_json(batch_file.read_text())
     main(["--db", db, "scan", str(batch_file)])

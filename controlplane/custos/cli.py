@@ -18,8 +18,8 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .api.schema import Batch
 from .baseline import Drift
+from .batch import Batch
 from .diff import ScanDiff
 from .pipeline import ingest
 from .report import render

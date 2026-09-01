@@ -1,5 +1,12 @@
 """The batch schema, mirroring the collector's wire types.
 
+Lives beside `telemetry.py` rather than under `api/` because it is a contract
+with the collector, not an API concern. The pipeline needs it, the API needs
+it, and the A0 experiment produces it — putting it inside the API package made
+`pipeline` depend on `api`, which made `api` depend on `pipeline`, which was a
+circular import waiting for the first module that imported them in the other
+order.
+
 This file and `collector/internal/wire/wire.go` describe the same bytes. They
 are in different languages, so they cannot share a definition, which makes drift
 between them a real risk — and a silent one, because a field the API ignores

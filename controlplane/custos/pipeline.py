@@ -13,9 +13,9 @@ import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from .api.schema import Batch
 from .attribute import PrincipalFacts
 from .baseline import Drift, detect_from_history
+from .batch import Batch
 from .classify import Disposition
 from .diff import ScanDiff, compare
 from .reach import IamCapability

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from custos.api.schema import (
+from custos.batch import (
     Attachment,
     Batch,
     Collection,
