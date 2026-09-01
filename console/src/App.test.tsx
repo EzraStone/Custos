@@ -444,3 +444,31 @@ describe("the audit trail", () => {
     expect(stub.calls.some((c) => c.url.includes("/audit"))).toBe(false);
   });
 });
+
+describe("the grant dialog", () => {
+  async function openDialog() {
+    install();
+    session.save({ token: "tok-abc", operator: "ezra@custos.dev" });
+    render(<App />);
+    await screen.findByText("finance-close");
+    await userEvent.click(
+      screen.getByText(/why this was flagged/i, { selector: "summary" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: /grant imprimatur/i }));
+    await screen.findByRole("dialog");
+  }
+
+  it("holds the register still while it is open", async () => {
+    await openDialog();
+    // The dialog asks about one specific agent. A reader who can scroll the
+    // list behind it can end up reading one finding while approving another.
+    expect(document.body.style.overflow).toBe("hidden");
+  });
+
+  it("gives scrolling back when it closes", async () => {
+    await openDialog();
+    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(document.body.style.overflow).not.toBe("hidden");
+  });
+});

@@ -49,6 +49,18 @@ export function GrantDialog({
     return () => document.removeEventListener("keydown", onKey);
   }, [onCancel]);
 
+  // The register keeps scrolling behind a fixed overlay unless the body is
+  // held still. That matters more here than it would elsewhere: the dialog is
+  // asking about one specific agent, and a reader who scrolls the list behind
+  // it can end up reading one finding while approving another.
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+
   const tools = [...agent.tools].sort();
   const data = [...agent.data_stores].sort();
   const name = agent.principal.split("/").pop() ?? agent.principal;
