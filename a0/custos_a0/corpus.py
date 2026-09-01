@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from random import Random
 
-from .scenarios import GENERATORS
+from .scenarios import GENERATORS, HARD
 from .trace import Corpus
 
 
@@ -21,6 +21,13 @@ class CorpusSpec:
     seed: int = 20260816
     start: datetime = datetime(2026, 8, 10, tzinfo=UTC)  # a Monday
     days: int = 3
+
+    hard: bool = False
+    """Include the workloads that break the clean coupled/decoupled split.
+
+    Off by default so the headline G0 result stays measured against the corpus
+    it was originally measured against. Turning it on is how the cost of the
+    harder cases becomes a number rather than a silent shift."""
 
     @property
     def end(self) -> datetime:
@@ -34,7 +41,9 @@ def build(spec: CorpusSpec = DEFAULT) -> Corpus:
     """Generate the labelled corpus."""
     corpus = Corpus(start=spec.start, end=spec.end)
 
-    for i, gen in enumerate(GENERATORS):
+    generators = [*GENERATORS, *HARD] if spec.hard else list(GENERATORS)
+
+    for i, gen in enumerate(generators):
         # Derived per-generator seed: stable under reordering.
         rng = Random(spec.seed + i * 7919)
         w = gen(rng, spec.start, spec.end)

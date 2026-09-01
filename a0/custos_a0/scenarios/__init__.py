@@ -31,6 +31,12 @@ from .agents import (
 )
 from .borderline import batch_summariser, ci_codegen
 from .chatbots import chatbot_multiturn, chatbot_rag, chatbot_simple, embedding_service
+from .hard import (
+    agent_batch,
+    agent_human_in_loop,
+    agent_via_gateway,
+    chatbot_function_call,
+)
 
 Generator = Callable[[Random, datetime, datetime], Workload]
 
@@ -48,15 +54,33 @@ GENERATORS: list[Generator] = [
     ci_codegen,
 ]
 
+HARD: list[Generator] = [
+    agent_human_in_loop,
+    agent_batch,
+    chatbot_function_call,
+    agent_via_gateway,
+]
+"""Workloads that break the clean coupled/decoupled split the base corpus has.
+
+Kept separate so the headline G0 result is measured against the corpus it was
+measured against originally, and the effect of adding these is a number rather
+than a silent shift.
+"""
+
 __all__ = [
     "GENERATORS",
+    "HARD",
     "Generator",
+    "agent_batch",
     "agent_coding",
+    "agent_human_in_loop",
     "agent_langgraph",
     "agent_low_volume",
     "agent_scheduled_ops",
     "agent_tool_loop",
+    "agent_via_gateway",
     "batch_summariser",
+    "chatbot_function_call",
     "chatbot_multiturn",
     "chatbot_rag",
     "chatbot_simple",
