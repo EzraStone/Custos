@@ -103,6 +103,39 @@ def _write_fixtures(out: Path, limit: int = 4000) -> Path:
     return path
 
 
+def cmd_stress(args: argparse.Namespace) -> int:
+    """Score the classifier against the corpus with partially-coupled workloads.
+
+    Separate from `experiment` because G0 was defined against the base corpus
+    and is measured there. This is the number to quote in diligence: the base
+    corpus separates by 0.26, and a corpus containing agents that pause for
+    human approval separates by roughly half that.
+    """
+    from .evaluate import run_hard
+
+    result = run_hard(gateway_declared=not args.hide_gateway)
+
+    print("Custos stress corpus — partially-coupled workloads included\n")
+    print(_detail_table(result))
+    print()
+    print(
+        f"recall {result.recall:.2f}   precision {result.precision:.2f}   "
+        f"separation margin {result.separation_margin:+.3f}"
+    )
+    if result.missed_agents:
+        print()
+        for row in result.missed_agents:
+            print(f"missed: {row.workload}")
+            print(f"        {row.note}")
+
+    print()
+    print(
+        "The base corpus separates by 0.260. Quote this number instead wherever "
+        "that one would be doing work."
+    )
+    return 0
+
+
 def cmd_report(args: argparse.Namespace) -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -126,6 +159,12 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("experiment", help="run the sweep and decide G0")
     p.add_argument("--out", help="directory for artifacts")
     p.set_defaults(func=cmd_experiment)
+
+    p = sub.add_parser("stress", help="score against the partially-coupled corpus")
+    p.add_argument("--hide-gateway", action="store_true",
+                   help="leave the self-hosted gateway undeclared, as a customer "
+                        "who has not told us about theirs")
+    p.set_defaults(func=cmd_stress)
 
     p = sub.add_parser("report", help="render a scan report from the corpus")
     p.add_argument("--out", default="out")

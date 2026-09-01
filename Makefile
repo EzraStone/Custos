@@ -82,12 +82,8 @@ onboard: ## Generate a customer's setup material: make onboard ACCOUNT=... ENDPO
 preflight: collector ## Check a collector configuration before scanning
 	./collector/bin/custos-collector --check
 
-stress: ## Score the classifier against the hard corpus
-	$(VENV)/bin/python -c "from custos_a0.evaluate import run_hard; \
-	r = run_hard(gateway_declared=True); \
-	print(f'stress corpus: recall={r.recall:.2f} precision={r.precision:.2f} \
-margin={r.separation_margin:+.3f}'); \
-	[print(f'  MISS {x.workload}') for x in r.missed_agents]"
+stress: ## Score the classifier against the partially-coupled corpus
+	$(PY) -m custos_a0.cli stress
 
 clean:
 	rm -rf a0/out collector/bin checkpoint/bin
