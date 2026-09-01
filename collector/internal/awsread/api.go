@@ -3,6 +3,7 @@ package awsread
 import (
 	"context"
 
+	"github.com/aws/aws-sdk-go-v2/service/cloudtrail"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
@@ -88,6 +89,22 @@ type ServerlessAPI interface {
 		...func(*ecs.Options)) (*ecs.ListClustersOutput, error)
 }
 
+// TrailAPI reads CloudTrail management events.
+//
+// The one attribution path that does not depend on resolving a network
+// interface. When a workload calls Bedrock, CloudTrail records the assumed role
+// and the source address together, which maps a principal to an address
+// directly — no ENI description to parse, no naming convention to rely on, and
+// it works for compute types whose interfaces we cannot resolve at all.
+//
+// It is a supplement rather than a replacement: it covers AWS-native model
+// calls and says nothing about traffic to a third-party provider, which is most
+// of it.
+type TrailAPI interface {
+	LookupEvents(context.Context, *cloudtrail.LookupEventsInput,
+		...func(*cloudtrail.Options)) (*cloudtrail.LookupEventsOutput, error)
+}
+
 // Compile-time assertions that the real SDK clients satisfy these interfaces.
 // If AWS changes a signature, this fails at build time rather than at 3am in a
 // customer's account.
@@ -96,6 +113,7 @@ var (
 	_ ObjectAPI   = (*s3.Client)(nil)
 	_ NetworkAPI  = (*ec2.Client)(nil)
 	_ IdentityAPI = (*iam.Client)(nil)
+	_ TrailAPI    = (*cloudtrail.Client)(nil)
 )
 
 // ServerlessAPI is satisfied by a pair of clients rather than one, so it has

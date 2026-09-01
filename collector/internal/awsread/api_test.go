@@ -20,6 +20,7 @@ func TestEveryAWSMethodIsReadOnly(t *testing.T) {
 		"NetworkAPI":    reflect.TypeOf((*NetworkAPI)(nil)).Elem(),
 		"IdentityAPI":   reflect.TypeOf((*IdentityAPI)(nil)).Elem(),
 		"ServerlessAPI": reflect.TypeOf((*ServerlessAPI)(nil)).Elem(),
+		"TrailAPI":      reflect.TypeOf((*TrailAPI)(nil)).Elem(),
 	}
 
 	total := 0
