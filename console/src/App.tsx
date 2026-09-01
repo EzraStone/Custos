@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError, Client } from "./api/client";
 import { byConsequence, type Agent, type Health, type Scan } from "./api/types";
@@ -21,6 +21,15 @@ export function App() {
   const [grantError, setGrantError] = useState<string | null>(null);
   const [grantBusy, setGrantBusy] = useState(false);
 
+  // Every load takes a ticket, and a response is only allowed to write state
+  // if its ticket is still the current one. Toggling the view twice in quick
+  // succession issues two requests; without this the slower one wins whenever
+  // it happens to land second, and the list shows sanctioned agents under a
+  // heading that says unsanctioned. That is not a cosmetic race in a review
+  // queue — it is the wrong set of agents in front of someone deciding what
+  // to approve.
+  const ticket = useRef(0);
+
   const client = useMemo(
     () => (auth.token ? new Client({ token: auth.token }) : null),
     [auth.token],
@@ -36,6 +45,7 @@ export function App() {
 
   const load = useCallback(async () => {
     if (!client) return;
+    const mine = ++ticket.current;
     setLoading(true);
     setError(null);
 
@@ -45,10 +55,12 @@ export function App() {
         client.scans(auth.account || undefined).catch(() => ({ scans: [] })),
         client.health().catch(() => null),
       ]);
+      if (mine !== ticket.current) return;
       setAgents([...registry.agents].sort(byConsequence));
       setScans("scans" in history ? history.scans : []);
       if (status) setHealth(status);
     } catch (caught) {
+      if (mine !== ticket.current) return;
       const failure = caught as ApiError;
       // An expired or revoked credential signs the session out rather than
       // leaving a console that shows an error on every action.
@@ -60,11 +72,18 @@ export function App() {
       }
       setAgents(null);
     } finally {
-      setLoading(false);
+      // A superseded load must not clear the spinner: the request that
+      // superseded it is still running.
+      if (mine === ticket.current) setLoading(false);
     }
   }, [client, auth.account, view, signOut]);
 
+  // load() raises a spinner before awaiting the API. Fetching from the control
+  // plane is the external system this effect exists to synchronise with, which
+  // is the case the rule's own guidance carves out; the state it objects to is
+  // the spinner, and there is nowhere earlier to raise it.
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect
     void load();
   }, [load]);
 

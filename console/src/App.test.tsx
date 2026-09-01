@@ -267,3 +267,66 @@ describe("credentials that stop working", () => {
     expect(await screen.findByText(/pass \?account=/i)).toBeInTheDocument();
   });
 });
+
+describe("overlapping loads", () => {
+  // Toggling the view issues a second register call while the first is still
+  // in flight. If the slower one is allowed to write state when it lands, the
+  // list shows one set of agents under a heading describing the other — in a
+  // review queue that means sanctioned agents presented as awaiting approval.
+  it("drops a response that a newer request has superseded", async () => {
+    const unsanctionedOnly = agent({ id: "agt_slow", principal: "arn:aws:iam::1:role/slow-one" });
+    const everything = agent({ id: "agt_fast", principal: "arn:aws:iam::1:role/fast-one" });
+
+    // Seeded with a no-op rather than null: TypeScript does not track the
+    // assignment inside the executor, so a nullable here narrows to never at
+    // the call site below.
+    let releaseFirst = () => {};
+    const firstInFlight = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith("/v1/register")) {
+          const filtered = url.includes("unsanctioned_only=true");
+          // The filtered request is the one the console issues first. Hold it
+          // open until the unfiltered one has already been answered.
+          if (filtered) await firstInFlight;
+          return json({
+            account_id: "1",
+            catalogue_revision: "2026-08-18",
+            agents: [filtered ? unsanctionedOnly : everything],
+          });
+        }
+        if (url.startsWith("/v1/scans")) return json({ account_id: "1", scans: [] });
+        return json({
+          status: "ok",
+          version: "0.1.0",
+          catalogue_revision: "2026-08-18",
+          prices_revision: "unverified-placeholder",
+        });
+      }),
+    );
+
+    session.save({ token: "tok-abc", operator: "ezra@custos.dev" });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /show all/i }));
+    expect(await screen.findByText("fast-one")).toBeInTheDocument();
+
+    releaseFirst();
+
+    // The superseded response lands now. Give it every chance to win.
+    await waitFor(() => expect(screen.getByText("fast-one")).toBeInTheDocument());
+    expect(screen.queryByText("slow-one")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /the register/i })).toBeInTheDocument();
+  });
+});
