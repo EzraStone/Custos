@@ -13,23 +13,25 @@ PYTEST := $(VENV)/bin/pytest
 .DEFAULT_GOAL := help
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: help setup check lint test test-py test-go fmt experiment collector \
-        serve scan image prune onboard preflight stress clean
+.PHONY: help setup check lint test test-py test-go test-console fmt experiment \
+        collector console serve scan image prune onboard preflight stress clean
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
 	  awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-14s\033[0m %s\n",$$1,$$2}'
 
-setup: ## Create the virtualenv and install both Python packages editable
+setup: ## Create the virtualenv, install Python packages, install console deps
 	python3 -m venv $(VENV)
 	$(PIP) -q install --upgrade pip
 	$(PIP) -q install -e ./controlplane -e ./a0
 	$(PIP) -q install pytest ruff
+	@if [ -f console/package.json ]; then cd console && npm install --silent; fi
 
 check: lint test ## Everything CI runs
 
-lint: ## Lint Python and vet Go
+lint: ## Lint Python, vet Go, typecheck the console
 	$(RUFF) check controlplane a0
+	@if [ -d console/node_modules ]; then cd console && npm run typecheck --silent; fi
 	@if [ -d collector ] && [ -f collector/go.mod ]; then \
 	  cd collector && gofmt -l . && go vet ./...; fi
 	@if [ -d checkpoint ] && [ -f checkpoint/go.mod ]; then \
@@ -40,7 +42,7 @@ fmt: ## Auto-fix formatting
 	@if [ -f collector/go.mod ]; then cd collector && gofmt -w .; fi
 	@if [ -f checkpoint/go.mod ]; then cd checkpoint && gofmt -w .; fi
 
-test: test-py test-go ## All tests
+test: test-py test-go test-console ## All tests
 
 test-py: ## Python tests for both packages
 	cd controlplane && ../$(PYTEST) -q
@@ -49,6 +51,11 @@ test-py: ## Python tests for both packages
 test-go: ## Go tests
 	@if [ -f collector/go.mod ]; then cd collector && go test ./...; fi
 	@if [ -f checkpoint/go.mod ]; then cd checkpoint && go test ./...; fi
+
+test-console: ## Console tests and typecheck
+	@if [ -d console/node_modules ]; then \
+	  cd console && npm run typecheck --silent && npm test --silent; \
+	else echo "console: run make setup first"; fi
 
 experiment: ## Run the A0 experiment and write the report
 	$(PY) -m custos_a0.cli experiment --out a0/out
@@ -67,6 +74,9 @@ serve: ## Run the control plane locally
 scan: ## Scan a batch file: make scan BATCH=batch.json DB=acme.db
 	@test -n "$(BATCH)" || (echo "usage: make scan BATCH=batch.json [DB=custos.db]" && exit 1)
 	$(VENV)/bin/custos --db $(or $(DB),custos.db) scan $(BATCH) --out scan-report.html
+
+console: ## Build the console into console/dist, which the control plane serves
+	cd console && npm install --silent && npm run build
 
 image: ## Build the control plane container image
 	docker build -f deploy/Dockerfile -t custos-controlplane:$(VERSION) .
