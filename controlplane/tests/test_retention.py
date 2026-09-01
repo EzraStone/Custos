@@ -121,3 +121,55 @@ def test_vacuum_runs_after_a_prune(conn):
 
 def test_pruning_an_empty_database_is_a_no_op(conn):
     assert prune(conn).total == 0
+
+
+# --- delivery history ---------------------------------------------------------
+
+def _deliver(conn, days_ago: int, fingerprint="fp1"):
+    from datetime import timedelta
+
+    from custos.deliver import Finding, Severity, Suppressor
+    from custos.store.db import now
+
+    finding = Finding(
+        severity=Severity.ACT_NOW, title="t", detail="d", account_id=ACCOUNT,
+        principal="role/x",
+    )
+    # Force a known fingerprint by varying the principal.
+    finding = Finding(
+        severity=Severity.ACT_NOW, title=fingerprint, detail="d",
+        account_id=ACCOUNT, principal="role/x",
+    )
+    Suppressor(conn).record([finding], "slack", now() - timedelta(days=days_ago))
+    return finding
+
+
+def test_stale_delivery_history_is_pruned(conn):
+    """A fingerprint older than the longest repeat window can never suppress
+    anything, so keeping it is storage with no behaviour attached."""
+    _deliver(conn, days_ago=400, fingerprint="old")
+    _deliver(conn, days_ago=1, fingerprint="recent")
+
+    result = prune(conn)
+    assert result.deliveries == 1
+    assert count(conn, "deliveries") == 1
+
+
+def test_delivery_history_outlives_its_repeat_window(conn):
+    """Pruning a record a day before its window expires would re-deliver a
+    finding that was correctly suppressed."""
+    from custos.deliver.suppress import REPEAT_AFTER
+
+    longest = max(REPEAT_AFTER.values()).days
+    _deliver(conn, days_ago=longest + 1)
+
+    prune(conn)
+    assert count(conn, "deliveries") == 1, (
+        "a record still inside its repeat window plus margin must survive"
+    )
+
+
+# A table that appears the first time some object is constructed is a table
+# that migrations and retention both forget about.
+def test_the_deliveries_table_exists_without_constructing_a_suppressor(conn):
+    conn.execute("SELECT COUNT(*) FROM deliveries").fetchone()

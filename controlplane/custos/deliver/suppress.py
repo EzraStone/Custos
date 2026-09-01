@@ -36,20 +36,6 @@ review item, which is roughly the cadence at which someone triages. Thirty for
 a note, which is effectively "next month's digest".
 """
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS deliveries (
-    fingerprint   TEXT NOT NULL,
-    account_id    TEXT NOT NULL,
-    severity      TEXT NOT NULL,
-    channel       TEXT NOT NULL,
-    delivered_at  TEXT NOT NULL,
-    PRIMARY KEY (fingerprint, channel)
-);
-CREATE INDEX IF NOT EXISTS deliveries_by_account
-    ON deliveries (account_id, delivered_at DESC);
-"""
-
-
 @dataclass(slots=True)
 class Suppressor:
     """Tracks what has already been said, per channel.
@@ -60,9 +46,6 @@ class Suppressor:
     """
 
     conn: sqlite3.Connection
-
-    def __post_init__(self) -> None:
-        self.conn.executescript(SCHEMA)
 
     def filter(
         self, findings: list[Finding], channel: str, at: datetime

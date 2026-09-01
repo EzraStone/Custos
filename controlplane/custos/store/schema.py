@@ -22,7 +22,7 @@ agent's apparent spend and reach.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -118,6 +118,23 @@ CREATE TABLE IF NOT EXISTS observations (
     blast_radius      TEXT    NOT NULL DEFAULT 'read'
 );
 CREATE INDEX IF NOT EXISTS observations_by_agent ON observations (agent_id, observed_at DESC);
+
+-- What has already been said, per channel. Suppression reads this to avoid
+-- reporting the same finding every week, which is how a channel gets muted.
+--
+-- Lives here rather than being created by the Suppressor, because a table that
+-- appears the first time some object is constructed is a table that migrations
+-- and retention both forget about.
+CREATE TABLE IF NOT EXISTS deliveries (
+    fingerprint   TEXT NOT NULL,
+    account_id    TEXT NOT NULL,
+    severity      TEXT NOT NULL,
+    channel       TEXT NOT NULL,
+    delivered_at  TEXT NOT NULL,
+    PRIMARY KEY (fingerprint, channel)
+);
+CREATE INDEX IF NOT EXISTS deliveries_by_account
+    ON deliveries (account_id, delivered_at DESC);
 
 -- Every status change, with who made it. The audit trail is what a customer
 -- reads when they ask why an agent is sanctioned.
