@@ -125,19 +125,19 @@ def test_pruning_an_empty_database_is_a_no_op(conn):
 
 # --- delivery history ---------------------------------------------------------
 
-def _deliver(conn, days_ago: int, fingerprint="fp1"):
+def _deliver(conn, days_ago: int, title="a finding"):
+    """Record one delivery `days_ago` in the past.
+
+    The title varies the fingerprint, which is what makes two calls produce two
+    rows rather than one updated row.
+    """
     from datetime import timedelta
 
     from custos.deliver import Finding, Severity, Suppressor
     from custos.store.db import now
 
     finding = Finding(
-        severity=Severity.ACT_NOW, title="t", detail="d", account_id=ACCOUNT,
-        principal="role/x",
-    )
-    # Force a known fingerprint by varying the principal.
-    finding = Finding(
-        severity=Severity.ACT_NOW, title=fingerprint, detail="d",
+        severity=Severity.ACT_NOW, title=title, detail="d",
         account_id=ACCOUNT, principal="role/x",
     )
     Suppressor(conn).record([finding], "slack", now() - timedelta(days=days_ago))
@@ -147,8 +147,8 @@ def _deliver(conn, days_ago: int, fingerprint="fp1"):
 def test_stale_delivery_history_is_pruned(conn):
     """A fingerprint older than the longest repeat window can never suppress
     anything, so keeping it is storage with no behaviour attached."""
-    _deliver(conn, days_ago=400, fingerprint="old")
-    _deliver(conn, days_ago=1, fingerprint="recent")
+    _deliver(conn, days_ago=400, title="old")
+    _deliver(conn, days_ago=1, title="recent")
 
     result = prune(conn)
     assert result.deliveries == 1
