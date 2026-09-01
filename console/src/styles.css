@@ -205,3 +205,6 @@ h2 { font-family: var(--display); font-size: 1.5rem; margin: 2.5rem 0 .5rem; }
 .signin .field { margin-bottom: 1.25rem; }
 .signin .field input { width: 100%; }
 .signin .hint { font-size: .76rem; }
+
+.meta-row .spacer { margin-left: auto; }
+.meta-row .warn { color: var(--seal); }
