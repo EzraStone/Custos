@@ -54,6 +54,19 @@ actions), and optionally load balancer timing and size.
 against a field allowlist. Adding a field requires editing a test named after
 the invariant it breaks.
 
+### You read CloudTrail. Does that include our request parameters?
+
+No. CloudTrail event records carry `requestParameters`, which for a model
+invocation can include the prompt, and the decoder has no field for it. The
+event is parsed into a struct with four fields — timestamp, event name, source
+address, and the calling identity — so those parameters have nowhere to land.
+
+That is the same argument as the wire types, applied to the one place a payload
+could otherwise reach us through an AWS API rather than off the network.
+
+**Backed by:** `collector/internal/ingest/trail.go`,
+`TestRequestParametersHaveNowhereToLand`.
+
 ### Do you read prompts or model responses?
 
 No, and the collector is not capable of it. `ship.Send` takes a `wire.Batch` and
@@ -100,6 +113,22 @@ No, enforced in three places independently.
 The third exists so the claim survives the first two being widened by mistake.
 
 **Backed by:** `deploy/terraform/iam.tf`, `TestNoMutatingAPIs`.
+
+### How many API calls will this make against our account?
+
+Bounded everywhere it could grow, and each bound was set by a test that caught
+the unbounded version:
+
+| | |
+|---|---|
+| Flow log reads | Capped at 500,000 records per window; a window that would exceed it is shortened rather than truncated |
+| Interface lookups | Batched 200 per call, each interface resolved once per window regardless of how many times it appears |
+| Task definitions | Cached, so a service with twenty tasks fetches its definition once |
+| ECS cluster search | Bounded at 20 clusters |
+| CloudTrail | 12 lookups total per window, skipped entirely when nothing needs attributing, and stopped as soon as a page adds nothing new |
+
+Collection runs are jittered by up to five minutes so a fleet of collectors does
+not synchronise against your rate limits.
 
 ### What if it runs somewhere it should not?
 
