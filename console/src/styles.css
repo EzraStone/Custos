@@ -198,3 +198,10 @@ h2 { font-family: var(--display); font-size: 1.5rem; margin: 2.5rem 0 .5rem; }
 .scope ul { margin: 0; padding-left: 1.1rem; font-family: var(--mono); font-size: .82rem; }
 .scope li { margin-bottom: .25rem; }
 .scope .empty { margin: 0; font-size: .82rem; }
+
+/* ---------- sign in ---------- */
+.signin { max-width: 30rem; margin: 3rem 0; }
+.signin h2 { margin-top: 0; }
+.signin .field { margin-bottom: 1.25rem; }
+.signin .field input { width: 100%; }
+.signin .hint { font-size: .76rem; }
