@@ -205,6 +205,7 @@ func fromAWSWindow(
 		Network:    clients.Network,
 		Identity:   clients.Identity,
 		Serverless: clients.Serverless,
+		Trail:      clients.Trail,
 		AccountID:  cfg.AccountID,
 		Region:     cfg.Region,
 	}

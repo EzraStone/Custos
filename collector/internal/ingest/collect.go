@@ -32,6 +32,7 @@ type Collector struct {
 	Network    awsread.NetworkAPI
 	Identity   awsread.IdentityAPI
 	Serverless awsread.ServerlessAPI
+	Trail      awsread.TrailAPI
 
 	AccountID string
 	Region    string
@@ -55,6 +56,12 @@ type Report struct {
 	Principals  int
 	Requests    int
 	HaveALBLogs bool
+
+	// TrailResolved counts interfaces attributed only because CloudTrail saw
+	// the address. Reported because it is the weakest attribution path, and a
+	// scan leaning on it heavily is a scan whose owners are less certain than
+	// the rest.
+	TrailResolved int
 
 	// Shortened records that the window was cut back to what was actually
 	// read, so the cursor resumes from there. Reported because it means
@@ -100,6 +107,10 @@ func (r Report) Summary() string {
 		fmt.Fprintf(&b, "WARNING: hit the record limit and the window could not be "+
 			"shortened — this window is partial and an absence of findings means "+
 			"less than it would otherwise\n")
+	}
+	if r.TrailResolved > 0 {
+		fmt.Fprintf(&b, "%d interfaces attributed via CloudTrail rather than their "+
+			"instance profile; those owners are less certain\n", r.TrailResolved)
 	}
 	if n := len(r.Degraded); n > 0 {
 		fmt.Fprintf(&b, "%d interfaces could not be attributed to a principal:\n", n)
@@ -199,6 +210,15 @@ func (c *Collector) Collect(ctx context.Context, w awsread.Window) (wire.Batch, 
 		attributions = NewServerless(c.Serverless).Enrich(ctx, attributions)
 	}
 
+	// CloudTrail is the last resort and the only one that does not depend on
+	// resolving an interface. Applied after the others so it fills gaps rather
+	// than overriding attribution we are more confident in — an ENI attached
+	// to an instance profile is a stronger claim than an address seen making a
+	// Bedrock call, because addresses are recycled.
+	if c.Trail != nil {
+		attributions = c.correlateFromTrail(ctx, w, attributions, &report)
+	}
+
 	resolved, degraded := Attachments(attributions)
 	batch.Attachments = resolved
 	report.Degraded = degraded
@@ -245,6 +265,46 @@ func ShortenTo(records []wire.FlowRecord) (time.Time, bool) {
 		}
 	}
 	return latest, !latest.IsZero()
+}
+
+// correlateFromTrail fills in principals for interfaces nothing else resolved.
+func (c *Collector) correlateFromTrail(
+	ctx context.Context, w awsread.Window, attributions []Attribution, report *Report,
+) []Attribution {
+	unresolved := 0
+	for _, a := range attributions {
+		if a.Principal == "" {
+			unresolved++
+		}
+	}
+	if unresolved == 0 {
+		// Nothing to fill in. Skipping the lookup entirely is the difference
+		// between CloudTrail costing nothing on a well-tagged account and
+		// costing a dozen API calls every window forever.
+		return attributions
+	}
+
+	byAddress, err := (&TrailCorrelator{API: c.Trail}).Correlate(ctx, w)
+	if err != nil {
+		report.Errors = append(report.Errors, "cloudtrail correlation: "+err.Error())
+	}
+	if len(byAddress) == 0 {
+		return attributions
+	}
+
+	filled := 0
+	for i := range attributions {
+		if attributions[i].Principal != "" {
+			continue
+		}
+		if principal, ok := byAddress[attributions[i].Address]; ok {
+			attributions[i].Principal = principal
+			attributions[i].Degraded = ""
+			filled++
+		}
+	}
+	report.TrailResolved = filled
+	return attributions
 }
 
 func distinctInterfaces(records []wire.FlowRecord) []string {

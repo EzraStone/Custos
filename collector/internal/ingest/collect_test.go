@@ -242,3 +242,74 @@ func TestDegradedInterfacesAreListedButCapped(t *testing.T) {
 		t.Fatalf("long degraded lists should be capped:\n%s", out)
 	}
 }
+
+// CloudTrail is the last resort. It fills gaps rather than overriding
+// attribution we are more confident in — an ENI attached to an instance
+// profile is a stronger claim than an address seen making a Bedrock call,
+// because addresses are recycled.
+func TestCloudTrailFillsGapsWithoutOverridingStrongerAttribution(t *testing.T) {
+	ec2API := &fakeEC2{
+		interfaces: []ec2types.NetworkInterface{
+			eni("eni-1", "primary", onInstance("i-a")),
+			eni("eni-2", "aws-K8S-i-0123456789abcdef0"),
+		},
+		instances: map[string]string{
+			"i-a": "arn:aws:iam::447120043318:instance-profile/known-good",
+		},
+	}
+	trail := &fakeTrail{events: map[string][]string{
+		"InvokeModel": {
+			rawEvent("10.0.20.11", "", "arn:aws:iam::1:role/should-not-win"),
+		},
+	}}
+
+	c := collector(stubFlows{records: []wire.FlowRecord{flow("eni-1"), flow("eni-2")}},
+		ec2API, nil)
+	c.Trail = trail
+
+	batch, report, err := c.Collect(context.Background(), s3Window())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	byInterface := map[string]string{}
+	for _, a := range batch.Attachments {
+		byInterface[a.InterfaceID] = a.Principal
+	}
+	if byInterface["eni-1"] != "arn:aws:iam::447120043318:role/known-good" {
+		t.Fatalf("CloudTrail overrode a stronger attribution: %v", byInterface)
+	}
+	_ = report
+}
+
+// Skipping the lookup when nothing needs filling is the difference between
+// CloudTrail costing nothing on a well-tagged account and costing a dozen API
+// calls every window forever.
+func TestCloudTrailIsNotCalledWhenEverythingResolved(t *testing.T) {
+	ec2API := &fakeEC2{
+		interfaces: []ec2types.NetworkInterface{eni("eni-1", "primary", onInstance("i-a"))},
+		instances: map[string]string{
+			"i-a": "arn:aws:iam::447120043318:instance-profile/known",
+		},
+	}
+	trail := &fakeTrail{}
+
+	c := collector(stubFlows{records: []wire.FlowRecord{flow("eni-1")}}, ec2API, nil)
+	c.Trail = trail
+
+	if _, _, err := c.Collect(context.Background(), s3Window()); err != nil {
+		t.Fatal(err)
+	}
+	if trail.calls != 0 {
+		t.Fatalf("CloudTrail was queried with nothing to fill in: %d calls", trail.calls)
+	}
+}
+
+// A scan leaning heavily on the weakest attribution path is a scan whose
+// owners are less certain than the rest, and the summary has to say so.
+func TestTrailAttributionIsReportedAsWeaker(t *testing.T) {
+	out := Report{TrailResolved: 4}.Summary()
+	if !strings.Contains(out, "less certain") {
+		t.Fatalf("summary should qualify CloudTrail attribution:\n%s", out)
+	}
+}

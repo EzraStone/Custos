@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
+	"github.com/aws/aws-sdk-go-v2/service/cloudtrail"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
@@ -44,6 +45,7 @@ type Clients struct {
 	Objects  *s3.Client
 	Network  *ec2.Client
 	Identity *iam.Client
+	Trail    *cloudtrail.Client
 
 	// Serverless composes the Lambda and ECS clients behind one interface,
 	// because resolving a role needs both and no single SDK client provides
@@ -116,6 +118,7 @@ func New(ctx context.Context, opts Options) (*Clients, error) {
 		Objects:  s3.NewFromConfig(cfg),
 		Network:  ec2.NewFromConfig(cfg),
 		Identity: iam.NewFromConfig(cfg),
+		Trail:    cloudtrail.NewFromConfig(cfg),
 		Serverless: &ServerlessClients{
 			Lambda: lambda.NewFromConfig(cfg),
 			ECS:    ecs.NewFromConfig(cfg),
