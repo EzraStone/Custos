@@ -158,3 +158,6 @@ class BatchAccepted(BaseModel):
     agents_found: int
     review_candidates: int
     coverage_note: str = ""
+    delivered: int = 0
+    """Findings sent to configured channels. Zero is normal — no channels
+    configured, or nothing new to say since the last scan."""

@@ -19,6 +19,8 @@ from pydantic import BaseModel, Field
 from .. import __version__
 from ..batch import Batch, BatchAccepted
 from ..catalog import RANGES_REVISION
+from ..deliver import Channel, notify
+from ..deliver import config as deliver_config
 from ..diff import ScanDiff, compare
 from ..logging import event, get
 from ..pipeline import ingest
@@ -114,9 +116,11 @@ def scope(principal: Principal, requested: str | None) -> str:
 def create_app(
     conn: sqlite3.Connection | None = None,
     tokens: TokenStore | None = None,
+    channels: list[Channel] | None = None,
 ) -> FastAPI:
     database = conn if conn is not None else open_database()
     token_store = tokens if tokens is not None else TokenStore.from_env()
+    delivery = channels if channels is not None else deliver_config.from_env()
 
     app = FastAPI(
         title="Custos control plane",
@@ -130,6 +134,7 @@ def create_app(
     )
     app.state.db = database
     app.state.tokens = token_store
+    app.state.channels = delivery
 
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
@@ -187,6 +192,24 @@ def create_app(
             )
 
         outcome = ingest(app.state.db, batch)
+
+        # Delivery happens here rather than in the pipeline, because ingestion
+        # runs inside a transaction and a webhook has no business holding one
+        # open. A failure is logged and reported in the response; it never
+        # affects the 202, because the batch was accepted and the findings are
+        # in the register regardless of whether anyone was told.
+        delivered = 0
+        if app.state.channels:
+            notified = notify(
+                app.state.db, outcome, batch.account_id, app.state.channels, now()
+            )
+            delivered = sum(d.sent for d in notified.deliveries)
+            if not notified.ok:
+                event(
+                    log, "delivery.partial", account_id=batch.account_id,
+                    failures=[d.channel for d in notified.deliveries if not d.ok],
+                )
+
         event(
             log, "batch.ingested",
             account_id=batch.account_id,
@@ -198,6 +221,7 @@ def create_app(
             changes=len(outcome.diff.actionable),
             drift_findings=len(outcome.drift),
             coverage=round(outcome.coverage.parsed_fraction, 3),
+            delivered=delivered,
         )
         return BatchAccepted(
             batch_id=outcome.batch.id,
@@ -206,6 +230,7 @@ def create_app(
             agents_found=len(outcome.result.register.agents),
             review_candidates=len(outcome.result.review_candidates),
             coverage_note=outcome.coverage_note,
+            delivered=delivered,
         )
 
     @app.get("/v1/register")
