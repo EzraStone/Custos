@@ -500,3 +500,60 @@ def test_a_redelivered_window_does_not_re_notify(realistic_payload):
 
     assert again.json()["duplicate"] is True
     assert len(channel.batches) == 1, "a retried window must not alert twice"
+
+
+# --- console ------------------------------------------------------------------
+
+def _app_with_console(tmp_path, index="<!doctype html><title>Custos</title>"):
+    (tmp_path / "index.html").write_text(index)
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "app.js").write_text("console.log('custos')")
+
+    import os
+
+    os.environ["CUSTOS_CONSOLE_DIR"] = str(tmp_path)
+    try:
+        return TestClient(create_app(
+            conn=open_database(), tokens=TokenStore({TOKEN: ACCOUNT}),
+        ))
+    finally:
+        del os.environ["CUSTOS_CONSOLE_DIR"]
+
+
+def test_the_console_is_served_at_the_root(tmp_path):
+    client = _app_with_console(tmp_path)
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "Custos" in response.text
+
+
+def test_console_assets_are_served(tmp_path):
+    client = _app_with_console(tmp_path)
+    assert client.get("/assets/app.js").status_code == 200
+
+
+# A static mount at the root is greedy. Registered before the API it would
+# shadow /v1 and /healthz, and the symptom would be index.html returned where
+# JSON was expected — which reads as a client bug rather than a routing one.
+def test_the_api_is_still_routed_before_the_console(tmp_path):
+    client = _app_with_console(tmp_path)
+
+    assert client.get("/healthz").json()["status"] == "ok"
+    assert client.get("/v1/register").status_code == 401
+    assert client.post("/v1/batches", json=batch(), headers=AUTH).status_code == 202
+
+
+# The control plane is useful without a console and must not refuse to start
+# because nobody ran npm run build.
+def test_a_missing_console_build_is_not_an_error(tmp_path):
+    import os
+
+    os.environ["CUSTOS_CONSOLE_DIR"] = str(tmp_path / "does-not-exist")
+    try:
+        client = TestClient(create_app(
+            conn=open_database(), tokens=TokenStore({TOKEN: ACCOUNT}),
+        ))
+        assert client.get("/healthz").status_code == 200
+        assert client.get("/").status_code == 404
+    finally:
+        del os.environ["CUSTOS_CONSOLE_DIR"]

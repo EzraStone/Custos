@@ -7,13 +7,16 @@ mutates state names the human who did it.
 
 from __future__ import annotations
 
+import os
 import sqlite3
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .. import __version__
@@ -377,7 +380,32 @@ def create_app(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no such agent")
         return {"agent_id": agent_id, "entries": agents.audit_for(agent_id)}
 
+    _mount_console(app)
     return app
+
+
+def _mount_console(app: FastAPI) -> None:
+    """Serve the built console, if there is one.
+
+    Mounted last so every API route is matched first. A static mount at the
+    root is greedy — registered earlier it would shadow /v1 and /healthz, and
+    the symptom would be the console's index.html returned where JSON was
+    expected, which reads as a client bug rather than a routing one.
+
+    Absent build, no mount. The control plane is useful without a console and
+    must not refuse to start because nobody ran npm run build.
+    """
+    root = Path(
+        os.getenv("CUSTOS_CONSOLE_DIR")
+        or Path(__file__).resolve().parents[3] / "console" / "dist"
+    )
+    if not (root / "index.html").is_file():
+        return
+
+    # html=True serves index.html for a directory request, which is all the
+    # console needs — it has one route and no client-side router to fall back
+    # for.
+    app.mount("/", StaticFiles(directory=str(root), html=True), name="console")
 
 
 class GrantRequest(BaseModel):
