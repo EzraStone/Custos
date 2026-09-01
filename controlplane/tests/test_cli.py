@@ -166,3 +166,24 @@ def test_prune_reports_what_it_removed(db, batch_file, capsys):
     capsys.readouterr()
     main(["--db", db, "prune"])
     assert "pruned" in capsys.readouterr().out
+
+
+# --- notification -------------------------------------------------------------
+
+def test_scan_without_channels_says_so_rather_than_failing(db, batch_file, capsys, monkeypatch):
+    for key in ("CUSTOS_SLACK_WEBHOOK", "CUSTOS_SIEM_WEBHOOK"):
+        monkeypatch.delenv(key, raising=False)
+
+    main(["--db", db, "scan", str(batch_file), "--notify"])
+    assert "no channels configured" in capsys.readouterr().out
+
+
+# A scan that exited non-zero because Slack was down would make an unrelated
+# outage look like a security event.
+def test_a_delivery_failure_does_not_change_the_scan_result(db, batch_file, capsys, monkeypatch):
+    monkeypatch.setenv("CUSTOS_SIEM_WEBHOOK", "https://127.0.0.1:1/nowhere")
+
+    with_notify = main(["--db", db, "scan", str(batch_file), "--notify"])
+    out = capsys.readouterr().out
+    assert with_notify == 1, "still exits on findings, not on the delivery failure"
+    assert "FAILED" in out

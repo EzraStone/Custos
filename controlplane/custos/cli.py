@@ -62,6 +62,9 @@ def cmd_scan(args: argparse.Namespace) -> int:
         for finding in outcome.drift:
             print(f"  {finding.question}")
 
+    if args.notify:
+        _deliver(conn, outcome, batch.account_id)
+
     if args.out:
         _write_report(args.out, outcome, batch.account_id)
         print()
@@ -70,6 +73,31 @@ def cmd_scan(args: argparse.Namespace) -> int:
     # Exit non-zero when unsanctioned agents were found, so this composes with
     # a CI job or a cron that should page someone. A clean account exits zero.
     return 1 if outcome.result.register.unsanctioned else 0
+
+
+def _deliver(conn, outcome, account_id: str) -> None:
+    """Send findings to whatever channels are configured.
+
+    Never fails the scan. The findings are in the register and the report
+    either way, and a scan that exited non-zero because Slack was down would
+    make an unrelated outage look like a security event.
+    """
+    from .deliver import from_env, notify
+    from .store.db import now
+
+    channels = from_env()
+    if not channels:
+        print()
+        print("notify        no channels configured "
+              "(set CUSTOS_SLACK_WEBHOOK or CUSTOS_SIEM_WEBHOOK)")
+        return
+
+    result = notify(conn, outcome, account_id, channels, now())
+    print()
+    for delivery in result.deliveries:
+        status = "ok" if delivery.ok else f"FAILED: {delivery.error}"
+        print(f"notify        {delivery.channel}: sent {delivery.sent}, "
+              f"suppressed {delivery.suppressed} — {status}")
 
 
 def _write_report(
@@ -225,6 +253,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("scan", help="ingest a batch and report on it")
     p.add_argument("batch", help="path to a batch JSON file")
     p.add_argument("--out", help="write an HTML report here")
+    p.add_argument("--notify", action="store_true",
+                   help="deliver findings to configured channels")
     p.set_defaults(func=cmd_scan)
 
     p = sub.add_parser("register", help="list the register")
