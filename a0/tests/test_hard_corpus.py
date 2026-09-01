@@ -93,3 +93,28 @@ def test_the_stress_margin_is_recorded_and_narrower(extended):
     margin = extended.separation_margin
     assert margin > 0, "the classes must still separate"
     assert 0.10 < margin < 0.20, f"stress margin moved to {margin:.3f}"
+
+
+# --- the CLI ------------------------------------------------------------------
+
+def test_stress_command_prints_both_margins(capsys):
+    """The number that flatters is the one that gets used by accident, so the
+    tool that prints it says which to quote."""
+    from custos_a0.cli import main
+
+    assert main(["stress"]) == 0
+    out = capsys.readouterr().out
+    assert "separation margin" in out
+    assert "0.260" in out, "the base corpus number must appear for comparison"
+    assert "Quote this number instead" in out
+
+
+def test_hiding_the_gateway_reproduces_the_miss_on_demand(capsys):
+    """Being able to demonstrate the one real failure is more useful than
+    describing it."""
+    from custos_a0.cli import main
+
+    assert main(["stress", "--hide-gateway"]) == 0
+    out = capsys.readouterr().out
+    assert "missed: deploy-remediation-agent" in out
+    assert "gateway" in out

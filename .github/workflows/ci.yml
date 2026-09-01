@@ -37,6 +37,11 @@ jobs:
       - run: pip install -e ./controlplane -e ./a0
       - name: Run the A0 experiment
         run: python -m custos_a0.cli experiment
+      - name: Stress corpus
+        # Informational in the log, enforced by tests. The margin here is the
+        # number that belongs in diligence, and printing it on every build
+        # means a change that narrows it is visible rather than buried.
+        run: python -m custos_a0.cli stress
 
   contract:
     # The Python schema and the Go wire types describe the same bytes and
