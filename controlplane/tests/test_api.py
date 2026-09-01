@@ -436,3 +436,67 @@ def test_agents_are_only_reachable_by_a_token_covering_their_account(
         f"/v1/agents/{agents[0]['id']}/audit",
         headers={"Authorization": "Bearer tok-other"},
     ).status_code == 404
+
+
+# --- delivery -----------------------------------------------------------------
+
+class _CountingChannel:
+    """Records what it was asked to send instead of sending it."""
+
+    def __init__(self, name="slack", fail=False):
+        self.name = name
+        self.fail = fail
+        self.batches = []
+
+    def send(self, findings, at):
+        from custos.deliver import Delivery
+
+        if self.fail:
+            return Delivery(channel=self.name, sent=0, error="endpoint down")
+        self.batches.append(list(findings))
+        return Delivery(channel=self.name, sent=len(findings))
+
+
+def _client_with(channel):
+    return TestClient(create_app(
+        conn=open_database(), tokens=TokenStore({TOKEN: ACCOUNT}), channels=[channel],
+    ))
+
+
+# A scheduled collector shipping to the API got no notifications at all, so
+# continuous operation was silently report-only.
+def test_ingestion_delivers_findings(realistic_payload):
+    channel = _CountingChannel()
+    client = _client_with(channel)
+
+    response = client.post("/v1/batches", json=realistic_payload, headers=AUTH)
+    assert response.status_code == 202
+    assert response.json()["delivered"] > 0
+    assert len(channel.batches) == 1
+
+
+# The batch was accepted and the findings are in the register regardless of
+# whether anyone was told.
+def test_a_delivery_failure_does_not_reject_the_batch(realistic_payload):
+    client = _client_with(_CountingChannel(fail=True))
+
+    response = client.post("/v1/batches", json=realistic_payload, headers=AUTH)
+    assert response.status_code == 202
+    assert response.json()["delivered"] == 0
+    assert response.json()["agents_found"] == 5
+
+
+def test_no_channels_configured_delivers_nothing_and_says_zero(client, realistic_payload):
+    response = client.post("/v1/batches", json=realistic_payload, headers=AUTH)
+    assert response.json()["delivered"] == 0
+
+
+def test_a_redelivered_window_does_not_re_notify(realistic_payload):
+    channel = _CountingChannel()
+    client = _client_with(channel)
+
+    client.post("/v1/batches", json=realistic_payload, headers=AUTH)
+    again = client.post("/v1/batches", json=realistic_payload, headers=AUTH)
+
+    assert again.json()["duplicate"] is True
+    assert len(channel.batches) == 1, "a retried window must not alert twice"
