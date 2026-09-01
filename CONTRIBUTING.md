@@ -8,9 +8,9 @@ make check
 
 CI runs exactly these targets. If `make check` passes, CI passes.
 
-## The five invariants
+## The seven invariants
 
-`docs/SECURITY-INVARIANTS.md` lists SEC-16 through SEC-20. Each one names the
+`docs/SECURITY-INVARIANTS.md` lists SEC-16 through SEC-22. Each one names the
 test that enforces it.
 
 **A change that removes or weakens one of those tests is a change to the
@@ -52,6 +52,24 @@ needs a reason in the commit message.
 the gate. If your change moves them, that is a change to a business decision.
 Say so in the commit message and update `docs/A0-FINDINGS.md` in the same
 commit.
+
+## Adding a delivery channel
+
+The failure mode of a channel is not missing an alert. It is sending so many
+that the channel gets muted, after which every alert is missed and the
+integration looks like coverage while providing none.
+
+So a new channel inherits three rules, and none of them is optional:
+
+- Suppression is per channel and runs **before** sending, so an outage does not
+  consume a finding's one delivery.
+- Delivery is recorded **after** a channel reports success, so a finding that
+  failed to send is still deliverable next scan.
+- A failure is returned, never raised. A scan that aborted because a webhook was
+  down would lose the data as well as the notification.
+
+Get either ordering backwards and the failure is silent: a finding that was
+never delivered and never will be.
 
 ## Commit messages
 
