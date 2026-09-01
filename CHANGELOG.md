@@ -4,6 +4,59 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### Continuous, and harder to fool
+
+**Delivery.** Findings reach Slack and a SIEM without anyone opening a report.
+The design is mostly restraint: a first scan sends one summary rather than
+forty alerts, later scans send only what changed, and suppression is per channel
+with repeat windows set by severity. The failure mode of a security channel is
+not missing an alert — it is sending so many that the channel gets muted, after
+which every alert is missed.
+
+**Scheduled collection.** The collector runs as a service, tracking a cursor so
+a crash, a deploy, or a throttled hour costs latency rather than data. A window
+that exceeds its record limit is now **shortened** rather than truncated, which
+closes a silent data-loss path: a truncated window advanced the cursor past
+records that were never read, and the next scan simply reported fewer agents.
+
+**Attribution reaches further.** Lambda and ECS execution roles resolve fully.
+CloudTrail fills the remaining gaps by mapping a source address to the role that
+used it — the one path that needs no network interface, and the only one that
+reaches EKS pods.
+
+**Multi-account tokens.** One customer in the target profile runs five to fifty
+AWS accounts. A token now covers a named set rather than one, without weakening
+the boundary: it still cannot reach an account it was not issued for, and must
+say which account a read applies to rather than being allowed to guess.
+
+**Onboarding.** `custos onboard` generates a customer's credentials, tfvars, and
+the paragraph to paste into a ticket. `custos-collector --check` names which
+onboarding failure occurred, because every one of them produces the same
+symptom: a report with no findings.
+
+### A harder corpus, and a smaller margin
+
+Four workloads were added that break the clean coupled/decoupled split the
+original corpus had: an agent that pauses for human approval, an agent on a
+batch schedule, a chatbot with function calling, and an agent behind a
+self-hosted gateway.
+
+**Every verdict is still correct and there are still no false positives. The
+separation margin falls from 0.26 to 0.14.** That is the number to quote
+wherever the first would be doing work, and `make stress` prints it.
+
+The weights were not retuned to widen it. They were already fitted on synthetic
+traffic; fitting them again on more synthetic traffic would improve the metric
+and nothing else.
+
+### Two new invariants
+
+Both from building rather than planning. SEC-21 came from finding a third-party
+HTTP client logging full request URLs at INFO, routing query strings into a
+customer's SIEM by a path the application's own middleware never touched.
+SEC-22 came from realising a truncated collection window is silent data loss.
+
+
 ### The loop closed
 
 The repository runs end to end: a collector reads a real AWS account, ships
