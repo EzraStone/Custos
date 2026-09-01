@@ -14,18 +14,33 @@ function clientWith(fetchImpl: typeof globalThis.fetch, baseUrl = "") {
   return new Client({ token: "tok-abc", baseUrl, fetch: fetchImpl });
 }
 
+/**
+ * A fetch stub that keeps its signature.
+ *
+ * An arrow with no parameters infers a zero-argument function, so mock.calls[0]
+ * is typed as an empty tuple and every assertion about the URL or the body
+ * needs a cast the typechecker rightly rejects. Declaring the parameters here
+ * keeps the call records typed at every call site.
+ */
+function stubFetch(handler: (url: string, init?: RequestInit) => Response) {
+  return vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+    Promise.resolve(handler(String(input), init)),
+  );
+}
+
 describe("client", () => {
   it("sends the token as a bearer credential", async () => {
-    const fetchImpl = vi.fn(async () => respond(200, { status: "ok" }));
-    await clientWith(fetchImpl as never).health();
+    const fetchImpl = stubFetch(() => respond(200, { status: "ok" }));
+    await clientWith(fetchImpl as unknown as typeof globalThis.fetch).health();
 
     const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer tok-abc");
   });
 
   it("asks for only the unsanctioned set when told to", async () => {
-    const fetchImpl = vi.fn(async () => respond(200, { agents: [] }));
-    await clientWith(fetchImpl as never).register("447120043318", true);
+    const fetchImpl = stubFetch(() =>
+      respond(200, { agents: [] }));
+    await clientWith(fetchImpl as unknown as typeof globalThis.fetch).register("447120043318", true);
 
     const [url] = fetchImpl.mock.calls[0] as [string];
     expect(url).toContain("account=447120043318");
@@ -33,16 +48,18 @@ describe("client", () => {
   });
 
   it("omits the query entirely for a single-account token", async () => {
-    const fetchImpl = vi.fn(async () => respond(200, { agents: [] }));
-    await clientWith(fetchImpl as never).register();
+    const fetchImpl = stubFetch(() =>
+      respond(200, { agents: [] }));
+    await clientWith(fetchImpl as unknown as typeof globalThis.fetch).register();
 
     const [url] = fetchImpl.mock.calls[0] as [string];
     expect(url).toBe("/v1/register");
   });
 
   it("escapes an agent id rather than pasting it into a path", async () => {
-    const fetchImpl = vi.fn(async () => respond(200, { entries: [] }));
-    await clientWith(fetchImpl as never).audit("agt/../../etc");
+    const fetchImpl = stubFetch(() =>
+      respond(200, { entries: [] }));
+    await clientWith(fetchImpl as unknown as typeof globalThis.fetch).audit("agt/../../etc");
 
     const [url] = fetchImpl.mock.calls[0] as [string];
     expect(url).not.toContain("../");
@@ -51,8 +68,9 @@ describe("client", () => {
   // Scope defaults to what was observed. An operator approving an agent is
   // approving what it was seen doing.
   it("sends nulls for an unspecified grant scope", async () => {
-    const fetchImpl = vi.fn(async () => respond(200, { id: "agt_1" }));
-    await clientWith(fetchImpl as never).grant("agt_1", "ezra@custos.dev");
+    const fetchImpl = stubFetch(() =>
+      respond(200, { id: "agt_1" }));
+    await clientWith(fetchImpl as unknown as typeof globalThis.fetch).grant("agt_1", "ezra@custos.dev");
 
     const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(init.body as string)).toEqual({
@@ -63,8 +81,9 @@ describe("client", () => {
   });
 
   it("sends an explicit scope when one is given", async () => {
-    const fetchImpl = vi.fn(async () => respond(200, { id: "agt_1" }));
-    await clientWith(fetchImpl as never).grant("agt_1", "ezra", {
+    const fetchImpl = stubFetch(() =>
+      respond(200, { id: "agt_1" }));
+    await clientWith(fetchImpl as unknown as typeof globalThis.fetch).grant("agt_1", "ezra", {
       tools: ["billing-api"],
       data: [],
     });
@@ -79,24 +98,24 @@ describe("client", () => {
 // reading it.
 describe("errors", () => {
   it("carries the server's own message", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = stubFetch(() =>
       respond(400, { detail: "this credential covers several accounts; pass ?account=<id>" }),
     );
 
-    await expect(clientWith(fetchImpl as never).register()).rejects.toThrow(
+    await expect(clientWith(fetchImpl as unknown as typeof globalThis.fetch).register()).rejects.toThrow(
       /pass \?account=/,
     );
   });
 
   it("flattens FastAPI validation arrays into something readable", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = stubFetch(() =>
       respond(422, {
         detail: [{ loc: ["body", "operator"], msg: "String should have at least 1 character" }],
       }),
     );
 
     await expect(
-      clientWith(fetchImpl as never).grant("agt_1", ""),
+      clientWith(fetchImpl as unknown as typeof globalThis.fetch).grant("agt_1", ""),
     ).rejects.toThrow(/body\.operator: String should have at least 1 character/);
   });
 
@@ -105,15 +124,15 @@ describe("errors", () => {
       async () => new Response("<html>502 Bad Gateway</html>", { status: 502 }),
     );
 
-    await expect(clientWith(fetchImpl as never).health()).rejects.toThrow(/HTTP 502/);
+    await expect(clientWith(fetchImpl as unknown as typeof globalThis.fetch).health()).rejects.toThrow(/HTTP 502/);
   });
 
   it("marks an unauthenticated failure so the caller can sign out", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = stubFetch(() =>
       respond(401, { detail: "invalid or missing credential" }),
     );
 
-    await clientWith(fetchImpl as never)
+    await clientWith(fetchImpl as unknown as typeof globalThis.fetch)
       .register()
       .catch((error: ApiError) => {
         expect(error.unauthenticated).toBe(true);
@@ -122,11 +141,11 @@ describe("errors", () => {
   });
 
   it("marks a missing-account failure distinctly from an auth failure", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = stubFetch(() =>
       respond(400, { detail: "covers several accounts; pass ?account=<id>" }),
     );
 
-    await clientWith(fetchImpl as never)
+    await clientWith(fetchImpl as unknown as typeof globalThis.fetch)
       .register()
       .catch((error: ApiError) => {
         expect(error.needsAccount).toBe(true);
