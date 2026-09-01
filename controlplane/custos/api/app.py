@@ -80,6 +80,37 @@ def authenticate(
 Auth = Annotated[Principal, Depends(authenticate)]
 
 
+def scope(principal: Principal, requested: str | None) -> str:
+    """Resolve which account a read applies to, or refuse.
+
+    A token covering one account needs no parameter. A token covering several
+    must say which, because defaulting to the first would attribute one
+    account's findings to another — quietly, and in the direction that makes a
+    report wrong rather than empty.
+
+    A requested account the token does not cover is 404 rather than 403. A
+    distinct response would confirm the account exists to someone holding a
+    credential for a different one.
+    """
+    if requested:
+        if not principal.covers(requested):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="no such account"
+            )
+        return requested
+
+    if len(principal.accounts) == 1:
+        return principal.account_id
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=(
+            "this credential covers several accounts; pass ?account=<id> to say "
+            f"which of {sorted(principal.accounts)}"
+        ),
+    )
+
+
 def create_app(
     conn: sqlite3.Connection | None = None,
     tokens: TokenStore | None = None,
@@ -136,7 +167,7 @@ def create_app(
 
     @app.post("/v1/batches", status_code=status.HTTP_202_ACCEPTED)
     def post_batch(batch: Batch, principal: Auth) -> BatchAccepted:
-        if batch.account_id != principal.account_id:
+        if not principal.covers(batch.account_id):
             # A token names one account. Shipping telemetry for another is
             # either a misconfiguration or an attempt to poison someone else's
             # register, and both deserve the same refusal.
@@ -178,24 +209,28 @@ def create_app(
         )
 
     @app.get("/v1/register")
-    def get_register(principal: Auth, unsanctioned_only: bool = False) -> dict:
+    def get_register(
+        principal: Auth, unsanctioned_only: bool = False, account: str | None = None
+    ) -> dict:
+        account_id = scope(principal, account)
         agents = AgentStore(app.state.db)
         records = (
-            agents.unsanctioned(principal.account_id)
+            agents.unsanctioned(account_id)
             if unsanctioned_only
-            else agents.list_for_account(principal.account_id)
+            else agents.list_for_account(account_id)
         )
         return {
-            "account_id": principal.account_id,
+            "account_id": account_id,
             "catalogue_revision": RANGES_REVISION,
             "agents": [_render(a) for a in records],
         }
 
     @app.get("/v1/scans")
-    def get_scans(principal: Auth, limit: int = 20) -> dict:
+    def get_scans(principal: Auth, limit: int = 20, account: str | None = None) -> dict:
+        account_id = scope(principal, account)
         scans = ScanStore(app.state.db)
         return {
-            "account_id": principal.account_id,
+            "account_id": account_id,
             "scans": [
                 {
                     "id": s.id,
@@ -206,7 +241,7 @@ def create_app(
                     "coverage": s.coverage,
                     "truncated": s.truncated,
                 }
-                for s in scans.scans_for(principal.account_id, limit=min(limit, 100))
+                for s in scans.scans_for(account_id, limit=min(limit, 100))
             ],
         }
 
@@ -220,7 +255,7 @@ def create_app(
         """
         agents = AgentStore(app.state.db)
         existing = agents.get(agent_id)
-        if existing is None or existing.identity.account_id != principal.account_id:
+        if existing is None or not principal.covers(existing.identity.account_id):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no such agent")
 
         try:
@@ -239,7 +274,7 @@ def create_app(
         # that drops request noise.
         event(
             log, "agent.sanctioned",
-            account_id=principal.account_id, agent_id=agent_id,
+            account_id=existing.identity.account_id, agent_id=agent_id,
             operator=body.operator, principal=agent.identity.principal,
         )
         return _render(agent)
@@ -248,7 +283,7 @@ def create_app(
     def set_status(agent_id: str, body: StatusRequest, principal: Auth) -> dict:
         agents = AgentStore(app.state.db)
         existing = agents.get(agent_id)
-        if existing is None or existing.identity.account_id != principal.account_id:
+        if existing is None or not principal.covers(existing.identity.account_id):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no such agent")
 
         try:
@@ -263,7 +298,7 @@ def create_app(
         return _render(agent)
 
     @app.get("/v1/report", response_class=HTMLResponse)
-    def get_report(principal: Auth) -> HTMLResponse:
+    def get_report(principal: Auth, account: str | None = None) -> HTMLResponse:
         """Render the current register as the report a customer reads.
 
         Served rather than only written to a file because the second scan
@@ -276,14 +311,15 @@ def create_app(
         after a sanction and shows an agent as unsanctioned after someone
         approved it.
         """
+        account_id = scope(principal, account)
         agents = AgentStore(app.state.db)
         scans = ScanStore(app.state.db)
 
         register = Register()
-        for agent in agents.list_for_account(principal.account_id):
+        for agent in agents.list_for_account(account_id):
             register.agents[agent.id] = agent
 
-        latest = scans.latest_scan(principal.account_id)
+        latest = scans.latest_scan(account_id)
         result = ScanResult(
             register=register, verdicts=[], telemetry=[],
             principals_seen=latest.principals_seen if latest else 0,
@@ -294,7 +330,7 @@ def create_app(
         ) if latest else None
 
         diff = ScanDiff()
-        previous = scans.latest_scan_before(principal.account_id, latest.id) if latest else None
+        previous = scans.latest_scan_before(account_id, latest.id) if latest else None
         if latest and previous:
             diff = compare(
                 register.agents,
@@ -304,7 +340,7 @@ def create_app(
             )
 
         return HTMLResponse(render(
-            result, account_label=principal.account_id,
+            result, account_label=account_id,
             generated_at=now(), diff=diff, coverage=coverage,
         ))
 
@@ -312,7 +348,7 @@ def create_app(
     def get_audit(agent_id: str, principal: Auth) -> dict:
         agents = AgentStore(app.state.db)
         existing = agents.get(agent_id)
-        if existing is None or existing.identity.account_id != principal.account_id:
+        if existing is None or not principal.covers(existing.identity.account_id):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no such agent")
         return {"agent_id": agent_id, "entries": agents.audit_for(agent_id)}
 
