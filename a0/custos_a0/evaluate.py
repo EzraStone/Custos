@@ -48,6 +48,31 @@ SCENARIOS: tuple[Scenario, ...] = (
 )
 
 
+def run_hard(gateway_declared: bool = False) -> Result:
+    """Score the classifier against the stress corpus.
+
+    Separate from `run_all` on purpose. G0 was defined against the base corpus
+    and is measured against it; this answers a different question — how much
+    headroom is left when the clean coupled/decoupled split does not hold — and
+    conflating the two would quietly restate the gate.
+
+    `gateway_declared` simulates a customer who told us about their self-hosted
+    LLM gateway, which is the intended remedy for `agent_via_gateway`.
+    """
+    from custos import catalog
+
+    from .scenarios.hard import GATEWAY
+
+    corpus = corpus_mod.build(corpus_mod.CorpusSpec(hard=True))
+    if gateway_declared:
+        catalog.extend([f"{GATEWAY.ip}/32"])
+    try:
+        return run(SCENARIOS[0], corpus)
+    finally:
+        if gateway_declared:
+            catalog.reset()
+
+
 @dataclass(slots=True)
 class Row:
     """One workload's result, with ground truth attached for reporting."""
