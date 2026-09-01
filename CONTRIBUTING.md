@@ -14,7 +14,13 @@ CI runs exactly these targets. If `make check` passes, CI passes.
 test that enforces it.
 
 **A change that removes or weakens one of those tests is a change to the
-invariant, not a refactor.** They are written so that breaking one requires
+invariant, not a refactor.**
+
+Renaming one counts. `test_invariant_coverage.py` asserts that every test name
+cited in the document exists, that every invariant cites at least one, and that
+CI's invariants job mentions all of them — because a citation pointing at a
+test that was renamed is a guarantee nobody can verify, and it found exactly
+that on its first run. They are written so that breaking one requires
 deliberately editing a test named after the thing you are breaking — that is the
 mechanism, and it only works if nobody routes around it.
 
