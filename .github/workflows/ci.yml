@@ -104,6 +104,34 @@ jobs:
       - name: Build
         run: cd collector && CGO_ENABLED=0 go build -trimpath ./cmd/custos-collector
 
+  console:
+    # The console is the only thing a customer looks at directly, so a build
+    # that typechecks but renders nothing is worse than one that fails here.
+    # npm ci, not npm install: the lockfile is the record of what was tested.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: console/package-lock.json
+      - name: Install
+        run: cd console && npm ci
+      - name: Typecheck
+        run: cd console && npm run typecheck
+      - name: Lint
+        run: cd console && npm run lint
+      - name: Test
+        run: cd console && npm test
+      - name: Build
+        run: cd console && npm run build
+      - name: The build produced something servable
+        # The control plane mounts console/dist only if index.html is there.
+        # A build that silently emits nothing would turn the console into a
+        # 404 in production and pass every other check in this file.
+        run: test -s console/dist/index.html
+
   terraform:
     runs-on: ubuntu-latest
     steps:
