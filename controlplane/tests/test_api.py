@@ -338,3 +338,24 @@ def test_ingestion_logs_what_it_found(client, realistic_payload):
     assert len(ingested) == 1
     assert ingested[0]["agents_found"] == 5
     assert "coverage" in ingested[0]
+
+
+def test_the_batch_cap_matches_the_collector(client):
+    """Both are set by measurement, and a mismatch means either the collector
+    ships batches the API refuses, or the API accepts batches that take it
+    down."""
+    from pathlib import Path
+
+    from custos.api.app import MAX_FLOWS_PER_BATCH
+
+    root = Path(__file__).resolve().parents[2]
+    source = root / "collector" / "internal" / "ingest" / "cloudwatch.go"
+    if not source.exists():
+        import pytest
+
+        pytest.skip("collector source not present")
+
+    text = source.read_text()
+    assert f"MaxEventsPerRun = {MAX_FLOWS_PER_BATCH:_}" in text, (
+        "the API cap and the collector cap have drifted"
+    )

@@ -34,9 +34,18 @@ from .auth import Principal, TokenStore, parse_bearer
 
 log = get("custos.api")
 
-MAX_FLOWS_PER_BATCH = 2_000_000
-"""Matches the collector's own event cap. A batch larger than this did not come
-from our collector, and accepting it would let one request exhaust memory."""
+MAX_FLOWS_PER_BATCH = 500_000
+"""Matches the collector's record cap, and both are set by measurement.
+
+Ingestion costs roughly a kilobyte of peak memory per flow record end to end —
+the JSON being parsed, the validated batch, and the conversion to telemetry all
+live at once. Half a million is therefore about half a gigabyte of peak, which
+a small container survives.
+
+The previous value of two million was about two gigabytes on a single request
+and would have taken the control plane down the first time a customer had a
+busy hour. A batch larger than this cap did not come from our collector, which
+shortens its window rather than exceeding it."""
 
 
 def authenticate(
