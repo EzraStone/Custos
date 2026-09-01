@@ -23,12 +23,17 @@ import (
 
 // MaxEventsPerRun bounds a single collection.
 //
-// A busy account produces millions of flow log records an hour. Reading all of
-// them would cost the customer money in API calls and cost us nothing useful:
-// the classifier works on aggregate byte ratios per principal, which converge
-// long before the whole window is read. Hitting this limit is reported, not
-// hidden, because a truncated window changes what an absence of findings means.
-const MaxEventsPerRun = 2_000_000
+// Measured against the control plane rather than guessed: ingestion costs
+// roughly a kilobyte of peak memory per flow record end to end, counting the
+// parsed batch and the conversion. Half a million records is therefore about
+// half a gigabyte of peak, which a small container survives; two million was
+// not survivable and was the previous value.
+//
+// A window that would exceed this is SHORTENED, never truncated. See
+// ShortenTo: truncation drops the tail of a window silently, and the next
+// window starts after the data that was dropped, so the records are lost
+// permanently and the scan that follows simply reports fewer agents.
+const MaxEventsPerRun = 500_000
 
 // pageSize is the CloudWatch Logs maximum. Fewer, larger pages means fewer
 // billable API calls against the customer's account.

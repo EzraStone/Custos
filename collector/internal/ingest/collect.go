@@ -55,8 +55,14 @@ type Report struct {
 	Principals  int
 	Requests    int
 	HaveALBLogs bool
-	Degraded    []Attribution
-	Errors      []string
+
+	// Shortened records that the window was cut back to what was actually
+	// read, so the cursor resumes from there. Reported because it means
+	// collection is running behind and the interval should probably be shorter.
+	Shortened bool
+
+	Degraded []Attribution
+	Errors   []string
 }
 
 // Trustworthy reports whether the scan covered enough to make an absence of
@@ -87,9 +93,13 @@ func (r Report) Summary() string {
 		fmt.Fprintf(&b, "WARNING: %d SKIPDATA lines — AWS dropped records it could not "+
 			"capture, so this account's traffic is under-represented\n", r.Stats.SkipData)
 	}
-	if r.Stats.Truncated {
-		fmt.Fprintf(&b, "WARNING: hit the event limit — this window is partial and an "+
-			"absence of findings means less than it would otherwise\n")
+	if r.Stats.Truncated && r.Shortened {
+		fmt.Fprintf(&b, "hit the record limit; window shortened to what was read — "+
+			"no data lost, but consider a shorter collection interval\n")
+	} else if r.Stats.Truncated {
+		fmt.Fprintf(&b, "WARNING: hit the record limit and the window could not be "+
+			"shortened — this window is partial and an absence of findings means "+
+			"less than it would otherwise\n")
 	}
 	if n := len(r.Degraded); n > 0 {
 		fmt.Fprintf(&b, "%d interfaces could not be attributed to a principal:\n", n)
@@ -129,6 +139,22 @@ func (c *Collector) Collect(ctx context.Context, w awsread.Window) (wire.Batch, 
 
 	records, stats, err := c.Flows.Read(ctx, w)
 	report.Stats = stats
+
+	// A window that hit the record limit is shortened to what was actually
+	// read, rather than shipped as if it covered the whole span.
+	//
+	// This is the difference between a busy hour costing extra windows and a
+	// busy hour losing data. Shipping a truncated window as if it were
+	// complete advances the collection cursor past records that were never
+	// read, and they are gone — the next scan reports fewer agents and nothing
+	// distinguishes that from an account with fewer agents.
+	if stats.Truncated {
+		if end, ok := ShortenTo(records); ok {
+			w.End = end
+			report.Shortened = true
+		}
+	}
+	batch.WindowEnd = w.End
 	batch.Collection = wire.Collection{
 		LinesRead:      int64(stats.Lines),
 		LinesParsed:    int64(stats.Parsed),
@@ -202,6 +228,23 @@ func (c *Collector) Collect(ctx context.Context, w awsread.Window) (wire.Batch, 
 // run, rather than reporting zero because it never looked.
 func DistinctInterfaces(records []wire.FlowRecord) []string {
 	return distinctInterfaces(records)
+}
+
+// ShortenTo returns the end of the last record read, so a window that hit its
+// limit can be cut back to cover exactly what it collected.
+//
+// Uses the maximum record end rather than the last record in the slice: flow
+// log pages are not strictly ordered, and taking the last one would cut the
+// window short of records already in hand — which would then be re-collected
+// next run, forever, because the cursor never reaches them.
+func ShortenTo(records []wire.FlowRecord) (time.Time, bool) {
+	var latest time.Time
+	for _, r := range records {
+		if r.End.After(latest) {
+			latest = r.End
+		}
+	}
+	return latest, !latest.IsZero()
 }
 
 func distinctInterfaces(records []wire.FlowRecord) []string {

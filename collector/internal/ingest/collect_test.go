@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
@@ -176,10 +177,55 @@ func TestSummaryWarnsLoudlyAboutUnderRepresentation(t *testing.T) {
 		}},
 	}
 	out := r.Summary()
-	for _, want := range []string{"SKIPDATA", "under-represented", "event limit", "eni-9"} {
+	for _, want := range []string{"SKIPDATA", "under-represented", "record limit", "eni-9"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("summary missing %q:\n%s", want, out)
 		}
+	}
+}
+
+// A shortened window lost nothing; an unshortened one did. Reporting them the
+// same way would either alarm someone over a busy hour or hide real loss.
+func TestAShortenedWindowIsNotReportedAsDataLoss(t *testing.T) {
+	shortened := Report{
+		Stats:     flowlogs.Stats{Lines: 100, Parsed: 100, Truncated: true},
+		Shortened: true,
+	}.Summary()
+	if !strings.Contains(shortened, "no data lost") {
+		t.Errorf("a shortened window should say nothing was lost:\n%s", shortened)
+	}
+	if strings.Contains(shortened, "WARNING") {
+		t.Errorf("a shortened window is not a warning:\n%s", shortened)
+	}
+
+	lost := Report{
+		Stats:     flowlogs.Stats{Lines: 100, Parsed: 100, Truncated: true},
+		Shortened: false,
+	}.Summary()
+	if !strings.Contains(lost, "WARNING") {
+		t.Errorf("an unshortened truncation is real loss and must warn:\n%s", lost)
+	}
+}
+
+// Flow log pages are not strictly ordered. Taking the last record in the slice
+// would cut the window short of records already in hand, which would then be
+// re-collected forever because the cursor never reaches them.
+func TestShortenToUsesTheLatestRecordNotTheLastOne(t *testing.T) {
+	early := time.Unix(1786370400, 0).UTC()
+	late := time.Unix(1786374000, 0).UTC()
+
+	records := []wire.FlowRecord{
+		{End: early}, {End: late}, {End: early.Add(time.Minute)},
+	}
+	got, ok := ShortenTo(records)
+	if !ok || !got.Equal(late) {
+		t.Fatalf("got %v (ok=%v), want %v", got, ok, late)
+	}
+}
+
+func TestShortenToOfNothingIsNotATime(t *testing.T) {
+	if _, ok := ShortenTo(nil); ok {
+		t.Fatal("an empty read cannot shorten a window")
 	}
 }
 
