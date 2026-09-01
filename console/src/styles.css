@@ -208,3 +208,23 @@ h2 { font-family: var(--display); font-size: 1.5rem; margin: 2.5rem 0 .5rem; }
 
 .meta-row .spacer { margin-left: auto; }
 .meta-row .warn { color: var(--seal); }
+
+/* ---------- account picker ---------- */
+.picker { max-width: 34rem; margin: 2.5rem 0; }
+.picker h2 { margin-top: 0; }
+.accounts { list-style: none; margin: 0; padding: 0; }
+.accounts li { margin-bottom: .5rem; }
+.accounts .account {
+  width: 100%;
+  text-align: left;
+  font-family: var(--mono);
+  font-size: .92rem;
+  padding: .7rem .85rem;
+  background: var(--raised);
+  color: var(--ink);
+  border: 1px solid var(--hair);
+  border-radius: 3px;
+  cursor: pointer;
+}
+.accounts .account:hover { border-color: var(--rule); }
+.accounts .account.current { border-color: var(--verdigris); }

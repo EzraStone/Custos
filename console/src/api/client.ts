@@ -16,6 +16,7 @@
  */
 
 import type {
+  AccountsResponse,
   Agent,
   AuditResponse,
   Health,
@@ -85,6 +86,11 @@ export class Client {
 
   health(): Promise<Health> {
     return this.request<Health>("/healthz");
+  }
+
+  /** The accounts this credential covers. One for most tokens, many for a fleet. */
+  accounts(): Promise<AccountsResponse> {
+    return this.request<AccountsResponse>("/v1/accounts");
   }
 
   register(account?: string, unsanctionedOnly = false): Promise<RegisterResponse> {

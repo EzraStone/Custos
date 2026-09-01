@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError, Client } from "./api/client";
 import { byConsequence, type Agent, type Health, type Scan } from "./api/types";
+import { AccountPicker } from "./components/AccountPicker";
 import { Finding } from "./components/Finding";
 import { GrantDialog } from "./components/GrantDialog";
 import { SignIn } from "./components/SignIn";
@@ -14,6 +15,7 @@ export function App() {
   const [health, setHealth] = useState<Health | null>(null);
   const [agents, setAgents] = useState<Agent[] | null>(null);
   const [scans, setScans] = useState<Scan[]>([]);
+  const [accounts, setAccounts] = useState<string[] | null>(null);
   const [view, setView] = useState<View>("unsanctioned");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -40,6 +42,7 @@ export function App() {
     setAuth({ token: "", operator: "", account: "" });
     setAgents(null);
     setScans([]);
+    setAccounts(null);
     setHealth(null);
   }, []);
 
@@ -50,9 +53,23 @@ export function App() {
     setError(null);
 
     try {
+      // Which accounts the credential covers is asked first, because on a fleet
+      // token every other call needs an account and would 400 without one.
+      const covered = (await client.accounts()).accounts;
+      if (mine !== ticket.current) return;
+      setAccounts(covered);
+
+      // One account needs no choosing. Several, with none chosen, means the
+      // picker renders instead of a register — there is nothing to show yet.
+      const account = auth.account || (covered.length === 1 ? covered[0] : "");
+      if (!account) {
+        setAgents(null);
+        return;
+      }
+
       const [registry, history, status] = await Promise.all([
-        client.register(auth.account || undefined, view === "unsanctioned"),
-        client.scans(auth.account || undefined).catch(() => ({ scans: [] })),
+        client.register(account, view === "unsanctioned"),
+        client.scans(account).catch(() => ({ scans: [] })),
         client.health().catch(() => null),
       ]);
       if (mine !== ticket.current) return;
@@ -123,6 +140,38 @@ export function App() {
   const spendIsEstimate = health?.prices_revision !== undefined
     && health.prices_revision.startsWith("unverified");
 
+  const fleet = (accounts?.length ?? 0) > 1;
+  const chooseAccount = (account: string) => {
+    session.save({ account });
+    setAuth((current) => ({ ...current, account }));
+  };
+
+  // A fleet credential with no account chosen has nothing to show: every route
+  // below is scoped to one account. The picker is the page, not a banner on
+  // top of an empty register.
+  if (fleet && !auth.account) {
+    return (
+      <main className="sheet">
+        <Masthead>
+          <button className="link" onClick={signOut}>
+            Sign out
+          </button>
+        </Masthead>
+        {error ? (
+          <div className="notice" role="alert">
+            <span className="tag">Could not load the register</span>
+            <p>{error}</p>
+          </div>
+        ) : null}
+        <AccountPicker
+          accounts={accounts ?? []}
+          current={auth.account}
+          onChoose={chooseAccount}
+        />
+      </main>
+    );
+  }
+
   return (
     <main className="sheet">
       <Masthead>
@@ -133,6 +182,14 @@ export function App() {
 
       <div className="meta-row">
         <span>{auth.operator || "no name set — reading only"}</span>
+        {fleet ? (
+          <span>
+            account {auth.account}{" "}
+            <button className="link" onClick={() => chooseAccount("")}>
+              switch
+            </button>
+          </span>
+        ) : null}
         {health ? <span>catalogue {health.catalogue_revision}</span> : null}
         {scans[0] ? <span>last scan {formatDate(scans[0].started_at)}</span> : null}
         {scans[0]?.truncated ? (

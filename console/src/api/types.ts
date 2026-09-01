@@ -53,6 +53,10 @@ export interface Agent {
   imprimatur: Imprimatur | null;
 }
 
+export interface AccountsResponse {
+  accounts: string[];
+}
+
 export interface RegisterResponse {
   account_id: string;
   catalogue_revision: string;

@@ -33,6 +33,7 @@ interface Backend {
   agents?: Agent[];
   coverage?: number;
   truncated?: boolean;
+  accounts?: string[];
   registerStatus?: number;
   registerDetail?: string;
   grantStatus?: number;
@@ -63,6 +64,9 @@ function backend(config: Backend = {}) {
         catalogue_revision: "2026-08-18",
         prices_revision: config.pricesRevision ?? "unverified-placeholder",
       });
+    }
+    if (url.startsWith("/v1/accounts")) {
+      return json(200, { accounts: config.accounts ?? ["447120043318"] });
     }
     if (url.startsWith("/v1/register")) {
       if (config.registerStatus && config.registerStatus !== 200) {
@@ -306,6 +310,7 @@ describe("overlapping loads", () => {
             agents: [filtered ? unsanctionedOnly : everything],
           });
         }
+        if (url.startsWith("/v1/accounts")) return json({ accounts: ["1"] });
         if (url.startsWith("/v1/scans")) return json({ account_id: "1", scans: [] });
         return json({
           status: "ok",
@@ -328,5 +333,78 @@ describe("overlapping loads", () => {
     await waitFor(() => expect(screen.getByText("fast-one")).toBeInTheDocument());
     expect(screen.queryByText("slow-one")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /the register/i })).toBeInTheDocument();
+  });
+});
+
+describe("a credential covering several accounts", () => {
+  const fleet = ["111111111111", "222222222222"];
+
+  it("asks which account before showing a register", async () => {
+    install({ accounts: fleet });
+    session.save({ token: "tok-fleet", operator: "ezra@custos.dev" });
+    render(<App />);
+
+    expect(
+      await screen.findByRole("heading", { name: /choose an account/i }),
+    ).toBeInTheDocument();
+    // Not a register with a banner over it. There is nothing to show: every
+    // route below is scoped to one account.
+    expect(
+      screen.queryByRole("heading", { name: /unsanctioned agents/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("never asks the register for a fleet token without an account", async () => {
+    const stub = install({ accounts: fleet });
+    session.save({ token: "tok-fleet", operator: "ezra@custos.dev" });
+    render(<App />);
+    await screen.findByRole("heading", { name: /choose an account/i });
+
+    // A register call with no account would 400. Not sending it is the point.
+    expect(stub.calls.some((c) => c.url.startsWith("/v1/register"))).toBe(false);
+  });
+
+  it("scopes the register to the chosen account", async () => {
+    const stub = install({ accounts: fleet });
+    session.save({ token: "tok-fleet", operator: "ezra@custos.dev" });
+    render(<App />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "222222222222" }),
+    );
+    await screen.findByRole("heading", { name: /unsanctioned agents/i });
+
+    const register = stub.calls.find((c) => c.url.startsWith("/v1/register"));
+    expect(register?.url).toContain("account=222222222222");
+  });
+
+  it("lets the operator switch back", async () => {
+    install({ accounts: fleet });
+    session.save({ token: "tok-fleet", operator: "ezra@custos.dev" });
+    render(<App />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "111111111111" }),
+    );
+    await screen.findByRole("heading", { name: /unsanctioned agents/i });
+    expect(screen.getByText(/account 111111111111/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /switch/i }));
+    expect(
+      await screen.findByRole("heading", { name: /choose an account/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not ask a single-account token to choose", async () => {
+    install({ accounts: ["447120043318"] });
+    session.save({ token: "tok-abc", operator: "ezra@custos.dev" });
+    render(<App />);
+
+    expect(
+      await screen.findByRole("heading", { name: /unsanctioned agents/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: /choose an account/i }),
+    ).not.toBeInTheDocument();
   });
 });
