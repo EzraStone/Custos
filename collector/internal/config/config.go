@@ -42,6 +42,14 @@ type Config struct {
 
 	// ExternalID guards the confused deputy problem. Required with RoleARN.
 	ExternalID string
+
+	// Daemon runs collection on a schedule instead of once.
+	Daemon bool
+
+	// StatePath holds the collection cursor across restarts. Without a durable
+	// path a restarting daemon re-collects one window and loses nothing, but a
+	// daemon that restarts often would never make progress past its interval.
+	StatePath string
 }
 
 // S3Source reports whether FlowLogs names an S3 location, returning the bucket
@@ -78,6 +86,11 @@ func Load(getenv func(string) string) (*Config, error) {
 		DryRun:     getenv("CUSTOS_DRY_RUN") == "1",
 		RoleARN:    strings.TrimSpace(getenv("CUSTOS_ROLE_ARN")),
 		ExternalID: strings.TrimSpace(getenv("CUSTOS_EXTERNAL_ID")),
+		Daemon:     getenv("CUSTOS_DAEMON") == "1",
+		StatePath:  strings.TrimSpace(getenv("CUSTOS_STATE_PATH")),
+	}
+	if c.StatePath == "" {
+		c.StatePath = "custos-collector-state.json"
 	}
 	if raw := getenv("CUSTOS_WINDOW"); raw != "" {
 		d, err := time.ParseDuration(raw)
@@ -126,6 +139,12 @@ func (c *Config) Validate() error {
 	}
 	if c.RoleARN != "" && c.Region == "" {
 		return errors.New("AWS_REGION is required when assuming a role")
+	}
+	if c.Daemon && c.DryRun {
+		// A dry-run daemon would loop forever printing batches and advancing
+		// its cursor over windows nothing received. Refusing is clearer than
+		// letting someone discover it a day later.
+		return errors.New("CUSTOS_DAEMON and CUSTOS_DRY_RUN are mutually exclusive")
 	}
 	return nil
 }

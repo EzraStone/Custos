@@ -21,9 +21,11 @@ import (
 	"time"
 
 	"github.com/EzraStone/Custos/collector/internal/awsclient"
+	"github.com/EzraStone/Custos/collector/internal/awsread"
 	"github.com/EzraStone/Custos/collector/internal/config"
 	"github.com/EzraStone/Custos/collector/internal/flowlogs"
 	"github.com/EzraStone/Custos/collector/internal/ingest"
+	"github.com/EzraStone/Custos/collector/internal/schedule"
 	"github.com/EzraStone/Custos/collector/internal/ship"
 	"github.com/EzraStone/Custos/collector/internal/wire"
 )
@@ -72,7 +74,34 @@ func run(args []string, stdout, stderr *os.File) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	if cfg.Daemon {
+		return serve(ctx, cfg, stdout, stderr)
+	}
 	return collect(ctx, cfg, *input, stdout, stderr)
+}
+
+// serve collects on a schedule until interrupted.
+//
+// Every window goes through the same path a one-shot run does, so there is no
+// second code path to keep correct — the only difference is who decides the
+// window and what happens to the cursor afterwards.
+func serve(ctx context.Context, cfg *config.Config, stdout, stderr *os.File) error {
+	fmt.Fprintf(stderr, "collecting every %s, cursor at %s\n", cfg.Window, cfg.StatePath)
+
+	return schedule.Run(ctx, schedule.Options{
+		Interval: cfg.Window,
+		State:    schedule.Store{Path: cfg.StatePath},
+		Log:      stderr,
+	}, func(ctx context.Context, w awsread.Window) error {
+		batch, report, err := fromAWSWindow(ctx, cfg, w)
+		if err != nil {
+			return err
+		}
+		batch.Collector = Version
+
+		fmt.Fprint(stderr, report.Summary())
+		return ship.New(cfg.Endpoint, cfg.Token, Version).Send(ctx, batch)
+	})
 }
 
 func collect(ctx context.Context, cfg *config.Config, path string, stdout, stderr *os.File) error {
@@ -139,6 +168,12 @@ func fromFile(cfg *config.Config, path string) (wire.Batch, ingest.Report, error
 }
 
 func fromAWS(ctx context.Context, cfg *config.Config) (wire.Batch, ingest.Report, error) {
+	return fromAWSWindow(ctx, cfg, ingest.Window(cfg.Window))
+}
+
+func fromAWSWindow(
+	ctx context.Context, cfg *config.Config, w awsread.Window,
+) (wire.Batch, ingest.Report, error) {
 	clients, err := awsclient.New(ctx, awsclient.Options{
 		Region:     cfg.Region,
 		RoleARN:    cfg.RoleARN,
@@ -167,7 +202,7 @@ func fromAWS(ctx context.Context, cfg *config.Config) (wire.Batch, ingest.Report
 		AccountID:  cfg.AccountID,
 		Region:     cfg.Region,
 	}
-	return collector.Collect(ctx, ingest.Window(cfg.Window))
+	return collector.Collect(ctx, w)
 }
 
 // accessLogSource returns a reader for load balancer access logs, or nil when
@@ -218,6 +253,8 @@ CONFIGURATION
   CUSTOS_WINDOW        collection window, default 1h
   CUSTOS_ROLE_ARN      cross-account role to assume     (optional)
   CUSTOS_EXTERNAL_ID   required whenever a role is assumed
+  CUSTOS_DAEMON=1      collect on a schedule instead of once
+  CUSTOS_STATE_PATH    where the collection cursor lives across restarts
   CUSTOS_DRY_RUN=1     read and print, never send
 
 With no endpoint or token configured this binary does nothing at all.

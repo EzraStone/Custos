@@ -114,3 +114,48 @@ func TestBucketWithNoPrefixIsValid(t *testing.T) {
 		t.Fatalf("got %q %q %v", bucket, prefix, ok)
 	}
 }
+
+// A dry-run daemon would loop forever printing batches and advancing its
+// cursor over windows nothing received.
+func TestDaemonAndDryRunAreMutuallyExclusive(t *testing.T) {
+	_, err := Load(env(map[string]string{
+		"CUSTOS_DAEMON": "1", "CUSTOS_DRY_RUN": "1", "CUSTOS_FLOW_LOGS": "g",
+	}))
+	if err == nil {
+		t.Fatal("a dry-run daemon must be refused")
+	}
+}
+
+func TestDaemonNeedsSomewhereToShip(t *testing.T) {
+	if _, err := Load(env(map[string]string{
+		"CUSTOS_DAEMON": "1", "CUSTOS_FLOW_LOGS": "g",
+	})); err == nil {
+		t.Fatal("a daemon with no endpoint must be refused")
+	}
+}
+
+func TestStatePathHasADefault(t *testing.T) {
+	c, err := Load(env(map[string]string{
+		"CUSTOS_ENDPOINT": "https://a.dev", "CUSTOS_TOKEN": "t",
+		"CUSTOS_FLOW_LOGS": "g", "CUSTOS_DAEMON": "1",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.StatePath == "" {
+		t.Fatal("a daemon without a cursor path would never make progress")
+	}
+}
+
+func TestStatePathIsConfigurable(t *testing.T) {
+	c, err := Load(env(map[string]string{
+		"CUSTOS_ENDPOINT": "https://a.dev", "CUSTOS_TOKEN": "t",
+		"CUSTOS_FLOW_LOGS": "g", "CUSTOS_STATE_PATH": "/var/lib/custos/cursor.json",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.StatePath != "/var/lib/custos/cursor.json" {
+		t.Fatalf("got %q", c.StatePath)
+	}
+}
