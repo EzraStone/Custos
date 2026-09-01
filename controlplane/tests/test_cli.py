@@ -187,3 +187,35 @@ def test_a_delivery_failure_does_not_change_the_scan_result(db, batch_file, caps
     out = capsys.readouterr().out
     assert with_notify == 1, "still exits on findings, not on the delivery failure"
     assert "FAILED" in out
+
+
+# --- fleets -------------------------------------------------------------------
+
+def test_accounts_lists_what_the_database_holds(db, batch_file, capsys):
+    """Otherwise only answerable by guessing an account ID and seeing whether
+    anything comes back."""
+    main(["--db", db, "scan", str(batch_file)])
+    capsys.readouterr()
+
+    assert main(["--db", db, "accounts"]) == 0
+    out = capsys.readouterr().out
+    assert "447120043318" in out
+    assert "unsanctioned" in out
+
+
+def test_accounts_counts_sanctioned_separately(db, batch_file, capsys):
+    main(["--db", db, "scan", str(batch_file)])
+    capsys.readouterr()
+    main(["--db", db, "register", "--account", ACCOUNT, "--json"])
+    agent_id = json.loads(capsys.readouterr().out)[0]["id"]
+    main(["--db", db, "grant", agent_id, "--operator", "ezra"])
+    capsys.readouterr()
+
+    main(["--db", db, "accounts"])
+    row = [ln for ln in capsys.readouterr().out.splitlines() if ACCOUNT in ln][0]
+    assert row.split() == [ACCOUNT, "5", "1", "4"]
+
+
+def test_accounts_on_an_empty_database_says_so(db, capsys):
+    assert main(["--db", db, "accounts"]) == 0
+    assert "No accounts" in capsys.readouterr().out

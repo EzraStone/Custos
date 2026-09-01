@@ -150,6 +150,33 @@ def cmd_register(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_accounts(args: argparse.Namespace) -> int:
+    """List the accounts this database holds.
+
+    The first thing anyone needs on a fleet database, and otherwise only
+    answerable by guessing an account ID and seeing whether anything comes
+    back.
+    """
+    conn = open_database(args.db)
+    rows = conn.execute(
+        "SELECT account_id, COUNT(*) AS agents, "
+        "SUM(CASE WHEN status = 'sanctioned' THEN 1 ELSE 0 END) AS sanctioned "
+        "FROM agents GROUP BY account_id ORDER BY account_id"
+    ).fetchall()
+
+    if not rows:
+        print("No accounts in this database yet.")
+        return 0
+
+    print(f"{'account':<18}{'agents':>8}{'sanctioned':>12}{'unsanctioned':>14}")
+    print("-" * 52)
+    for row in rows:
+        unsanctioned = row["agents"] - (row["sanctioned"] or 0)
+        print(f"{row['account_id']:<18}{row['agents']:>8}"
+              f"{row['sanctioned'] or 0:>12}{unsanctioned:>14}")
+    return 0
+
+
 def cmd_history(args: argparse.Namespace) -> int:
     conn = open_database(args.db)
     scans = ScanStore(conn).scans_for(args.account, limit=args.limit)
@@ -304,6 +331,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--unsanctioned-only", action="store_true")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_register)
+
+    p = sub.add_parser("accounts", help="list the accounts this database holds")
+    p.set_defaults(func=cmd_accounts)
 
     p = sub.add_parser("history", help="list past scans")
     p.add_argument("--account", required=True)
