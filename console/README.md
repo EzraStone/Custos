@@ -29,10 +29,15 @@ So three things are deliberate and should not be optimised away:
 
 ```
 npm install
-npm run dev          # against a control plane on :8080
+npm run dev          # proxies /v1 and /healthz to a control plane on :8080
 npm run build        # emits dist/, which the control plane serves
 npm test
 ```
+
+Point the dev server somewhere else with `CUSTOS_API=http://host:port npm run
+dev`. The proxy exists so development has the same shape as production —
+same origin, relative paths — rather than a base URL that is configured in one
+environment and wrong in the other.
 
 The console is served by the control plane rather than deployed separately.
 That is one fewer thing to run, and it means the console and the API share an
