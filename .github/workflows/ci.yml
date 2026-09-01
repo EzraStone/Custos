@@ -81,6 +81,10 @@ jobs:
         run: |
           cd controlplane
           pytest -q -k "sec17 or sec18 or sec20 or leakage or unattributed or forbidden_keys or noisy_library"
+      - name: Invariants are documented, cited, and run
+        run: |
+          cd controlplane
+          pytest -q tests/test_invariant_coverage.py
 
   go:
     runs-on: ubuntu-latest

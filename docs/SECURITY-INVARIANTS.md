@@ -65,7 +65,7 @@ mixed into the owned findings.
 This is an invariant rather than a preference because the failure it prevents is
 commercial, and commercial failures are the ones that get rationalised away.
 
-**Enforced by:** `test_sec20_unattributed_segregated`.
+**Enforced by:** `test_sec20_unattributed_findings_are_segregated`, `TestSEC20ResolvedAndDegradedAreNeverMerged`.
 
 ## SEC-21 — Logs follow the same rule as the wire
 
