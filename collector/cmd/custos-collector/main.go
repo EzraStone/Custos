@@ -25,6 +25,7 @@ import (
 	"github.com/EzraStone/Custos/collector/internal/config"
 	"github.com/EzraStone/Custos/collector/internal/flowlogs"
 	"github.com/EzraStone/Custos/collector/internal/ingest"
+	"github.com/EzraStone/Custos/collector/internal/preflight"
 	"github.com/EzraStone/Custos/collector/internal/schedule"
 	"github.com/EzraStone/Custos/collector/internal/ship"
 	"github.com/EzraStone/Custos/collector/internal/wire"
@@ -46,6 +47,7 @@ func run(args []string, stdout, stderr *os.File) error {
 	showVersion := fs.Bool("version", false, "print version and exit")
 	explain := fs.Bool("explain", false, "print what this binary reads and sends, then exit")
 	input := fs.String("from-file", "", "read flow log lines from a file instead of AWS")
+	check := fs.Bool("check", false, "run preflight checks and exit")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -73,6 +75,10 @@ func run(args []string, stdout, stderr *os.File) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	if *check {
+		return preflightCheck(ctx, cfg, stdout)
+	}
 
 	if cfg.Daemon {
 		return serve(ctx, cfg, stdout, stderr)
@@ -223,6 +229,45 @@ func accessLogSource(cfg *config.Config, clients *awsclient.Clients) ingest.Requ
 	return &ingest.AccessLogReader{API: clients.Objects, Bucket: bucket, Prefix: prefix}
 }
 
+// preflightCheck answers "why did the scan find nothing" before the scan.
+//
+// Run before every first scan. Every onboarding failure produces the same
+// symptom — a report with no findings — and the only way to tell that apart
+// from a clean account is to check before rather than infer after.
+func preflightCheck(ctx context.Context, cfg *config.Config, stdout *os.File) error {
+	pf := preflight.Config{
+		AccountID:    cfg.AccountID,
+		Region:       cfg.Region,
+		RoleARN:      cfg.RoleARN,
+		ExternalID:   cfg.ExternalID,
+		FlowLogs:     cfg.FlowLogs,
+		AccessLogs:   cfg.AccessLogs,
+		HaveEndpoint: cfg.Endpoint != "",
+		HaveToken:    cfg.Token != "",
+	}
+
+	var source preflight.FlowSource
+	if clients, err := awsclient.New(ctx, awsclient.Options{
+		Region: cfg.Region, RoleARN: cfg.RoleARN, ExternalID: cfg.ExternalID,
+	}); err == nil {
+		if bucket, prefix, ok := cfg.S3Source(); ok {
+			source = &ingest.S3Reader{
+				API: clients.Objects, Bucket: bucket, Prefix: prefix,
+				AccountID: cfg.AccountID, Region: cfg.Region,
+			}
+		} else if cfg.FlowLogs != "" {
+			source = &ingest.CloudWatchReader{API: clients.Logs, Group: cfg.FlowLogs}
+		}
+	}
+
+	report := preflight.Run(ctx, pf, source)
+	fmt.Fprint(stdout, report.String())
+	if !report.Ready() {
+		return errors.New("preflight checks did not pass")
+	}
+	return nil
+}
+
 const explanation = `custos-collector
 
 WHAT IT READS
@@ -256,6 +301,13 @@ CONFIGURATION
   CUSTOS_DAEMON=1      collect on a schedule instead of once
   CUSTOS_STATE_PATH    where the collection cursor lives across restarts
   CUSTOS_DRY_RUN=1     read and print, never send
+
+RUN THIS FIRST
+  ./custos-collector --check
+
+  Every onboarding failure produces the same symptom: a report with no
+  findings. --check names which one it is, before you spend an hour reading an
+  empty report.
 
 With no endpoint or token configured this binary does nothing at all.
 `
