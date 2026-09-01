@@ -66,6 +66,44 @@ Run `./custos-collector --check` before the first scan. Every onboarding
 failure produces the same symptom — a report with no findings — and `--check`
 names which one it is before an hour is spent reading an empty report.
 
+## What it looks like
+
+The console is the operator surface: read the findings, read the evidence,
+sanction an agent. It is served by the control plane at `/`, so there is one
+process and one port.
+
+Findings are ordered by **what each agent could destroy**, not by how confident
+the classifier is that it exists. Below, `ops-automation` sits above
+`autofix-runner` at identical 1.00 confidence and a twenty-eighth of the spend,
+because one holds a role that can delete things and the other does not.
+
+![The agent register, ordered by blast radius](docs/images/register.png)
+
+Every finding carries the sentences the classifier produced, and the grant
+control stays disabled until they have actually been opened. A console that
+makes sanctioning easier than reading upholds SEC-17 in code while defeating it
+in practice — the register becomes a rubber stamp and every downstream
+guarantee rests on a click nobody thought about.
+
+![A finding with its evidence and audit trail open](docs/images/evidence.png)
+
+Granting imprimatur is the only action in the entire system that confers
+authority, so it shows what is being approved and whose name goes on the
+record. The scope defaults to what the agent was observed reaching; widening it
+is a separate, deliberate act.
+
+![The grant confirmation, showing scope and operator](docs/images/grant.png)
+
+These are the real console against a real scanned database, but the traffic is
+the A0 synthetic corpus rather than a customer account — nobody has run this
+against an account we did not build. Regenerate them with `make screenshots`.
+
+One thing the third image gives away: the scope reads `10.0.4.23`,
+`52.216.10.7`. Flow logs carry no hostname, and the destination names that *are*
+available are currently discarded before they reach the register. Asking an
+operator to approve an IP address is a real gap, and it is tracked in
+[docs/STATUS.md](docs/STATUS.md) rather than cropped out of the screenshot.
+
 ## Layout
 
 | Path | Language | What it is |
