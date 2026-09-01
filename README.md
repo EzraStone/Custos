@@ -103,7 +103,7 @@ review.
 
 ## The invariants
 
-Five, all testable, none relaxable for a feature request. Each names the test
+Seven, all testable, none relaxable for a feature request. Each names the test
 that enforces it in [docs/SECURITY-INVARIANTS.md](docs/SECURITY-INVARIANTS.md).
 
 | | |
@@ -113,6 +113,8 @@ that enforces it in [docs/SECURITY-INVARIANTS.md](docs/SECURITY-INVARIANTS.md).
 | **SEC-18** | Metadata only. Enforced by wire types having no field that can hold a payload. |
 | **SEC-19** | The collector is inert without an explicit destination. |
 | **SEC-20** | A finding without an owner is segregated, never mixed into owned findings. |
+| **SEC-21** | Logs follow the same rule as the wire: nothing describing a person. |
+| **SEC-22** | A collection window is shortened, never silently truncated. |
 
 CI runs those five as their own job, so a failure reads as "an invariant broke"
 rather than as one line inside two hundred passing tests.
