@@ -20,6 +20,8 @@ from custos.register.store import Register
 from custos.report import render
 from custos.scan import ScanResult
 
+from .conftest import prose
+
 T0 = datetime(2026, 8, 18, 12, 0, tzinfo=UTC)
 
 FEATURES = Features(
@@ -129,13 +131,6 @@ def test_report_is_self_contained():
 # --- change and drift sections ----------------------------------------------
 
 
-def prose(page: str) -> str:
-    """Collapse whitespace before asserting on rendered sentences.
-
-    Source line wrapping is not meaningful in HTML, and a test that breaks when
-    a paragraph is rewrapped is a test that gets deleted rather than fixed.
-    """
-    return " ".join(page.split())
 
 def _diff(changes=(), previous=1):
     from custos.diff import ScanDiff

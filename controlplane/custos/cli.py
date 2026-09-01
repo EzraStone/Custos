@@ -245,6 +245,48 @@ def cmd_diff(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_onboard(args: argparse.Namespace) -> int:
+    """Generate a customer's setup material.
+
+    Prints the credentials once. They are not stored, and re-running produces
+    different ones — so the output of this command is the only copy, which is
+    deliberate.
+    """
+    from .onboard import InvalidAccount, generate
+
+    try:
+        onboarding = generate(args.account, args.endpoint, args.custos_account)
+    except (InvalidAccount, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    if args.json:
+        print(json.dumps({
+            "account_id": onboarding.account_id,
+            "external_id": onboarding.external_id,
+            "token": onboarding.token,
+            "tokens_env": onboarding.tokens_env,
+        }, indent=2))
+        return 0
+
+    print("=" * 72)
+    print("KEEP THIS. The credentials below are not stored and cannot be recovered.")
+    print("=" * 72)
+    print()
+    print("Add to the control plane's CUSTOS_TOKENS:")
+    print(f"  {onboarding.tokens_env}")
+    print()
+    print("Collector environment, once the role exists:")
+    for line in onboarding.collector_env.splitlines():
+        print(f"  {line}")
+    print()
+    print("-" * 72)
+    print("Send this to the customer:")
+    print("-" * 72)
+    print(onboarding.message)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="custos", description=__doc__)
     parser.add_argument("--db", default="custos.db", help="SQLite database path")
@@ -267,6 +309,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--account", required=True)
     p.add_argument("--limit", type=int, default=20)
     p.set_defaults(func=cmd_history)
+
+    p = sub.add_parser("onboard", help="generate a customer's setup material")
+    p.add_argument("--account", required=True, help="the customer's 12-digit AWS account ID")
+    p.add_argument("--endpoint", required=True, help="https URL of your control plane")
+    p.add_argument("--custos-account", default="000000000000",
+                   help="the AWS account your collector assumes from")
+    p.add_argument("--json", action="store_true", help="credentials only, for scripting")
+    p.set_defaults(func=cmd_onboard)
 
     p = sub.add_parser("diff", help="compare the two most recent scans")
     p.add_argument("--account", required=True)
