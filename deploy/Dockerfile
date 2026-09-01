@@ -1,9 +1,24 @@
 # Custos control plane.
 #
-# Two stages so the runtime image carries no build tooling. The result is small
-# enough to audit and boring enough to deploy anywhere — which matters because
-# the customers who buy this run their own infrastructure and will ask what is
-# in the image.
+# Three build stages so the runtime image carries no build tooling: no Node, no
+# npm cache, no pip. The result is small enough to audit and boring enough to
+# deploy anywhere — which matters because the customers who buy this run their
+# own infrastructure and will ask what is in the image.
+
+# The console is built here and copied into the runtime image as static files.
+# It is served by the control plane rather than by a second container: one
+# process, one port, one thing to expose. A separate web server would be a
+# second deployment unit for 200 kB of assets.
+FROM node:22-slim AS console
+
+WORKDIR /build
+# Manifests first, so a source-only change does not reinstall the dependency
+# tree. npm ci, not npm install — the lockfile is what CI tested.
+COPY console/package.json console/package-lock.json ./
+RUN npm ci
+COPY console/ ./
+RUN npm run build
+
 
 FROM python:3.11-slim AS build
 
@@ -24,7 +39,13 @@ RUN useradd --create-home --uid 10001 custos \
  && mkdir -p /data && chown custos:custos /data
 
 COPY --from=build /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH" \
+COPY --from=console /build/dist /opt/console
+
+# The control plane looks for the console next to the source tree when this is
+# unset, which is right for a checkout and wrong for an installed package. In
+# the image the path is explicit.
+ENV CUSTOS_CONSOLE_DIR=/opt/console \
+    PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     CUSTOS_DB=/data/custos.db

@@ -1,0 +1,29 @@
+# The build context is uploaded to the daemon in full before the first
+# instruction runs. Without this, every `docker build` ships console/node_modules
+# and .venv — hundreds of megabytes that no stage reads.
+
+.git/
+.github/
+
+**/node_modules
+console/dist/
+
+.venv/
+venv/
+**/__pycache__
+**/*.egg-info
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+
+collector/bin/
+checkpoint/bin/
+a0/out/
+artifacts/
+
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.*
+!.env.example
