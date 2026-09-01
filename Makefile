@@ -14,7 +14,7 @@ PYTEST := $(VENV)/bin/pytest
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 .PHONY: help setup check lint test test-py test-go fmt experiment collector \
-        serve scan image prune clean
+        serve scan image prune onboard preflight stress clean
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -73,6 +73,21 @@ image: ## Build the control plane container image
 
 prune: ## Drop telemetry past its retention window
 	$(VENV)/bin/custos --db $(or $(DB),custos.db) prune
+
+onboard: ## Generate a customer's setup material: make onboard ACCOUNT=... ENDPOINT=...
+	@test -n "$(ACCOUNT)" -a -n "$(ENDPOINT)" || \
+	  (echo "usage: make onboard ACCOUNT=447120043318 ENDPOINT=https://api.custos.dev" && exit 1)
+	$(VENV)/bin/custos onboard --account $(ACCOUNT) --endpoint $(ENDPOINT)
+
+preflight: collector ## Check a collector configuration before scanning
+	./collector/bin/custos-collector --check
+
+stress: ## Score the classifier against the hard corpus
+	$(VENV)/bin/python -c "from custos_a0.evaluate import run_hard; \
+	r = run_hard(gateway_declared=True); \
+	print(f'stress corpus: recall={r.recall:.2f} precision={r.precision:.2f} \
+margin={r.separation_margin:+.3f}'); \
+	[print(f'  MISS {x.workload}') for x in r.missed_agents]"
 
 clean:
 	rm -rf a0/out collector/bin checkpoint/bin
