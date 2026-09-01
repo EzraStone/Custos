@@ -36,6 +36,12 @@ custos diff                 →  what changed since last week
 **G0 passed: 1.00 recall, 1.00 precision, 0.26 separation margin, identical at
 60s and 600s flow log aggregation.**
 
+Against a harder corpus added afterwards — agents that pause for human
+approval, agents on batch schedules, chatbots with function calling — every
+verdict is still correct and there are still no false positives, but the margin
+falls to **0.14**. Quote that number, not the first one, wherever it would be
+doing work.
+
 Reproduce with `make experiment`. CI fails the build if it stops holding.
 
 The finding underneath it is the interesting part: the signal the specification
@@ -47,6 +53,15 @@ property of summed bytes and survives aggregation intact.
 Full result and its limitations: `docs/A0-FINDINGS.md`.
 
 ## What is still unproven
+
+**Headroom is thinner than the headline number.** 0.14 on the stress corpus
+against a 0.15 durability bar. Every verdict is correct; there is simply less
+room before one is not.
+
+**A model endpoint we do not recognise is an agent we cannot see.** An agent
+behind a self-hosted gateway is invisible until someone tells us the address.
+That is a question to ask every design partner directly, because it cannot be
+inferred.
 
 **The byte ratios have only been measured against synthetic traffic.** The
 weights were fitted on the A0 corpus. What A0 establishes is that a separating

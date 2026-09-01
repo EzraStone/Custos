@@ -144,6 +144,50 @@ an embedding service). The lowest-volume agent makes 55. Any classifier that
 ranks by activity finds the agents nobody was worried about and misses the one
 they should be.
 
+## Finding 7 — a harder corpus halves the margin
+
+Added after the original result, because every workload in the base corpus is
+either fully coupled or fully decoupled and real accounts are not that tidy.
+Four workloads test that assumption directly:
+
+| Workload | Truth | Verdict | Confidence |
+|---|---|---|---|
+| Agent that pauses for human approval | agent | agent | 0.83 |
+| Agent running on a batch schedule | agent | agent | 0.96 |
+| Chatbot with function calling | not agent | not agent | 0.34 |
+| Agent behind a self-hosted gateway | agent | **review — missed** | 0.77 |
+
+**Every verdict is correct once the gateway is declared, and there are no false
+positives. The separation margin falls from 0.26 to 0.14.**
+
+Three things follow.
+
+**Partial coupling costs confidence, which is the signal working.** The
+approval agent scores 0.83 rather than 0.99 because its human approval is a
+real inbound request. It still clears the bar, but with a third of the headroom
+— and that shape is common in exactly the workflows customers most want
+governed.
+
+**Schedule carries no signal, which was worth confirming.** An agentic batch
+job and a non-agentic one run at the same hour with the same volume, and the
+classifier separates them on what they do rather than when they do it.
+
+**An unrecognised model endpoint is an invisible agent, and no amount of
+classifier tuning fixes it.** The gateway agent is missed because its traffic
+goes to a private address the catalogue does not know. `catalog.extend` recovers
+it completely. This is the strongest argument for asking a customer directly
+whether they front their providers behind a gateway, because we cannot infer it.
+
+**The margin number is the one to carry into diligence.** 0.14 is below the 0.15
+durability bar this experiment set for itself. G0 is not retroactively failed —
+it was defined and measured against the base corpus — but the honest reading is
+that headroom on realistic traffic is roughly half what the clean corpus
+suggested, and the first real capture will eat into it.
+
+The weights were not retuned to widen it. They were already fitted on synthetic
+traffic; fitting them again on more synthetic traffic would improve the metric
+and nothing else.
+
 ---
 
 ## Why this result should be believed, and where it should not
@@ -166,6 +210,10 @@ A0 establishes is that *a separating signal exists and survives aggregation*,
 and which features carry it. It does not establish that these specific weights
 generalise. The first real capture will move them, and the thresholds sit in
 measured empty space rather than at round numbers so there is room for that.
+
+**The margin is thinner than the headline suggests.** 0.26 on the base corpus,
+0.14 once workloads with partial coupling are included. Quote the second number
+in any conversation where the first would be doing work.
 
 **Synthetic traffic embeds assumptions.** The byte model assumes ~4 bytes per
 token, standard MTU, and typical SDK pooling. Those are defensible and they are
