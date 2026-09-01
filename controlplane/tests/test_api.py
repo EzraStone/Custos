@@ -359,3 +359,80 @@ def test_the_batch_cap_matches_the_collector(client):
     assert f"MaxEventsPerRun = {MAX_FLOWS_PER_BATCH:_}" in text, (
         "the API cap and the collector cap have drifted"
     )
+
+
+# --- multi-account tokens -----------------------------------------------------
+
+FLEET = {"111111111111", "222222222222"}
+
+
+@pytest.fixture
+def fleet_client():
+    app = create_app(
+        conn=open_database(), tokens=TokenStore({"tok-fleet": FLEET})
+    )
+    return TestClient(app)
+
+
+FLEET_AUTH = {"Authorization": "Bearer tok-fleet"}
+
+
+def test_a_fleet_token_ships_for_any_account_it_covers(fleet_client):
+    for account in sorted(FLEET):
+        response = fleet_client.post(
+            "/v1/batches", json=batch(account=account), headers=FLEET_AUTH
+        )
+        assert response.status_code == 202, account
+
+
+def test_a_fleet_token_still_cannot_ship_for_an_account_it_lacks(fleet_client):
+    response = fleet_client.post(
+        "/v1/batches", json=batch(account="999999999999"), headers=FLEET_AUTH
+    )
+    assert response.status_code == 403
+
+
+# Defaulting to the first account would attribute one account's findings to
+# another — quietly, and in the direction that makes a report wrong rather than
+# empty.
+def test_a_fleet_token_must_say_which_account_it_means(fleet_client):
+    response = fleet_client.get("/v1/register", headers=FLEET_AUTH)
+    assert response.status_code == 400
+    assert "pass ?account=" in response.json()["detail"]
+
+
+def test_a_fleet_token_reads_a_named_account(fleet_client):
+    fleet_client.post("/v1/batches", json=batch(account="111111111111"), headers=FLEET_AUTH)
+    body = fleet_client.get("/v1/register?account=111111111111", headers=FLEET_AUTH).json()
+    assert body["account_id"] == "111111111111"
+
+
+# A distinct response would confirm the account exists to someone holding a
+# credential for a different one.
+def test_an_uncovered_account_is_not_found_rather_than_forbidden(fleet_client):
+    assert fleet_client.get(
+        "/v1/register?account=999999999999", headers=FLEET_AUTH
+    ).status_code == 404
+
+
+def test_a_single_account_token_needs_no_parameter(client):
+    assert client.get("/v1/register", headers=AUTH).status_code == 200
+
+
+def test_agents_are_only_reachable_by_a_token_covering_their_account(
+    fleet_client, realistic_payload
+):
+    payload = dict(realistic_payload)
+    payload["account_id"] = "111111111111"
+    fleet_client.post("/v1/batches", json=payload, headers=FLEET_AUTH)
+    agents = fleet_client.get(
+        "/v1/register?account=111111111111&unsanctioned_only=true", headers=FLEET_AUTH
+    ).json()["agents"]
+
+    other = TestClient(create_app(
+        conn=open_database(), tokens=TokenStore({"tok-other": "999999999999"})
+    ))
+    assert other.get(
+        f"/v1/agents/{agents[0]['id']}/audit",
+        headers={"Authorization": "Bearer tok-other"},
+    ).status_code == 404

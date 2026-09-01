@@ -50,3 +50,40 @@ def test_bearer_parsing():
     assert parse_bearer(None) == ""
     assert parse_bearer("") == ""
     assert parse_bearer("Bearer  padded  ") == "padded"
+
+
+# --- multi-account tokens -----------------------------------------------------
+
+# One customer in the target profile — 80 to 400 engineers — routinely runs
+# five to fifty AWS accounts. A token per account means fifty collectors, fifty
+# secrets to rotate, and fifty registers that cannot be read together.
+def test_a_token_can_cover_several_accounts():
+    store = TokenStore.from_env(
+        lambda _: "111111111111:tok-acme, 222222222222:tok-acme, 333333333333:tok-other"
+    )
+    acme = store.resolve("tok-acme")
+    assert acme.accounts == frozenset({"111111111111", "222222222222"})
+    assert acme.covers("111111111111") and acme.covers("222222222222")
+
+
+# The isolation boundary moved from one account to a named set. It did not
+# disappear.
+def test_a_multi_account_token_still_cannot_reach_an_account_it_lacks():
+    store = TokenStore.from_env(lambda _: "111111111111:tok-acme,222222222222:tok-acme")
+    acme = store.resolve("tok-acme")
+    assert not acme.covers("999999999999")
+
+
+def test_the_single_account_shortcut_refuses_to_guess():
+    """Code assuming one account must fail loudly rather than pick the first,
+    which would attribute one account's findings to another."""
+    import pytest
+
+    from custos.api.auth import Principal
+
+    single = Principal(accounts=frozenset({"111111111111"}))
+    assert single.account_id == "111111111111"
+
+    several = Principal(accounts=frozenset({"111111111111", "222222222222"}))
+    with pytest.raises(ValueError, match="covers 2 accounts"):
+        _ = several.account_id
