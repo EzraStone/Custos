@@ -21,13 +21,17 @@ custos diff                 →  what changed since last week
 | Read ALB access logs | Works. Four fields taken, the rest discarded at parse |
 | Resolve interface → principal, EC2 | Works |
 | Resolve interface → principal, Lambda / ECS | Works |
-| Resolve interface → principal, EKS | Node level only, labelled as such |
+| Resolve interface → principal, EKS | Node level, or exact via CloudTrail for Bedrock traffic |
 | Blast radius from IAM policy | Works |
 | Attribution to a team | Works, four methods with stated confidence |
 | Persistent register with SEC-17 state machine | Works |
 | Scan comparison | Works |
 | Behavioural baselines and drift | Works |
 | HTTP API, container image, retention | Works |
+| Delivery to Slack and SIEM | Works, with per-channel suppression |
+| Scheduled collection | Works, cursor-tracked, no gaps on restart |
+| Multi-account tokens | Works. One token covers a named set of accounts |
+| Onboarding and preflight | Works. `custos onboard`, `custos-collector --check` |
 | Enforcement checkpoint | **Not started.** §12: not before a paying customer |
 | Operator console | **Not started.** Same reason |
 
@@ -60,8 +64,10 @@ room before one is not.
 
 **A model endpoint we do not recognise is an agent we cannot see.** An agent
 behind a self-hosted gateway is invisible until someone tells us the address.
-That is a question to ask every design partner directly, because it cannot be
-inferred.
+`custos-a0 stress --hide-gateway` reproduces the miss on demand. This is a
+question to ask every design partner directly, because it cannot be inferred —
+and it is the single most likely reason a real scan comes back emptier than it
+should.
 
 **The byte ratios have only been measured against synthetic traffic.** The
 weights were fitted on the A0 corpus. What A0 establishes is that a separating
