@@ -253,6 +253,20 @@ def create_app(
             "agents": [_render(a) for a in records],
         }
 
+    @app.get("/v1/accounts")
+    def get_accounts(principal: Auth) -> dict:
+        """The accounts this credential covers.
+
+        A fleet token names several. Without this the console can only learn
+        that fact by making a request that fails, and can only learn *which*
+        accounts by parsing them out of the prose in a 400 — which would make
+        rewording an error message a breaking change.
+
+        This discloses nothing: the holder already has access to every account
+        listed, and the same set governs every other route.
+        """
+        return {"accounts": sorted(principal.accounts)}
+
     @app.get("/v1/scans")
     def get_scans(principal: Auth, limit: int = 20, account: str | None = None) -> dict:
         account_id = scope(principal, account)

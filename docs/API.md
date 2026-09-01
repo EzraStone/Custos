@@ -103,6 +103,23 @@ Each agent carries its `evidence`: the sentences the classifier produced. A
 finding without them is a score, and a score is what the workload's owner will
 argue with instead of the facts.
 
+## `GET /v1/accounts`
+
+The accounts this credential covers.
+
+```json
+{ "accounts": ["111111111111", "222222222222"] }
+```
+
+A fleet token names several, and every other route then requires `?account=`
+to say which. Without this endpoint a client could only discover that fact by
+making a request that fails, and could only discover *which* accounts by
+parsing them out of the prose in the resulting `400` — which would make
+rewording an error message a breaking change.
+
+Scoped to the credential, not global. A token covering one account does not
+learn that another exists.
+
 ## `GET /v1/scans`
 
 Scan history, newest first, with coverage and truncation per scan.

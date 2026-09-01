@@ -557,3 +557,27 @@ def test_a_missing_console_build_is_not_an_error(tmp_path):
         assert client.get("/").status_code == 404
     finally:
         del os.environ["CUSTOS_CONSOLE_DIR"]
+
+
+def _client_for(tokens: dict) -> TestClient:
+    return TestClient(create_app(conn=open_database(), tokens=TokenStore(tokens)))
+
+
+def test_accounts_lists_what_the_credential_covers():
+    client = _client_for({"fleet": ["111111111111", "222222222222"]})
+    r = client.get("/v1/accounts", headers={"Authorization": "Bearer fleet"})
+    assert r.status_code == 200
+    assert r.json() == {"accounts": ["111111111111", "222222222222"]}
+
+
+def test_accounts_needs_a_credential():
+    client = _client_for({"fleet": ["111111111111"]})
+    assert client.get("/v1/accounts").status_code == 401
+
+
+def test_accounts_does_not_leak_accounts_the_token_does_not_cover():
+    # Two tokens, disjoint scopes. The listing is per-credential, not global:
+    # a token covering one account must not learn that the other exists.
+    client = _client_for({"a": ["111111111111"], "b": ["222222222222"]})
+    r = client.get("/v1/accounts", headers={"Authorization": "Bearer a"})
+    assert r.json() == {"accounts": ["111111111111"]}
