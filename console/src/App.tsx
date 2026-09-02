@@ -364,6 +364,32 @@ export function App() {
         />
       ) : null}
 
+      {/*
+        The review band. SEC-17 says these are surfaced to an operator and
+        never written as agents, so they are not in the register and cannot be
+        — but a console that never mentions them lets an operator believe the
+        list below is everything the scan had to say.
+
+        Only the count is stored today, so this points at the report rather
+        than pretending to show them. Saying "there are five and they are not
+        here" is worth more than saying nothing.
+      */}
+      {scans[0] && scans[0].review_candidates > 0 ? (
+        <div className="notice">
+          <span className="tag">Not in this list</span>
+          <p>
+            The last scan put {scans[0].review_candidates} workload
+            {scans[0].review_candidates === 1 ? "" : "s"} in the review band:
+            not confident enough to register as an agent, not clearly ordinary
+            either. They are never written to the register, so they are not
+            below.{" "}
+            <button className="link" onClick={() => void openReport()}>
+              The report lists them.
+            </button>
+          </p>
+        </div>
+      ) : null}
+
       <Scans scans={scans} />
 
       <h2>{view === "unsanctioned" ? "Unsanctioned agents" : "The register"}</h2>

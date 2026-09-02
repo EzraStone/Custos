@@ -100,6 +100,14 @@ the status control. Everything else about it is a guess.
 
 Nothing depends on it. The CLI and the HTML report still do everything it does.
 
+**Review-band candidates are counted, not kept.** SEC-17 says a workload the
+classifier is unsure about is surfaced to an operator and never written as an
+agent, which is right — but only the count survives a scan. The report lists
+them at the time it is rendered and the console can only say how many there
+were and point at it. An operator who wants to look at last week's maybes
+cannot. Storing them properly means a table that is emphatically not the
+register, and that is a design decision nobody has made yet.
+
 **Nobody has run this against an account we did not build.** Tag hygiene,
 unanticipated workload shapes, and provider endpoints outside our catalogue are
 all real and all unmeasured.

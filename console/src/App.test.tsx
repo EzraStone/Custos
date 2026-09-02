@@ -32,6 +32,7 @@ function agent(overrides: Partial<Agent> = {}): Agent {
 interface Backend {
   agents?: Agent[];
   coverage?: number;
+  reviewCandidates?: number;
   scopeReadable?: number;
   scopeNamed?: number;
   scopeTotal?: number;
@@ -112,7 +113,7 @@ function backend(config: Backend = {}) {
           started_at: "2026-08-20T09:00:00+00:00",
           principals_seen: 11,
           agents_found: 5,
-          review_candidates: 2,
+          review_candidates: config.reviewCandidates ?? 2,
           coverage: config.coverage ?? 1.0,
           truncated: config.truncated ?? false,
           ...(config.scopeReadable === undefined ? {} : {
@@ -814,5 +815,32 @@ describe("keyboard", () => {
     await userEvent.keyboard("{Escape}");
     expect(box).toHaveValue("");
     expect(screen.getByText("ops")).toBeInTheDocument();
+  });
+});
+
+describe("the review band", () => {
+  async function loaded(config: Backend = {}) {
+    install(config);
+    session.save({ token: "tok-abc", operator: "ezra@custos.dev" });
+    render(<App />);
+    await screen.findByText("finance-close");
+  }
+
+  it("says the register is not everything the scan found", async () => {
+    // SEC-17 keeps these out of the register, and a console that never
+    // mentions them lets an operator believe the list is complete.
+    await loaded({ reviewCandidates: 3 });
+    expect(screen.getByText(/not in this list/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 workloads in the review band/i)).toBeInTheDocument();
+  });
+
+  it("stays quiet when the scan put nothing in the review band", async () => {
+    await loaded({ reviewCandidates: 0 });
+    expect(screen.queryByText(/not in this list/i)).toBeNull();
+  });
+
+  it("gets the singular right", async () => {
+    await loaded({ reviewCandidates: 1 });
+    expect(screen.getByText(/1 workload in the review band/i)).toBeInTheDocument();
   });
 });
