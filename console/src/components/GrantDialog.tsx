@@ -1,4 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
+
+import { useDialog } from "../useDialog";
 
 import type { Agent } from "../api/types";
 
@@ -36,30 +38,9 @@ export function GrantDialog({
 
   // Focus lands on cancel, not confirm. A dialog that opens with the
   // irreversible action under the return key is a dialog that gets past people
-  // rather than in front of them.
-  useEffect(() => {
-    cancelRef.current?.focus();
-  }, []);
-
-  useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") onCancel();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onCancel]);
-
-  // The register keeps scrolling behind a fixed overlay unless the body is
-  // held still. That matters more here than it would elsewhere: the dialog is
-  // asking about one specific agent, and a reader who scrolls the list behind
-  // it can end up reading one finding while approving another.
-  useEffect(() => {
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, []);
+  // rather than in front of them. Escape, the scroll lock, the focus trap, and
+  // giving focus back on close all live in useDialog.
+  const dialogRef = useDialog<HTMLDivElement>(onCancel, cancelRef);
 
   const tools = [...agent.tools].sort();
   const data = [...agent.data_stores].sort();
@@ -68,6 +49,7 @@ export function GrantDialog({
   return (
     <div className="overlay" role="presentation" onClick={onCancel}>
       <div
+        ref={dialogRef}
         className="dialog"
         role="dialog"
         aria-modal="true"

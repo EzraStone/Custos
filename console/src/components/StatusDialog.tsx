@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import {
   TRANSITION_LABEL,
@@ -6,6 +6,7 @@ import {
   type Agent,
   type TransitionableStatus,
 } from "../api/types";
+import { useDialog } from "../useDialog";
 
 /**
  * Change what an agent is, short of sanctioning it.
@@ -40,25 +41,10 @@ export function StatusDialog({
   const [reason, setReason] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") onCancel();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onCancel]);
-
-  useEffect(() => {
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, []);
+  // Focus starts in the reason field: it is required, and it is the thing the
+  // operator has to supply before anything can happen. Escape, the scroll
+  // lock, the focus trap, and returning focus on close live in useDialog.
+  const dialogRef = useDialog<HTMLDivElement>(onCancel, inputRef);
 
   const name = agent.principal.split("/").pop() ?? agent.principal;
   const revokes = to === "retired" && !agent.unsanctioned;
@@ -66,6 +52,7 @@ export function StatusDialog({
   return (
     <div className="overlay" role="presentation" onClick={onCancel}>
       <div
+        ref={dialogRef}
         className="dialog"
         role="dialog"
         aria-modal="true"
