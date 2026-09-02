@@ -18,8 +18,37 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from ..catalog import DestinationClass, classify, is_tool_destination
-from ..naming import describe
 from ..telemetry import SYN, Direction, FlowRecord, InboundRequest
+
+
+@dataclass(slots=True, frozen=True)
+class Seen:
+    """Exactly what `classify` was told about one destination.
+
+    Held so that naming a destination and classifying it are answered from the
+    same facts. They were not: `classify` was given the AWS service annotation
+    on both legs of a connection while naming only used it on the request, so
+    one S3 destination appeared in a scope twice — as `s3` from the request and
+    as an address from its reply.
+
+    Whether the annotation should be trusted on the return leg at all is a
+    separate question, tracked in docs/STATUS.md. Whatever the answer, the two
+    must agree, and this is the record that makes them.
+    """
+
+    cls: DestinationClass
+    port: int = 0
+    aws_service: str = ""
+
+    def better_than(self, other: Seen) -> bool:
+        """Whether this record says more about the destination than `other`.
+
+        A destination is seen many times. An annotated record says more than an
+        unannotated one, and a record with a port says more than one without.
+        """
+        if bool(self.aws_service) != bool(other.aws_service):
+            return bool(self.aws_service)
+        return bool(self.port) and not other.port
 
 
 @dataclass(slots=True)
@@ -36,15 +65,18 @@ class Window:
     tool_classes: set[DestinationClass] = field(default_factory=set)
     tool_addresses: set[str] = field(default_factory=set)
     model_addresses: set[str] = field(default_factory=set)
-    tool_labels: set[str] = field(default_factory=set)
-    """The same destinations, named for a human.
+    tool_seen: dict[str, Seen] = field(default_factory=dict)
+    """Per-address facts, for naming a destination and for saying what it is.
 
-    Parallel to `tool_addresses` rather than replacing it, deliberately. The
-    classifier's features count distinct addresses — "calls to 3 internal
-    destinations" — and naming collapses rotating service addresses into one
-    entry. Substituting labels here would change a feature the weights were
-    fitted on, silently, to make a display nicer. The addresses stay exactly
-    as they were; the labels are additional.
+    Kept per address because that is the only place either is knowable. The
+    class used to be re-derived downstream from the set of classes the whole
+    window saw, which filed every unmatched destination in a window containing
+    any datastore as a datastore too.
+
+    Parallel to `tool_addresses` rather than replacing it. The classifier
+    counts distinct addresses, and naming collapses rotating service addresses
+    into one entry — substituting labels for addresses would silently change a
+    fitted feature in service of a nicer display.
     """
 
     @property
@@ -152,7 +184,12 @@ def build_windows(
         elif is_tool_destination(cls):
             w.tool_classes.add(cls)
             w.tool_addresses.add(peer)
-            w.tool_labels.add(describe(peer, port, r.dst_aws_service if egress else ""))
+            # The same three values `classify` was called with, above. Naming
+            # and classification must not disagree about a destination.
+            seen = Seen(cls=cls, port=port, aws_service=r.dst_aws_service)
+            known = w.tool_seen.get(peer)
+            if known is None or seen.better_than(known):
+                w.tool_seen[peer] = seen
             if egress:
                 w.tool_egress += r.bytes
             else:

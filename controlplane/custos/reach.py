@@ -21,7 +21,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .catalog import DestinationClass, classify
-from .classify.episodes import PrincipalTelemetry
+from .classify.episodes import PrincipalTelemetry, Seen
+from .naming import describe
 from .register.model import BlastRadius, Reach
 
 DESTRUCTIVE_ACTIONS = frozenset({
@@ -80,19 +81,48 @@ class ReachReport:
 
 
 def observed_reach(t: PrincipalTelemetry) -> tuple[set[str], set[str]]:
-    """Split observed destinations into (tools, data stores)."""
+    """Split observed destinations into (tools, data stores), by name.
+
+    Two things changed here at once, and both were bugs in the scope an
+    operator approves.
+
+    The split is read off the per-address facts rather than re-derived. It used
+    to be inferred from the set of classes a whole window saw, so a window
+    containing any datastore filed every other destination in it as a datastore
+    too — an internal API could be presented as a data store on the strength of
+    unrelated traffic in the same minute.
+
+    And a destination is named once, from the best record seen for it anywhere
+    in the principal's traffic, rather than once per window. Naming per record
+    put `s3` and `52.216.10.7` in the same scope: one destination, named from a
+    request and again from its reply.
+    """
+    best: dict[str, Seen] = {}
+    for window in t.windows:
+        for address, seen in window.tool_seen.items():
+            known = best.get(address)
+            if known is None or seen.better_than(known):
+                best[address] = seen
+
     tools: set[str] = set()
     stores: set[str] = set()
-    for window in t.windows:
-        for address in window.tool_addresses:
-            # Port is not retained per address on the window, so re-derive the
-            # class from what the window recorded.
-            if DestinationClass.DATASTORE in window.tool_classes and address not in tools:
-                stores.add(address)
-            else:
-                tools.add(address)
-    # An address seen as both is a tool; the more specific claim wins.
+    for address, seen in best.items():
+        label = describe(address, seen.port, seen.aws_service)
+        if seen.cls is DestinationClass.DATASTORE:
+            stores.add(label)
+        else:
+            tools.add(label)
+    # A destination seen as both is a tool; the more specific claim wins.
     return tools, stores - tools
+
+
+def observed_addresses(t: PrincipalTelemetry) -> set[str]:
+    """Every tool destination as an address, for callers that re-classify.
+
+    Labels are for people. Anything asking the catalogue a question needs the
+    address it started with, and `naming.describe` is deliberately one-way.
+    """
+    return {a for w in t.windows for a in w.tool_addresses}
 
 
 def build(t: PrincipalTelemetry, capability: IamCapability | None = None) -> ReachReport:
@@ -101,8 +131,10 @@ def build(t: PrincipalTelemetry, capability: IamCapability | None = None) -> Rea
     model_endpoints = {a for w in t.windows for a in w.model_addresses}
 
     granted = granted_blast_radius(capability) if capability else BlastRadius.READ
+    # Addresses, not labels: this asks the catalogue a question, and a label is
+    # not something the catalogue can answer about.
     observed_write_targets = {
-        a for a in tools | stores if classify(a, 0) is not DestinationClass.EXTERNAL
+        a for a in observed_addresses(t) if classify(a, 0) is not DestinationClass.EXTERNAL
     }
 
     reach = Reach(

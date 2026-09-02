@@ -10,7 +10,15 @@ from custos.naming import PORT_NAMES, describe
 
 def test_the_aws_annotation_wins():
     assert describe("52.216.10.7", 443, "S3") == "s3"
-    assert describe("10.0.9.44", 5432, "DYNAMODB") == "dynamodb"
+
+
+def test_a_private_address_keeps_its_identity_even_when_the_service_is_known():
+    # Two RDS instances are two things to approve. Collapsing them to `rds`
+    # would hide one behind the other — the same mistake as showing a rotating
+    # S3 edge address, in the opposite direction.
+    assert describe("10.0.9.44", 5432, "RDS") == "rds 10.0.9.44"
+    assert describe("10.0.9.45", 5432, "RDS") == "rds 10.0.9.45"
+    assert len({describe(a, 5432, "RDS") for a in ("10.0.9.44", "10.0.9.45")}) == 2
 
 
 def test_rotating_service_addresses_collapse_to_one_entry():
