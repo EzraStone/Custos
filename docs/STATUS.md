@@ -33,8 +33,9 @@ custos diff                 →  what changed since last week
 | Multi-account tokens | Works. One token covers a named set of accounts |
 | Onboarding and preflight | Works. `custos onboard`, `custos-collector --check` |
 | Enforcement checkpoint | **Not started.** §12: not before a paying customer |
-| Operator console | Works. Read the register, read the evidence, sanction. Served by the control plane |
+| Operator console | Works. Read, filter, sanction, retire, and see what changed. Served by the control plane |
 | Destination naming | Works where an ENI, an AWS description, or a port says what something is |
+| Scope readability, measured | Works. Reported by `--check`, the report, the console, and `custos history` |
 
 ## The one number that matters
 
@@ -88,12 +89,16 @@ design-partner conversation.
 
 **The console was built ahead of the schedule the specification set.** §12
 puts it after a paying customer, and that ordering was right: a UI built before
-anyone has used the product is a guess about what an operator wants to see.
-It exists because it was asked for. Treat its layout as provisional — the
-evidence gate and the consequence ordering are the two decisions in it worth
-defending, and both should be re-argued against a real operator rather than
-assumed. Nothing else depends on it: the CLI and the HTML report still do
-everything the console does.
+anyone has used the product is a guess about what an operator wants to see. It
+exists because it was asked for.
+
+Treat its layout as provisional. Four decisions in it are worth defending and
+should be re-argued against a real operator rather than assumed: ordering by
+consequence rather than confidence, the evidence gate on the grant control, a
+filtered list that always shows the total, and `sanctioned` being absent from
+the status control. Everything else about it is a guess.
+
+Nothing depends on it. The CLI and the HTML report still do everything it does.
 
 **Nobody has run this against an account we did not build.** Tag hygiene,
 unanticipated workload shapes, and provider endpoints outside our catalogue are
