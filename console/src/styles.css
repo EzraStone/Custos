@@ -6,6 +6,10 @@
  */
 
 :root {
+  /* So native controls — focus rings, scrollbars, the search field's own
+     clear button — follow the palette rather than sitting light on dark. */
+  color-scheme: light;
+
   --ink: #14181f;
   --ink-soft: #3d4653;
   --ink-faint: #6c7686;
@@ -24,6 +28,8 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
+    color-scheme: dark;
+
     --ink: #e6e9ee;
     --ink-soft: #b3bcc9;
     --ink-faint: #8b95a4;
@@ -77,11 +83,23 @@ button, input, select { font: inherit; color: inherit; }
   font-family: var(--mono); font-size: .62rem; letter-spacing: .1em;
   text-transform: uppercase; color: var(--ink-faint);
 }
-.field input, .field select {
+/*
+ * Every text control, not just the ones inside a .field. The search box was
+ * outside one and rendered as a white rectangle in dark mode, which is the
+ * failure this scoping invites: a rule that has to be remembered gets
+ * forgotten by whoever adds the next input.
+ *
+ * Checkboxes and radios are excluded because a background and padding are
+ * wrong for them. There are none in the console today; this is so there is no
+ * surprise when there are.
+ */
+input:not([type="checkbox"]):not([type="radio"]), select {
   background: var(--raised); border: 1px solid var(--rule);
-  padding: .5rem .6rem; min-width: 15rem;
+  padding: .5rem .6rem;
 }
-.field input:focus-visible, .field select:focus-visible,
+.field input, .field select { min-width: 15rem; }
+
+input:focus-visible, select:focus-visible,
 button:focus-visible, summary:focus-visible {
   outline: 2px solid var(--seal); outline-offset: 2px;
 }

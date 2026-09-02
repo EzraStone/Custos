@@ -49,6 +49,24 @@ page.on("requestfailed", (r) => problems.push(`requestfailed: ${r.url()}`));
 
 await page.goto(base, { waitUntil: "networkidle" });
 
+/**
+ * Poll until a condition holds.
+ *
+ * Playwright's locator waits cover visibility and attachment, not "React has
+ * re-rendered with new state". Asserting on a property immediately after a
+ * click that triggers a state update is a race, and it lost about one run in
+ * three — the flakiest possible way to learn that, since two green runs look
+ * like proof.
+ */
+const until = async (what, holds, ms = 5000) => {
+  const deadline = Date.now() + ms;
+  for (;;) {
+    if (await holds()) return;
+    if (Date.now() > deadline) throw new Error(what);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+};
+
 const step = async (name, fn) => {
   try { await fn(); console.log(`  ok   ${name}`); }
   catch (e) { console.log(`  FAIL ${name}: ${e.message}`); process.exitCode = 1; }
@@ -83,8 +101,7 @@ await step("the grant button is gated until evidence is opened", async () => {
   // The hint text under the disabled button says the same words, so the
   // toggle has to be addressed as the summary element it is.
   await card.locator("summary", { hasText: /why this was flagged/i }).click();
-  await grant.waitFor({ state: "visible" });
-  if (await grant.isDisabled()) throw new Error("grant still disabled after evidence");
+  await until("grant still disabled after evidence", async () => !(await grant.isDisabled()));
 });
 
 await step("evidence is real sentences from the classifier", async () => {
@@ -123,6 +140,34 @@ await step("the sanction is recorded against the operator", async () => {
 
 await step("the page loaded nothing it could not fetch", async () => {
   if (problems.length) throw new Error(problems.join(" | "));
+});
+
+
+// Appended after the main flow: a theme check needs its own page, because a
+// colour scheme is fixed when the context is created.
+await step("dark mode has no light-mode rectangles in it", async () => {
+  const dark = await browser.newPage({ viewport: { width: 1160, height: 900 }, colorScheme: "dark" });
+  await dark.goto(base, { waitUntil: "networkidle" });
+  await dark.getByLabel(/control plane token/i).fill(token);
+  await dark.getByLabel(/your name/i).fill("ezra@custos.dev");
+  await dark.getByRole("button", { name: /continue/i }).click();
+  await dark.locator("article.finding").first().waitFor({ timeout: 10000 });
+
+  // The search box was outside the .field selector that themed every other
+  // input, so it rendered as a white rectangle. Checking every control rather
+  // than that one, because the next one added will be outside it too.
+  const ground = await dark.evaluate(() => {
+    const luminance = (colour) => {
+      const [r, g, b] = colour.match(/\d+/g).map(Number);
+      return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    };
+    return [...document.querySelectorAll("input, select, textarea")]
+      .map((el) => ({ el: el.getAttribute("aria-label") ?? el.type, l: luminance(getComputedStyle(el).backgroundColor) }))
+      .filter((x) => x.l > 0.5)
+      .map((x) => x.el);
+  });
+  if (ground.length > 0) throw new Error(`light controls in dark mode: ${ground.join(", ")}`);
+  await dark.close();
 });
 
 await browser.close();
