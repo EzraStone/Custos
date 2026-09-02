@@ -263,6 +263,20 @@ export function App() {
       ) : null}
 
       {/*
+        Everything else on this page changes silently for a screen reader: the
+        list is replaced, the counts move, and nothing says so. Refresh in
+        particular gives no feedback at all without this — the spinner is on a
+        button the reader has already left.
+
+        Polite rather than assertive: this is a status, and interrupting
+        someone mid-sentence to say a list finished loading is worse than
+        telling them a moment later.
+      */}
+      <p className="visually-hidden" role="status" aria-live="polite">
+        {announcement(loading, error, shown, agents, view)}
+      </p>
+
+      {/*
         Two different warnings, because they mean different things. Low
         coverage says findings may be missing. An unreadable scope says the
         findings are all here and the approval decision on each one is a guess.
@@ -401,6 +415,33 @@ export function App() {
       ) : null}
     </main>
   );
+}
+
+/**
+ * What a screen reader is told after a load settles.
+ *
+ * Counts, not "done". "Twelve unsanctioned agents" is the thing a person came
+ * for; "loaded" makes them go and find out.
+ */
+function announcement(
+  loading: boolean,
+  error: string | null,
+  shown: Agent[] | null,
+  agents: Agent[] | null,
+  view: View,
+): string {
+  if (loading) return "Loading the register.";
+  if (error) return `Could not load the register. ${error}`;
+  if (shown === null || agents === null) return "";
+
+  const noun = view === "unsanctioned" ? "unsanctioned agent" : "agent";
+  const plural = shown.length === 1 ? "" : "s";
+  if (shown.length === agents.length) {
+    return `${shown.length} ${noun}${plural}.`;
+  }
+  // The total, always. A filtered count read on its own is how someone
+  // concludes an account is nearly clean while hearing a third of it.
+  return `${shown.length} of ${agents.length} ${noun}${plural} shown; the rest are filtered out.`;
 }
 
 function Masthead({ children }: { children?: React.ReactNode }) {

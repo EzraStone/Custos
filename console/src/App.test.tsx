@@ -305,7 +305,9 @@ describe("credentials that stop working", () => {
     session.save({ token: "tok-fleet", operator: "ezra" });
     render(<App />);
 
-    expect(await screen.findByText(/pass \?account=/i)).toBeInTheDocument();
+    // Scoped to the alert: the live region repeats the same words for a screen
+    // reader, so an unscoped query matches twice.
+    expect(await screen.findByRole("alert")).toHaveTextContent(/pass \?account=/i);
   });
 });
 
@@ -667,5 +669,45 @@ describe("an approval scope that is mostly addresses", () => {
     // be inventing a problem.
     await loaded({});
     expect(screen.queryByText(/scope is mostly addresses/i)).toBeNull();
+  });
+});
+
+describe("what a screen reader is told", () => {
+  it("announces the count, not that loading finished", async () => {
+    // "Twelve unsanctioned agents" is the thing a person came for. "Loaded"
+    // makes them go and find out.
+    install();
+    session.save({ token: "tok-abc", operator: "ezra@custos.dev" });
+    render(<App />);
+    await screen.findByText("finance-close");
+
+    expect(screen.getByRole("status")).toHaveTextContent(/1 unsanctioned agent\./i);
+  });
+
+  it("always includes the total when a filter is on", async () => {
+    // A filtered count read on its own is how someone concludes an account is
+    // nearly clean while hearing a third of it.
+    install({
+      agents: [
+        agent({ id: "a1", principal: "arn:aws:iam::1:role/ops", blast_radius: "destructive" }),
+        agent({ id: "a2", principal: "arn:aws:iam::1:role/fin", blast_radius: "write" }),
+      ],
+    });
+    session.save({ token: "tok-abc", operator: "ezra@custos.dev" });
+    render(<App />);
+    await screen.findByText("ops");
+
+    await userEvent.click(screen.getByRole("button", { name: /can destroy/i }));
+    expect(screen.getByRole("status")).toHaveTextContent(/1 of 2 .*filtered out/i);
+  });
+
+  it("announces a failure rather than going quiet", async () => {
+    install({ registerStatus: 500, registerDetail: "the database is locked" });
+    session.save({ token: "tok-abc", operator: "ezra@custos.dev" });
+    render(<App />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(/could not load the register/i),
+    );
   });
 });
