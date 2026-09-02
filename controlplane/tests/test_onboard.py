@@ -101,3 +101,21 @@ def test_cli_json_output_is_scriptable(capsys):
 def test_cli_rejects_a_bad_account_without_a_traceback(capsys):
     assert main(["onboard", "--account", "nope", "--endpoint", ENDPOINT]) == 2
     assert "not a 12-digit AWS account ID" in capsys.readouterr().err
+
+
+def test_the_message_asks_about_eni_tags_before_the_first_scan():
+    """The remedy for an unreadable approval scope is the customer's, and it is
+    cheap for them before onboarding and awkward afterwards — nobody wants to
+    be told about tagging once their operators are already looking at a list of
+    IP addresses."""
+    message = generate("447120043318", "https://custos.example").message
+    assert "Name" in message and "tag" in message
+    assert "--check" in message, "the customer should be able to measure it themselves"
+    assert "10.0.4.23" in message, "say what the bad outcome actually looks like"
+
+
+def test_the_message_does_not_overstate_what_tagging_changes():
+    # It changes readability, not findings. Implying otherwise turns an
+    # optional tidy-up into a precondition and stalls onboarding.
+    message = generate("447120043318", "https://custos.example").message
+    assert "does not change what we find" in message

@@ -109,6 +109,14 @@ are the low-volume ones, which are usually the ones you would most want to know
 about. We take four fields from those logs (timestamp, target, and two byte
 counts); the URL, query string, user agent, and client address are discarded at
 parse time and cannot reach us.
+
+One thing worth checking on your side before the first scan: whether the
+network interfaces behind your internal services carry a `Name` tag. We name
+what an agent reaches from those tags and from the descriptions AWS writes for
+its own managed services, and anything neither covers appears as an IP address.
+That does not change what we find — it changes whether the person approving a
+finding is reading "billing-api" or "10.0.4.23". `./custos-collector --check`
+reports how many we could name before you commit to anything.
 """
 
 
