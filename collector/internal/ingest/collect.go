@@ -68,6 +68,11 @@ type Report struct {
 	// collection is running behind and the interval should probably be shorter.
 	Shortened bool
 
+	// Destinations counts the addresses that could be given a name. The rest
+	// appear in the register as addresses, so a low number here is the
+	// difference between a scope an operator can read and one they cannot.
+	Destinations int
+
 	Degraded []Attribution
 	Errors   []string
 }
@@ -223,6 +228,19 @@ func (c *Collector) Collect(ctx context.Context, w awsread.Window) (wire.Batch, 
 	batch.Attachments = resolved
 	report.Degraded = degraded
 
+	// What the workloads reached, named. This is the half of the register an
+	// operator is asked to approve, and without it the scope is a list of
+	// addresses. A failure here costs the names and not the scan: the control
+	// plane falls back to showing the address, which is what it did before
+	// this existed.
+	destinations := &DestinationResolver{API: c.Network}
+	named, err := destinations.Resolve(ctx, peerAddresses(records))
+	if err != nil {
+		report.Errors = append(report.Errors, err.Error())
+	}
+	batch.Destinations = named
+	report.Destinations = len(named)
+
 	if c.Identity == nil {
 		return batch, report, nil
 	}
@@ -314,6 +332,28 @@ func distinctInterfaces(records []wire.FlowRecord) []string {
 		if r.InterfaceID != "" && !seen[r.InterfaceID] {
 			seen[r.InterfaceID] = true
 			out = append(out, r.InterfaceID)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// peerAddresses is every address the account's workloads talked to.
+//
+// The peer is the destination on the way out and the source on the way back,
+// so both ends are collected: a workload that only ever received from an
+// address still reached it.
+func peerAddresses(records []wire.FlowRecord) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, r := range records {
+		peer := r.DstAddr
+		if r.Direction == wire.Ingress {
+			peer = r.SrcAddr
+		}
+		if peer != "" && !seen[peer] {
+			seen[peer] = true
+			out = append(out, peer)
 		}
 	}
 	sort.Strings(out)

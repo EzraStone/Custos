@@ -6,6 +6,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+
+	"github.com/EzraStone/Custos/collector/internal/wire"
 )
 
 func destEni(address, description string, tags ...string) ec2types.NetworkInterface {
@@ -123,5 +125,30 @@ func TestAnUnnamedAddressIsOmittedNotBlank(t *testing.T) {
 		"10.0.4.23", "10.0.4.24")
 	if len(names) != 1 || names["10.0.4.23"] == "" {
 		t.Fatalf("got %v", names)
+	}
+}
+
+// TestBothEndsOfAConversationAreAskedAbout: the peer is the destination on the
+// way out and the source on the way back. A workload that only ever received
+// from an address still reached it, and naming only outbound destinations
+// would leave those unnamed for no reason.
+func TestBothEndsOfAConversationAreAskedAbout(t *testing.T) {
+	records := []wire.FlowRecord{
+		{DstAddr: "10.0.4.23", Direction: wire.Egress, SrcAddr: "10.0.1.5"},
+		{SrcAddr: "10.0.9.44", Direction: wire.Ingress, DstAddr: "10.0.1.5"},
+	}
+	got := peerAddresses(records)
+	want := []string{"10.0.4.23", "10.0.9.44"}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+
+	// 10.0.1.5 is our own side on both records — the source going out and the
+	// destination coming back. Asking AWS to name the workload we are already
+	// attributing would be a wasted filter slot on a paginated call.
+	for _, a := range got {
+		if a == "10.0.1.5" {
+			t.Fatal("collected our own address as a peer")
+		}
 	}
 }
