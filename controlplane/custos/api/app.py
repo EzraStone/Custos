@@ -282,6 +282,12 @@ def create_app(
                     "review_candidates": s.review_candidates,
                     "coverage": s.coverage,
                     "truncated": s.truncated,
+                    # How much of this scan's approval scope was a name rather
+                    # than an address. A scan that is fully covered and fully
+                    # unreadable produces correct findings nobody can act on.
+                    "scope_readable": s.scope_readable,
+                    "scope_named": s.scope_named,
+                    "scope_total": s.scope_total,
                 }
                 for s in scans.scans_for(account_id, limit=min(limit, 100))
             ],

@@ -32,6 +32,9 @@ function agent(overrides: Partial<Agent> = {}): Agent {
 interface Backend {
   agents?: Agent[];
   coverage?: number;
+  scopeReadable?: number;
+  scopeNamed?: number;
+  scopeTotal?: number;
   truncated?: boolean;
   accounts?: string[];
   diff?: unknown;
@@ -101,6 +104,11 @@ function backend(config: Backend = {}) {
           review_candidates: 2,
           coverage: config.coverage ?? 1.0,
           truncated: config.truncated ?? false,
+          ...(config.scopeReadable === undefined ? {} : {
+            scope_readable: config.scopeReadable,
+            scope_named: config.scopeNamed ?? 0,
+            scope_total: config.scopeTotal ?? 0,
+          }),
         }],
       });
     }
@@ -621,5 +629,43 @@ describe("filtering the register", () => {
 
     expect(screen.getByText("support-triage")).toBeInTheDocument();
     expect(screen.queryByText("ops-automation")).not.toBeInTheDocument();
+  });
+});
+
+describe("an approval scope that is mostly addresses", () => {
+  async function loaded(config: Backend) {
+    install(config);
+    session.save({ token: "tok-abc", operator: "ezra@custos.dev" });
+    render(<App />);
+    await screen.findByText("finance-close");
+  }
+
+  it("says so, and says the findings are unaffected", async () => {
+    // A different warning from low coverage. Low coverage says findings may be
+    // missing. This says they are all here and every approval is a guess.
+    await loaded({ scopeReadable: 0.2, scopeNamed: 1, scopeTotal: 5 });
+
+    expect(screen.getByText(/scope is mostly addresses/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 of 5 internal/i)).toBeInTheDocument();
+    expect(screen.getByText(/findings below are unaffected/i)).toBeInTheDocument();
+  });
+
+  it("stays quiet when most of the scope is readable", async () => {
+    await loaded({ scopeReadable: 0.8, scopeNamed: 4, scopeTotal: 5 });
+    expect(screen.queryByText(/scope is mostly addresses/i)).toBeNull();
+  });
+
+  it("stays quiet when there was no internal traffic at all", async () => {
+    // Nothing internal reached is not an unreadable scope. Warning here would
+    // be the empty-read-as-full-coverage mistake in reverse.
+    await loaded({ scopeReadable: 1, scopeNamed: 0, scopeTotal: 0 });
+    expect(screen.queryByText(/scope is mostly addresses/i)).toBeNull();
+  });
+
+  it("stays quiet against a control plane that does not report it", async () => {
+    // An older server omits the field. Showing "0% readable" against it would
+    // be inventing a problem.
+    await loaded({});
+    expect(screen.queryByText(/scope is mostly addresses/i)).toBeNull();
   });
 });

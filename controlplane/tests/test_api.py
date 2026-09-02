@@ -621,3 +621,14 @@ def test_diff_needs_a_credential(client):
 def test_diff_is_scoped_to_the_account(client):
     r = client.get("/v1/diff?account=999999999999", headers=AUTH)
     assert r.status_code == 404
+
+
+def test_scans_report_how_readable_the_scope_was(client):
+    client.post("/v1/batches", json=batch(), headers=AUTH)
+    scan = client.get("/v1/scans", headers=AUTH).json()["scans"][0]
+    assert "scope_readable" in scan
+    assert scan["scope_total"] == 0
+    # Nothing internal reached is fully readable, not fully unreadable. There
+    # is no unreadable scope on a scan with no destinations, and warning about
+    # one would be the empty-read-as-full-coverage mistake in reverse.
+    assert scan["scope_readable"] == 1.0

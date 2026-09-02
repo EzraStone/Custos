@@ -44,6 +44,21 @@ class ScanRecord:
     review_candidates: int
     coverage: float
     truncated: bool
+    scope_named: int = 0
+    scope_total: int = 0
+
+    @property
+    def scope_readable(self) -> float:
+        """How much of the approval scope was a name rather than an address.
+
+        Zero destinations is 1.0, not 0.0. A scan that reached nothing internal
+        has no unreadable scope, and reporting it as fully unreadable would put
+        a warning on an account with nothing to warn about — the same mistake
+        as reporting an empty read as full coverage, in the other direction.
+        """
+        if self.scope_total <= 0:
+            return 1.0
+        return self.scope_named / self.scope_total
 
 
 class ScanStore:
@@ -111,13 +126,17 @@ class ScanStore:
         coverage: float,
         truncated: bool,
         catalogue_revision: str,
+        scope_named: int = 0,
+        scope_total: int = 0,
     ) -> int:
         cursor = self.conn.execute(
             "INSERT INTO scans (batch_id, account_id, started_at, principals_seen, "
-            "agents_found, review_candidates, coverage, truncated, catalogue_revision) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "agents_found, review_candidates, coverage, truncated, catalogue_revision, "
+            "scope_named, scope_total) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (batch_id, account_id, iso(started_at), principals_seen, agents_found,
-             review_candidates, coverage, int(truncated), catalogue_revision),
+             review_candidates, coverage, int(truncated), catalogue_revision,
+             scope_named, scope_total),
         )
         return cursor.lastrowid
 
@@ -153,6 +172,7 @@ class ScanStore:
                 agents_found=row["agents_found"],
                 review_candidates=row["review_candidates"],
                 coverage=row["coverage"], truncated=bool(row["truncated"]),
+                scope_named=row["scope_named"], scope_total=row["scope_total"],
             )
             for row in self.conn.execute(
                 "SELECT * FROM scans WHERE account_id = ? ORDER BY started_at DESC, id DESC "
@@ -185,6 +205,7 @@ class ScanStore:
             principals_seen=row["principals_seen"], agents_found=row["agents_found"],
             review_candidates=row["review_candidates"],
             coverage=row["coverage"], truncated=bool(row["truncated"]),
+            scope_named=row["scope_named"], scope_total=row["scope_total"],
         )
 
     def observations_for_scan(self, scan_id: int) -> dict[str, dict]:

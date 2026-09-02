@@ -262,6 +262,25 @@ export function App() {
         </div>
       ) : null}
 
+      {/*
+        Two different warnings, because they mean different things. Low
+        coverage says findings may be missing. An unreadable scope says the
+        findings are all here and the approval decision on each one is a guess.
+      */}
+      {scans[0]?.scope_readable !== undefined
+        && scans[0].scope_readable < 0.5
+        && (scans[0].scope_total ?? 0) > 0 ? (
+        <div className="notice">
+          <span className="tag">Scope is mostly addresses</span>
+          <p>
+            {scans[0].scope_named} of {scans[0].scope_total} internal
+            destinations could be named. The findings below are unaffected, but
+            approving one means approving a list of IP addresses. Tagging the
+            ENIs behind those services is what makes this readable.
+          </p>
+        </div>
+      ) : null}
+
       {scans[0] && scans[0].coverage < 0.95 ? (
         <div className="notice">
           <span className="tag">Incomplete coverage</span>

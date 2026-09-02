@@ -9,6 +9,7 @@ and the store testable without a classifier.
 
 from __future__ import annotations
 
+import ipaddress
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -80,6 +81,29 @@ def _to_telemetry(batch: Batch) -> tuple[list[FlowRecord], dict[str, list[Inboun
                            sent_bytes=r.sent_bytes, received_bytes=r.received_bytes)
         )
     return records, requests
+
+
+def scope_readability(batch: Batch, scan_input: ScanInput) -> tuple[int, int]:
+    """How many of the private destinations this batch reached could be named.
+
+    Counted over what the flow logs actually saw rather than over the register,
+    because it is a fact about the account's tagging and not about which
+    workloads happened to be classified as agents this time.
+    """
+    peers: set[str] = set()
+    for record in scan_input.records:
+        peer = record.dstaddr if record.direction is Direction.EGRESS else record.srcaddr
+        if _is_private(peer):
+            peers.add(peer)
+    named = sum(1 for p in peers if scan_input.destination_names.get(p))
+    return named, len(peers)
+
+
+def _is_private(address: str) -> bool:
+    try:
+        return ipaddress.ip_address(address).is_private
+    except ValueError:
+        return False
 
 
 def to_scan_input(batch: Batch, interval: timedelta = DEFAULT_INTERVAL) -> ScanInput:
@@ -190,7 +214,9 @@ def ingest(
 
         # Classification runs against the existing register so a re-scan
         # refreshes records rather than creating duplicates.
-        result = run_scan(to_scan_input(batch, interval))
+        scan_input = to_scan_input(batch, interval)
+        result = run_scan(scan_input)
+        named, total = scope_readability(batch, scan_input)
 
         scan_id = scans.record_scan(
             batch_id=record.id, account_id=batch.account_id, started_at=stamp,
@@ -200,6 +226,11 @@ def ingest(
             coverage=batch.collection.parsed_fraction,
             truncated=batch.collection.truncated,
             catalogue_revision=result.catalogue_revision,
+            # How readable this scan's approval scope is. A scan whose scope is
+            # mostly addresses produces correct findings that nobody can act
+            # on, and that is invisible unless it is counted.
+            scope_named=named,
+            scope_total=total,
         )
 
         # Captured before this scan's observations are written, so the

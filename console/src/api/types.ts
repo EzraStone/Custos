@@ -137,6 +137,16 @@ export interface Scan {
   review_candidates: number;
   coverage: number;
   truncated: boolean;
+  /**
+   * How much of this scan's approval scope was a name rather than an address.
+   *
+   * Optional because a control plane older than the field simply omits it, and
+   * a console that showed "0% readable" against an older server would be
+   * inventing a problem.
+   */
+  scope_readable?: number;
+  scope_named?: number;
+  scope_total?: number;
 }
 
 export interface ScansResponse {

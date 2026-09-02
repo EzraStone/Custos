@@ -124,6 +124,16 @@ learn that another exists.
 
 Scan history, newest first, with coverage and truncation per scan.
 
+Each scan also carries `scope_named` / `scope_total` and their ratio as
+`scope_readable`: how many of the private destinations that scan saw could be
+given a name rather than shown as an address. It is a different measure from
+`coverage` and means a different thing. Low coverage says findings may be
+missing; a low `scope_readable` says the findings are all present and the
+approval decision on each one is a guess.
+
+A scan that reached nothing internal reports `1.0`, not `0.0`. There is no
+unreadable scope on a scan with no destinations.
+
 ## `GET /v1/diff`
 
 What changed between the two most recent scans.
