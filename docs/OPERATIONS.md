@@ -85,6 +85,32 @@ Whatever the customer already uses — an ECS scheduled task, a Lambda on a rule
 a cron on a bastion. It needs the role and an endpoint, and it ships one window
 per run.
 
+### Hand them the console
+
+The control plane serves it at `/`. Give the operator their account's token and
+their own name — the name is not a credential, it is what goes in the audit
+trail against every decision they make.
+
+What they can do there:
+
+- **Read the register**, ordered by what each agent could destroy rather than by
+  how confident the classifier is. Filter by blast radius, or search for a role,
+  a team, or something an agent reaches.
+- **Read the evidence** behind any finding. The grant control stays disabled
+  until they have opened it, deliberately.
+- **Grant imprimatur**, which is the only action in the system that confers
+  authority. The scope is shown before it is granted.
+- **Retire an agent** that no longer exists, with a reason. This is the one that
+  keeps the queue readable: a decommissioned workload nobody retires keeps
+  surfacing as a finding forever, and a queue full of dead roles is a queue
+  nobody reads.
+- **See what changed** since the last scan, which is the whole argument for
+  scanning twice.
+
+What they cannot do there: start a scan, change a token, or move an agent
+directly to sanctioned. The console reads the register and records decisions;
+it does not drive collection.
+
 ### Schedule pruning
 
 ```
@@ -121,6 +147,14 @@ confidence drops across the board.
 Tag hygiene. The Attributor tries resource tags, role tags, IAM path, then a
 name heuristic, and reports which one it used. If everything resolves by name
 heuristic, the confidence is low for a reason.
+
+**The approval scope is a list of IP addresses.**
+`custos-collector --check` reports this before the first scan, and the console
+warns when fewer than half a scan's internal destinations could be named. It
+means the findings are right and nobody can act on them: an operator cannot
+approve `10.0.4.23`. Names come from an ENI's `Name` tag or from AWS's own
+description for a managed service, so the remedy is tagging the ENIs behind
+those services. Nothing about the classifier changes either way.
 
 **A finding the customer disputes.**
 Good — that is what the evidence sentences are for. Every finding carries the
