@@ -11,7 +11,7 @@ component that owned them.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -193,3 +193,87 @@ def test_collector_destination_names_reach_the_scan():
     # An entry with no name is not a name. Carrying it would make the register
     # show an empty label where it currently shows an honest address.
     assert names == {"10.0.4.23": "billing-api"}
+
+
+def test_a_named_destination_survives_the_whole_loop():
+    """Collector wire → API → classifier → register → the scope an operator
+    approves.
+
+    Five modules, each tested on its own. This asserts the one property none of
+    them can: that a name the collector resolved is the name a person is shown
+    when they are asked to confer authority. Every seam in that path has been
+    wrong at least once — the annotation read from the wrong end of a flow
+    record, the label built per record instead of per address, the field
+    dropped in the batch-to-telemetry copy.
+    """
+    from custos import batch as schema
+    from custos.api import TokenStore, create_app
+    from custos.store.db import open_database
+
+    account, token = "447120043318", "tok-loop"
+    client = TestClient(create_app(conn=open_database(), tokens=TokenStore({token: account})))
+    headers = {"Authorization": f"Bearer {token}"}
+
+    start = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+    body = _agent_shaped_batch(
+        schema, account, start,
+        destinations=[
+            schema.Destination(address="10.0.4.21", name="billing-api", kind="load-balancer"),
+        ],
+    )
+
+    assert client.post(
+        "/v1/batches", json=body.model_dump(mode="json"), headers=headers
+    ).status_code == 202
+
+    agents = client.get("/v1/register", headers=headers).json()["agents"]
+    assert agents, "the batch produced no agents to check the scope of"
+
+    reach = {r for a in agents for r in a["tools"] + a["data_stores"]}
+    assert "billing-api 10.0.4.21" in reach, f"the name never reached the register: {reach}"
+    # The address alone must not also be present: that was the duplicate-entry
+    # bug, one destination occupying two slots in the same approval.
+    assert "10.0.4.21" not in reach
+
+
+def _agent_shaped_batch(schema, account: str, start, destinations=()):
+    """Traffic with the shape of an agent: model egress, no inbound, a tool."""
+    flows = []
+    for minute in range(40):
+        at = start + timedelta(minutes=minute)
+        flows.append(schema.FlowRecord(
+            account_id=account, interface_id="eni-1", srcaddr="10.0.1.5",
+            dstaddr="160.79.104.10", srcport=41000 + minute, dstport=443,
+            protocol=6, packets=40, bytes=140_000,
+            start=at, end=at + timedelta(seconds=30), action="ACCEPT",
+            log_status="OK", direction="egress", tcp_flags=2,
+        ))
+        flows.append(schema.FlowRecord(
+            account_id=account, interface_id="eni-1", srcaddr="160.79.104.10",
+            dstaddr="10.0.1.5", srcport=443, dstport=41000 + minute,
+            protocol=6, packets=8, bytes=9_000,
+            start=at, end=at + timedelta(seconds=30), action="ACCEPT",
+            log_status="OK", direction="ingress", tcp_flags=16,
+        ))
+        flows.append(schema.FlowRecord(
+            account_id=account, interface_id="eni-1", srcaddr="10.0.1.5",
+            dstaddr="10.0.4.21", srcport=42000 + minute, dstport=8080,
+            protocol=6, packets=6, bytes=3_000,
+            start=at, end=at + timedelta(seconds=20), action="ACCEPT",
+            log_status="OK", direction="egress", tcp_flags=2,
+        ))
+
+    return schema.Batch(
+        account_id=account, region="us-east-1",
+        window_start=start, window_end=start + timedelta(hours=1),
+        collector_version="test",
+        collection=schema.Collection(
+            lines_read=len(flows), lines_parsed=len(flows), have_access_logs=True
+        ),
+        flows=flows,
+        destinations=list(destinations),
+        attachments=[schema.Attachment(
+            interface_id="eni-1", principal=f"arn:aws:iam::{account}:role/finance-close",
+            address="10.0.1.5", compute="Lambda",
+        )],
+    )
