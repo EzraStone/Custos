@@ -154,9 +154,16 @@ infrastructure if you prefer.
 ### What is the blast radius if you are breached?
 
 We would hold read-only metadata about your infrastructure: which principals
-exist, what they talk to, and what their policies permit. No credentials, no
-data, no payloads, and no ability to act in your account — the role requires an
-external ID and grants nothing but reads.
+exist, what they talk to, what those destinations are called, and what their
+policies permit. No credentials, no data, no payloads, and no ability to act in
+your account — the role requires an external ID and grants nothing but reads.
+
+On destination names specifically, because it is the one place a free-text
+field could have leaked: the collector reads ENI Name tags and AWS's own
+descriptions for managed services, and sends **only** names it recognised the
+shape of. An ENI whose description says "temp box for INC-4471, ask Sam before
+deleting" is not named, not sent, and appears in the register as an address.
+The test asserting that is named `TestFreeTextIsNotForwarded`.
 
 The honest framing: this is inventory data about your software. It would be
 useful to an attacker who was already inside, and it would not get them inside.

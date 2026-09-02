@@ -275,6 +275,11 @@ WHAT IT READS
   VPC Flow Logs        network metadata: addresses, ports, byte counts, timings
   CloudTrail           which principal is attached to which network interface
   IAM (read-only)      role tags, IAM paths, and attached policy actions
+  EC2 interfaces       the name of an address a workload talked to, so the
+                       register can say "billing-api" instead of "10.0.4.21".
+                       Only addresses already seen in your flow logs, and only
+                       names from an ENI's Name tag or AWS's own description —
+                       a description AWS did not write is not sent anywhere.
   ALB access logs      optional: when a request arrived and how large it was
 
 WHAT IT SENDS
