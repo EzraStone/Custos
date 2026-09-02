@@ -146,7 +146,7 @@ review.
 
 ## The invariants
 
-Seven, all testable, none relaxable for a feature request. Each names the test
+Eight, all testable, none relaxable for a feature request. Each names the test
 that enforces it in [docs/SECURITY-INVARIANTS.md](docs/SECURITY-INVARIANTS.md).
 
 | | |
@@ -158,6 +158,7 @@ that enforces it in [docs/SECURITY-INVARIANTS.md](docs/SECURITY-INVARIANTS.md).
 | **SEC-20** | A finding without an owner is segregated, never mixed into owned findings. |
 | **SEC-21** | Logs follow the same rule as the wire: nothing describing a person. |
 | **SEC-22** | A collection window is shortened, never silently truncated. |
+| **SEC-23** | Only names matching a shape AWS writes leave the account; free text does not. |
 
 CI runs those five as their own job, so a failure reads as "an invariant broke"
 rather than as one line inside two hundred passing tests.

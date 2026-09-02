@@ -72,11 +72,11 @@ jobs:
         with:
           go-version: "1.24"
       - run: pip install -e "./controlplane[api]" -e ./a0 pytest
-      - name: SEC-16, SEC-18, SEC-19, SEC-22 (collector)
+      - name: SEC-16, SEC-18, SEC-19, SEC-22, SEC-23 (collector)
         run: |
           cd collector
           go test ./internal/wire/ ./internal/awsread/ ./internal/config/ ./internal/ingest/ ./internal/schedule/ \
-            -run 'TestWireTypesCarryNoPayload|TestNoPayloadShapedFieldNames|TestNoMutatingAPIs|TestStartQuery|TestEveryAWSMethodIsReadOnly|TestZeroConfigIsInert|TestAShortenedWindowIsNotReportedAsDataLoss|TestShortenToUsesTheLatestRecordNotTheLastOne|TestTheCursorDoesNotAdvanceOnFailure|TestRequestParametersHaveNowhereToLand' -v
+            -run 'TestWireTypesCarryNoPayload|TestNoPayloadShapedFieldNames|TestNoMutatingAPIs|TestStartQuery|TestEveryAWSMethodIsReadOnly|TestZeroConfigIsInert|TestAShortenedWindowIsNotReportedAsDataLoss|TestShortenToUsesTheLatestRecordNotTheLastOne|TestTheCursorDoesNotAdvanceOnFailure|TestRequestParametersHaveNowhereToLand|TestFreeTextIsNotForwarded|TestKnownAWSShapesAreParsed|TestPublicAddressesAreNotAskedAbout' -v
       - name: SEC-17, SEC-18, SEC-20, SEC-21 (control plane)
         run: |
           cd controlplane

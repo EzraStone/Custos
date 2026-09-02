@@ -2,7 +2,7 @@
 
 SEC-01 through SEC-15 belong to the Checkpoint and are specified in the
 companion production document. The Register adds SEC-16 through SEC-18. This
-repository adds SEC-19 through SEC-22, each of which arose from building
+repository adds SEC-19 through SEC-23, each of which arose from building
 something rather than from planning it.
 
 Every invariant here is testable. None is relaxable for a feature request. Each
@@ -101,3 +101,24 @@ accident.
 **Enforced by:** `TestAShortenedWindowIsNotReportedAsDataLoss`,
 `TestShortenToUsesTheLatestRecordNotTheLastOne`,
 `TestTheCursorDoesNotAdvanceOnFailure`.
+
+## SEC-23 — Only recognised names leave the account
+
+The collector names a destination from an ENI's `Name` tag or from a
+description matching a shape AWS itself writes. A description it does not
+recognise is not sent; the address is, and the register shows that.
+
+An ENI description is a free-text field a person typed into. What people
+actually put there is "temp box for INC-4471, ask Sam before deleting" — a
+ticket number, a colleague's name, a note about an outage. None of that is
+infrastructure metadata, and shipping it would quietly widen what leaves a
+customer account from *what their software is* to *what their engineers wrote
+down*, which is the line the whole ethical position rests on.
+
+The Name tag is treated differently on purpose: it is the label a customer
+chose for the thing, which is the closest available answer to "what is this
+service called". Descriptions are matched against known AWS shapes and parsed,
+never forwarded whole.
+
+**Enforced by:** `TestFreeTextIsNotForwarded`, `TestKnownAWSShapesAreParsed`,
+`TestPublicAddressesAreNotAskedAbout`.
