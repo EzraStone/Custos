@@ -30,6 +30,7 @@ PAIRS = {
     "InboundRequest": schema.InboundRequest,
     "PrincipalFacts": schema.PrincipalFacts,
     "Attachment": schema.Attachment,
+    "Destination": schema.Destination,
     "Batch": schema.Batch,
     "Collection": schema.Collection,
 }

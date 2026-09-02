@@ -45,6 +45,12 @@ class ScanInput:
     compute_by_eni: dict[str, str] = field(default_factory=dict)
     facts: dict[str, PrincipalFacts] = field(default_factory=dict)
     capabilities: dict[str, IamCapability] = field(default_factory=dict)
+    destination_names: dict[str, str] = field(default_factory=dict)
+    """Address to name, as resolved by the collector from ENIs in the account.
+
+    The only source that can name an ordinary internal service. Nothing in a
+    flow log distinguishes the billing API from any other host on port 443.
+    """
     interval: timedelta = timedelta(seconds=60)
     inbound_logs_available: bool = True
 
@@ -145,7 +151,7 @@ def run(inp: ScanInput, register: Register | None = None) -> ScanResult:
         )
         attribution = resolve(facts)
         capability = inp.capabilities.get(verdict.principal)
-        reach_report = reach_mod.build(t, capability)
+        reach_report = reach_mod.build(t, capability, inp.destination_names)
         compute = _compute_for(t, inp) or facts.compute
 
         reg.upsert(

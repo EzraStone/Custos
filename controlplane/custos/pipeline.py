@@ -66,7 +66,8 @@ def _to_telemetry(batch: Batch) -> tuple[list[FlowRecord], dict[str, list[Inboun
             dstport=f.dstport, protocol=f.protocol, packets=f.packets,
             bytes=f.bytes, start=f.start, end=f.end, action=f.action,
             log_status=f.log_status, vpc_id=f.vpc_id, subnet_id=f.subnet_id,
-            direction=_DIRECTIONS[f.direction], dst_aws_service=f.dst_aws_service,
+            direction=_DIRECTIONS[f.direction],
+            src_aws_service=f.src_aws_service, dst_aws_service=f.dst_aws_service,
             tcp_flags=f.tcp_flags,
         )
         for f in batch.flows
@@ -99,6 +100,9 @@ def to_scan_input(batch: Batch, interval: timedelta = DEFAULT_INTERVAL) -> ScanI
         },
         compute_by_eni={
             a.interface_id: a.compute for a in batch.attachments if a.compute
+        },
+        destination_names={
+            d.address: d.name for d in batch.destinations if d.name
         },
         facts={
             p.principal: PrincipalFacts(

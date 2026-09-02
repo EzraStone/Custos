@@ -11,6 +11,8 @@ component that owned them.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -136,3 +138,58 @@ def test_a_scan_without_access_logs_loses_recall_not_precision(client, first_bat
     principals = {a["principal"] for a in found}
     for chatbot in ("docs-chat", "kb-assistant", "sales-copilot", "search-embed"):
         assert not any(chatbot in p for p in principals), chatbot
+
+
+def test_every_wire_flow_field_survives_the_conversion():
+    """The contract test compares the Go struct to the Pydantic model. Neither
+    of them sees this function, which copies one into the other field by field
+    — so a field can be on the wire, accepted by the API, and dropped here
+    without a single test noticing. That is how src_aws_service was lost the
+    day it was added."""
+    from custos import batch as schema
+    from custos.pipeline import _to_telemetry
+
+    wire_only = {"account_id"}  # carried on the batch, not per record
+    sample = schema.FlowRecord(
+        account_id="1", interface_id="eni-1", srcaddr="10.0.1.5",
+        dstaddr="52.216.10.7", srcport=41000, dstport=443, protocol=6,
+        packets=9, bytes=1234,
+        start=datetime(2026, 8, 10, 12, 0, tzinfo=UTC),
+        end=datetime(2026, 8, 10, 12, 1, tzinfo=UTC),
+        action="ACCEPT", log_status="OK", vpc_id="vpc-1", subnet_id="subnet-1",
+        direction="egress", src_aws_service="ELASTICACHE", dst_aws_service="S3",
+        tcp_flags=18,
+    )
+    b = schema.Batch(
+        account_id="1",
+        window_start=sample.start, window_end=sample.end,
+        flows=[sample],
+    )
+    records, _ = _to_telemetry(b)
+    got = records[0]
+
+    for name in schema.FlowRecord.model_fields:
+        if name in wire_only:
+            continue
+        want = getattr(sample, name)
+        have = getattr(got, name)
+        assert str(have) == str(want), f"{name} was dropped or changed: {want!r} -> {have!r}"
+
+
+def test_collector_destination_names_reach_the_scan():
+    from custos import batch as schema
+    from custos.pipeline import to_scan_input
+
+    b = schema.Batch(
+        account_id="1",
+        window_start=datetime(2026, 8, 10, 12, 0, tzinfo=UTC),
+        window_end=datetime(2026, 8, 10, 13, 0, tzinfo=UTC),
+        destinations=[
+            schema.Destination(address="10.0.4.23", name="billing-api", kind="load-balancer"),
+            schema.Destination(address="10.0.4.24", name="", kind=""),
+        ],
+    )
+    names = to_scan_input(b).destination_names
+    # An entry with no name is not a name. Carrying it would make the register
+    # show an empty label where it currently shows an honest address.
+    assert names == {"10.0.4.23": "billing-api"}

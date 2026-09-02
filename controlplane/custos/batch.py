@@ -90,6 +90,23 @@ class Attachment(BaseModel):
     compute: str = ""
 
 
+class Destination(BaseModel):
+    """A name for an address a workload reached.
+
+    The register's scope is what an operator reads before granting authority,
+    and an address is not something anyone can make a decision about. The
+    collector names what it can from ENIs in the account and omits the rest,
+    so an address absent from this list is one nothing could be said about
+    rather than one called nothing.
+    """
+
+    model_config = STRICT
+
+    address: str
+    name: str = ""
+    kind: str = ""
+
+
 class Collection(BaseModel):
     """How the collection itself went, as opposed to what it found.
 
@@ -137,6 +154,7 @@ class Batch(BaseModel):
     requests: list[InboundRequest] = Field(default_factory=list)
     principals: list[PrincipalFacts] = Field(default_factory=list)
     attachments: list[Attachment] = Field(default_factory=list)
+    destinations: list[Destination] = Field(default_factory=list)
 
     @property
     def have_alb_logs(self) -> bool:

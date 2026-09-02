@@ -18,6 +18,7 @@ agent that only ever read from a bucket, holding a role that could delete it.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from .catalog import DestinationClass, classify
@@ -80,7 +81,9 @@ class ReachReport:
     concrete over-permission with a named owner and an obvious remediation."""
 
 
-def observed_reach(t: PrincipalTelemetry) -> tuple[set[str], set[str]]:
+def observed_reach(
+    t: PrincipalTelemetry, names: Mapping[str, str] | None = None
+) -> tuple[set[str], set[str]]:
     """Split observed destinations into (tools, data stores), by name.
 
     Two things changed here at once, and both were bugs in the scope an
@@ -107,7 +110,7 @@ def observed_reach(t: PrincipalTelemetry) -> tuple[set[str], set[str]]:
     tools: set[str] = set()
     stores: set[str] = set()
     for address, seen in best.items():
-        label = describe(address, seen.port, seen.aws_service)
+        label = describe(address, seen.port, seen.aws_service, names)
         if seen.cls is DestinationClass.DATASTORE:
             stores.add(label)
         else:
@@ -125,9 +128,13 @@ def observed_addresses(t: PrincipalTelemetry) -> set[str]:
     return {a for w in t.windows for a in w.tool_addresses}
 
 
-def build(t: PrincipalTelemetry, capability: IamCapability | None = None) -> ReachReport:
+def build(
+    t: PrincipalTelemetry,
+    capability: IamCapability | None = None,
+    names: Mapping[str, str] | None = None,
+) -> ReachReport:
     """Combine observed reach with granted capability."""
-    tools, stores = observed_reach(t)
+    tools, stores = observed_reach(t, names)
     model_endpoints = {a for w in t.windows for a in w.model_addresses}
 
     granted = granted_blast_radius(capability) if capability else BlastRadius.READ

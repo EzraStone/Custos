@@ -39,6 +39,8 @@ covers is the wrong place to have one.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from .catalog import DestinationClass, classify, is_private
 
 # Ports whose service is unambiguous enough to put in front of an approver.
@@ -56,8 +58,27 @@ PORT_NAMES: dict[int, str] = {
 }
 
 
-def describe(addr: str, port: int = 0, aws_service: str = "") -> str:
-    """Name one destination, or return the address when nothing is known."""
+def describe(
+    addr: str,
+    port: int = 0,
+    aws_service: str = "",
+    known: Mapping[str, str] | None = None,
+) -> str:
+    """Name one destination, or return the address when nothing is known.
+
+    `known` is what the collector resolved from ENIs in the account, and it
+    wins over everything below. It is the only source that can name an
+    ordinary internal service: nothing in a flow log distinguishes the billing
+    API from any other host on port 443, and the account does.
+    """
+    if known:
+        name = known.get(addr, "")
+        if name:
+            # The address stays. A private address is a specific host, and the
+            # operator approving it is approving that host rather than every
+            # host that shares a name.
+            return f"{name} {addr}"
+
     if aws_service:
         service = aws_service.strip().lower()
         # Keep the address when it is worth keeping. A private address is a
