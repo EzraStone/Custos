@@ -20,11 +20,36 @@ type fakeEC2 struct {
 func (f *fakeEC2) DescribeNetworkInterfaces(_ context.Context, in *ec2.DescribeNetworkInterfacesInput,
 	_ ...func(*ec2.Options)) (*ec2.DescribeNetworkInterfacesOutput, error) {
 	f.describes++
+	out := &ec2.DescribeNetworkInterfacesOutput{}
+
+	// Two ways to ask: by interface id, which is how attribution looks up the
+	// ENIs a flow log named, and by private address, which is how destination
+	// naming asks what lives at an address.
+	if len(in.Filters) > 0 {
+		want := map[string]bool{}
+		for _, filter := range in.Filters {
+			if aws.ToString(filter.Name) != "addresses.private-ip-address" {
+				continue
+			}
+			for _, v := range filter.Values {
+				want[v] = true
+			}
+		}
+		for _, iface := range f.interfaces {
+			for _, a := range iface.PrivateIpAddresses {
+				if want[aws.ToString(a.PrivateIpAddress)] {
+					out.NetworkInterfaces = append(out.NetworkInterfaces, iface)
+					break
+				}
+			}
+		}
+		return out, nil
+	}
+
 	want := map[string]bool{}
 	for _, id := range in.NetworkInterfaceIds {
 		want[id] = true
 	}
-	out := &ec2.DescribeNetworkInterfacesOutput{}
 	for _, iface := range f.interfaces {
 		if want[aws.ToString(iface.NetworkInterfaceId)] {
 			out.NetworkInterfaces = append(out.NetworkInterfaces, iface)

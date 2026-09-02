@@ -88,6 +88,28 @@ type Attachment struct {
 	Compute     string `json:"compute"`
 }
 
+// Destination names an address a workload reached.
+//
+// The register's scope is what an operator reads before granting authority,
+// and an address is not something anyone can make a decision about. Flow logs
+// carry no hostname, but an ENI in the account does: AWS gives managed
+// services structured descriptions, and the account's own workloads are
+// already resolved to principals for attribution.
+//
+// Name is what to show. Kind says where it came from, so a reader can weigh a
+// load balancer's own name against a guess from a port number.
+//
+// No new SEC-18 surface: this is the same category as Attachment, which
+// already ships an address and the principal behind it. Free-text descriptions
+// are parsed into a known shape rather than forwarded, so an operator who
+// wrote something careless in an ENI description does not have it shipped
+// verbatim.
+type Destination struct {
+	Address string `json:"address"`
+	Name    string `json:"name"`
+	Kind    string `json:"kind"`
+}
+
 // Collection describes the collection itself rather than the account.
 //
 // It ships because the control plane cannot otherwise tell "this account is
@@ -109,14 +131,15 @@ type Collection struct {
 // Batch is the unit of shipment. This is the complete set of things that ever
 // leaves a customer account.
 type Batch struct {
-	AccountID   string           `json:"account_id"`
-	Region      string           `json:"region"`
-	WindowStart time.Time        `json:"window_start"`
-	WindowEnd   time.Time        `json:"window_end"`
-	Collector   string           `json:"collector_version"`
-	Collection  Collection       `json:"collection"`
-	Flows       []FlowRecord     `json:"flows"`
-	Requests    []InboundRequest `json:"requests"`
-	Principals  []PrincipalFacts `json:"principals"`
-	Attachments []Attachment     `json:"attachments"`
+	AccountID    string           `json:"account_id"`
+	Region       string           `json:"region"`
+	WindowStart  time.Time        `json:"window_start"`
+	WindowEnd    time.Time        `json:"window_end"`
+	Collector    string           `json:"collector_version"`
+	Collection   Collection       `json:"collection"`
+	Flows        []FlowRecord     `json:"flows"`
+	Requests     []InboundRequest `json:"requests"`
+	Principals   []PrincipalFacts `json:"principals"`
+	Attachments  []Attachment     `json:"attachments"`
+	Destinations []Destination    `json:"destinations"`
 }

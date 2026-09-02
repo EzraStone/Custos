@@ -31,10 +31,13 @@ var allowedFields = map[string]map[string]bool{
 		"InterfaceID": true, "Principal": true, "Address": true,
 		"SubnetID": true, "Compute": true,
 	},
+	"Destination": {
+		"Address": true, "Name": true, "Kind": true,
+	},
 	"Batch": {
 		"AccountID": true, "Region": true, "WindowStart": true, "WindowEnd": true,
 		"Collector": true, "Collection": true, "Flows": true, "Requests": true,
-		"Principals": true, "Attachments": true,
+		"Principals": true, "Attachments": true, "Destinations": true,
 	},
 	"Collection": {
 		"LinesRead": true, "LinesParsed": true, "LinesMalformed": true,
@@ -46,7 +49,7 @@ var allowedFields = map[string]map[string]bool{
 func TestWireTypesCarryNoPayload(t *testing.T) {
 	types := []any{
 		FlowRecord{}, InboundRequest{}, PrincipalFacts{},
-		Attachment{}, Collection{}, Batch{},
+		Attachment{}, Destination{}, Collection{}, Batch{},
 	}
 
 	for _, v := range types {
