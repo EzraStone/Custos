@@ -74,3 +74,78 @@ def test_transaction_commits_on_success():
             ("1", iso(T0), iso(T0), iso(T0)),
         )
     assert conn.execute("SELECT COUNT(*) AS n FROM batches").fetchone()["n"] == 1
+
+
+def test_a_column_added_later_reaches_a_database_that_already_exists(tmp_path):
+    """The failure this guards against happens on a customer's control plane,
+    during an upgrade, with their register already in the file.
+
+    CREATE TABLE IF NOT EXISTS does nothing to a table that is already there,
+    so a column added after their first scan would be invisible to their
+    database and the first write naming it would fail at runtime.
+
+    The v2 shape of `scans` is written out rather than derived, because it is
+    history: what a customer's database actually looks like today does not
+    change when the current schema does.
+    """
+    import sqlite3
+
+    from custos.store.db import migrate, open_database
+    from custos.store.schema import ADDED_COLUMNS
+
+    path = tmp_path / "v2.db"
+    conn = open_database(path)
+    conn.close()
+
+    raw = sqlite3.connect(path)
+    raw.execute("DROP TABLE scans")
+    raw.execute(
+        "CREATE TABLE scans ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, batch_id INTEGER NOT NULL, "
+        "account_id TEXT NOT NULL, started_at TEXT NOT NULL, "
+        "principals_seen INTEGER NOT NULL DEFAULT 0, "
+        "agents_found INTEGER NOT NULL DEFAULT 0, "
+        "review_candidates INTEGER NOT NULL DEFAULT 0, "
+        "coverage REAL NOT NULL DEFAULT 0.0, "
+        "truncated INTEGER NOT NULL DEFAULT 0, "
+        "catalogue_revision TEXT NOT NULL DEFAULT '')"
+    )
+    # A row, because that is the case an additive migration has to survive. An
+    # empty table would accept a NOT NULL column with no default and prove
+    # nothing about a customer with a year of scans.
+    raw.execute(
+        "INSERT INTO scans (batch_id, account_id, started_at) VALUES (1, '1', '2026-08-10')"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = open_database(path)
+    conn.row_factory = sqlite3.Row
+    for table, column, _ in ADDED_COLUMNS:
+        columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        assert column in columns, f"{table}.{column} never reached an existing database"
+
+    # The existing row survived, and running the migration again changes nothing.
+    assert conn.execute("SELECT COUNT(*) AS n FROM scans").fetchone()["n"] == 1
+    assert migrate(conn) == migrate(conn)
+
+
+def test_added_columns_are_additive_only(tmp_path):
+    """Every entry must be a nullable column or one with a default.
+
+    SQLite can add those to an existing table cheaply. Anything else — a
+    rename, a type change, a NOT NULL with no default — cannot be applied this
+    way and needs a migration someone writes by hand, so it must not be
+    possible to smuggle one in as a line in the list.
+    """
+    from custos.store.schema import ADDED_COLUMNS
+
+    for table, column, definition in ADDED_COLUMNS:
+        upper = definition.upper()
+        assert "NOT NULL" not in upper or "DEFAULT" in upper, (
+            f"{table}.{column} is NOT NULL with no default; SQLite cannot add "
+            "that to a table with rows in it"
+        )
+        assert "PRIMARY KEY" not in upper and "UNIQUE" not in upper, (
+            f"{table}.{column} adds a constraint; that is a hand-written migration"
+        )

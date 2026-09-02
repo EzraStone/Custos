@@ -22,7 +22,20 @@ agent's apparent spend and reach.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
+
+# Columns added after a table was first written, applied by ALTER on databases
+# that already exist. The schema below is applied with CREATE TABLE IF NOT
+# EXISTS, which does nothing to a table that is already there — so without this
+# list, every column added after a customer's first scan is invisible to their
+# database and the first write naming it fails during an upgrade.
+#
+# Additive only. A rename, a type change, or a new constraint is not a line
+# here; it is a migration someone writes by hand and thinks about.
+ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("scans", "scope_named", "INTEGER NOT NULL DEFAULT 0"),
+    ("scans", "scope_total", "INTEGER NOT NULL DEFAULT 0"),
+)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -59,7 +72,14 @@ CREATE TABLE IF NOT EXISTS scans (
     review_candidates   INTEGER NOT NULL DEFAULT 0,
     coverage            REAL    NOT NULL DEFAULT 0.0,
     truncated           INTEGER NOT NULL DEFAULT 0,
-    catalogue_revision  TEXT    NOT NULL DEFAULT ''
+    catalogue_revision  TEXT    NOT NULL DEFAULT '',
+
+    -- How much of this scan's approval scope could be named rather than shown
+    -- as an address. Recorded per scan because it is a property of the
+    -- account's tagging on that day, and because a scope that got less
+    -- readable is worth noticing.
+    scope_named         INTEGER NOT NULL DEFAULT 0,
+    scope_total         INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS scans_by_account ON scans (account_id, started_at DESC);
 

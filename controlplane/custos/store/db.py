@@ -15,7 +15,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .schema import SCHEMA, SCHEMA_VERSION
+from .schema import ADDED_COLUMNS, SCHEMA, SCHEMA_VERSION
 
 
 def now() -> datetime:
@@ -75,6 +75,7 @@ def connect(path: str | Path = ":memory:") -> sqlite3.Connection:
 def migrate(conn: sqlite3.Connection) -> int:
     """Apply the schema. Idempotent; returns the resulting version."""
     conn.executescript(SCHEMA)
+    _add_missing_columns(conn)
     row = conn.execute("SELECT MAX(version) AS v FROM schema_version").fetchone()
     current = row["v"] if row and row["v"] is not None else 0
     if current < SCHEMA_VERSION:
@@ -83,6 +84,27 @@ def migrate(conn: sqlite3.Connection) -> int:
             (SCHEMA_VERSION, iso(now())),
         )
     return SCHEMA_VERSION
+
+
+def _add_missing_columns(conn: sqlite3.Connection) -> None:
+    """Bring an existing database up to the current column set.
+
+    The schema is applied with CREATE TABLE IF NOT EXISTS, which does exactly
+    nothing to a table that already exists. Every column added after a database
+    was first created is therefore invisible to it, and the first write naming
+    that column fails at runtime — on a customer's control plane, during an
+    upgrade, with their register already in the file.
+
+    ADDED_COLUMNS is the list of every column added since the schema was first
+    written. Additive only: SQLite can add a nullable column with a default to
+    an existing table cheaply and safely, and anything that is not that — a
+    rename, a type change, a constraint — needs a real migration written by
+    hand rather than a line in this list.
+    """
+    for table, column, definition in ADDED_COLUMNS:
+        existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 def open_database(path: str | Path = ":memory:") -> sqlite3.Connection:
