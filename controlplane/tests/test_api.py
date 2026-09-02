@@ -632,3 +632,33 @@ def test_scans_report_how_readable_the_scope_was(client):
     # is no unreadable scope on a scan with no destinations, and warning about
     # one would be the empty-read-as-full-coverage mistake in reverse.
     assert scan["scope_readable"] == 1.0
+
+
+def test_drift_on_an_agent_with_no_history_is_empty_not_an_error(client, realistic_payload):
+    agents = _ingest_real_batch(client, realistic_payload)
+    r = client.get(f"/v1/agents/{agents[0]['id']}/drift", headers=AUTH)
+    assert r.status_code == 200
+
+    # A new finding having no baseline is its normal state, not a failure.
+    body = r.json()
+    assert body["drift"] == []
+    assert body["baseline"]["established"] is False
+    assert body["observations"] == 1
+
+
+def test_drift_says_whether_the_baseline_means_anything(client, realistic_payload):
+    """A caller showing drift from an unestablished baseline is showing noise
+    with a confident label on it, so the endpoint says which it is."""
+    agents = _ingest_real_batch(client, realistic_payload)
+    body = client.get(f"/v1/agents/{agents[0]['id']}/drift", headers=AUTH).json()
+    assert "established" in body["baseline"]
+    assert isinstance(body["baseline"]["tools"], list)
+
+
+def test_drift_needs_a_credential(client):
+    assert client.get("/v1/agents/agt_whatever/drift").status_code == 401
+
+
+def test_drift_on_an_unknown_agent_is_404(client):
+    r = client.get("/v1/agents/agt_nope/drift", headers=AUTH)
+    assert r.status_code == 404

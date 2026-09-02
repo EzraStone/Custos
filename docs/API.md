@@ -185,6 +185,34 @@ endpoint. There is one door and this is not it.
 
 Retiring revokes any existing grant.
 
+## `GET /v1/agents/{id}/drift`
+
+How one agent's behaviour compares with its own history.
+
+```json
+{
+  "agent_id": "agt_...",
+  "observations": 14,
+  "drift": [
+    { "kind": "new_tool", "observed_at": "2026-08-20T09:00:00+00:00",
+      "question": "finance-close reached rds 10.0.9.45 for the first time. Is that expected?",
+      "detail": "finance-close reached rds 10.0.9.45 for the first time" }
+  ],
+  "baseline": { "tools": ["billing-api 10.0.4.21"], "observations": 13, "established": true }
+}
+```
+
+Per agent rather than per account. Drift is a question put to one workload's
+owner, and an account-wide list of those is a list nobody owns.
+
+`question` is the phrasing to show. Every drift finding is put as a question
+because a question gets answered and an accusation gets argued with.
+
+`baseline.established` says whether there is enough history for any of this to
+mean something. A client that renders drift from an unestablished baseline is
+showing noise with a confident label on it. An agent seen once has no baseline
+and returns an empty list — the normal state of a new finding, not an error.
+
 ## `GET /v1/agents/{id}/audit`
 
 Every status change with the actor who made it, oldest first. This is the

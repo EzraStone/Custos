@@ -293,6 +293,54 @@ def create_app(
             ],
         }
 
+    @app.get("/v1/agents/{agent_id}/drift")
+    def get_drift(agent_id: str, principal: Auth) -> dict:
+        """How this agent's behaviour compares with its own history.
+
+        Per agent rather than per account. Drift is a question put to one
+        workload's owner — "it started reaching something new, is that
+        expected" — and an account-wide list of those is a list nobody owns.
+
+        A baseline needs history. An agent seen once has none, which is
+        reported as an empty list rather than as an error: it is the normal
+        state of a new finding, not a failure to answer.
+        """
+        from ..baseline import detect_from_history
+
+        agents = AgentStore(app.state.db)
+        existing = agents.get(agent_id)
+        if existing is None or not principal.covers(existing.identity.account_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no such agent")
+
+        scans = ScanStore(app.state.db)
+        history = scans.observation_history(agent_id)
+        baseline, drift = detect_from_history(agent_id, history)
+
+        return {
+            "agent_id": agent_id,
+            "observations": len(history),
+            "drift": [
+                {
+                    "kind": str(d.kind),
+                    "observed_at": _iso(d.observed_at),
+                    # `question` rather than `detail`: every drift finding is
+                    # phrased as a question to the workload's owner, because a
+                    # question gets answered and an accusation gets argued with.
+                    "question": d.question,
+                    "detail": d.detail,
+                }
+                for d in sorted(drift, key=lambda d: (d.severity, str(d.kind)))
+            ],
+            "baseline": {
+                "tools": sorted(baseline.tool_set),
+                "observations": baseline.observations,
+                # Whether there is enough history for drift to mean anything.
+                # A caller showing drift from an unestablished baseline is
+                # showing noise with a confident label on it.
+                "established": baseline.established,
+            },
+        }
+
     @app.get("/v1/diff")
     def get_diff(principal: Auth, account: str | None = None) -> dict:
         """What changed between the two most recent scans.
