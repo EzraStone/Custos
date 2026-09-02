@@ -11,6 +11,16 @@ import { NO_FILTERS, isFiltered, type FilterState } from "../filters";
  */
 const RADII: (BlastRadius | "all")[] = ["all", "destructive", "write", "read"];
 
+// Only the statuses an agent in the register can actually be in. Listing every
+// value the server might send would put chips on the page that match nothing.
+const STATUSES: { value: string; label: string }[] = [
+  { value: "all", label: "Any status" },
+  { value: "discovered", label: "Discovered" },
+  { value: "pending_review", label: "For review" },
+  { value: "sanctioned", label: "Sanctioned" },
+  { value: "retired", label: "Retired" },
+];
+
 export function Filters({
   value,
   onChange,
@@ -42,6 +52,19 @@ export function Filters({
         >
           Unattributed
         </button>
+      </div>
+
+      <div className="radios" role="group" aria-label="Filter by status">
+        {STATUSES.map((status) => (
+          <button
+            key={status.value}
+            className={value.status === status.value ? "chip on" : "chip"}
+            aria-pressed={value.status === status.value}
+            onClick={() => onChange({ ...value, status: status.value })}
+          >
+            {status.label}
+          </button>
+        ))}
       </div>
 
       <label className="search">

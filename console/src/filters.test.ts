@@ -85,7 +85,11 @@ describe("unattributed only", () => {
 
 describe("combining filters", () => {
   it("requires all of them", () => {
-    const f = { radius: "destructive" as const, query: "finance", unattributedOnly: false };
+    const f = {
+      ...NO_FILTERS,
+      radius: "destructive" as const,
+      query: "finance",
+    };
     expect(matches(agent({ blast_radius: "destructive" }), f)).toBe(true);
     expect(matches(agent({ blast_radius: "read" }), f)).toBe(false);
     expect(
@@ -102,5 +106,25 @@ describe("combining filters", () => {
         f,
       ),
     ).toBe(false);
+  });
+});
+
+describe("filtering by status", () => {
+  it("keeps only the matching status", () => {
+    const f = { ...NO_FILTERS, status: "retired" };
+    expect(matches(agent({ status: "retired" }), f)).toBe(true);
+    expect(matches(agent({ status: "discovered" }), f)).toBe(false);
+  });
+
+  it("separates the review queue from the untouched one", () => {
+    // Both are unsanctioned. An agent someone flagged for review is a
+    // different queue from one nobody has looked at yet.
+    const f = { ...NO_FILTERS, status: "pending_review" };
+    expect(matches(agent({ status: "pending_review" }), f)).toBe(true);
+    expect(matches(agent({ status: "discovered" }), f)).toBe(false);
+  });
+
+  it("counts as filtering", () => {
+    expect(isFiltered({ ...NO_FILTERS, status: "retired" })).toBe(true);
   });
 });

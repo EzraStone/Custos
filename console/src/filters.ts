@@ -15,18 +15,32 @@ import type { Agent, BlastRadius } from "./api/types";
  */
 export interface FilterState {
   radius: BlastRadius | "all";
+  /**
+   * An agent's status, or "all".
+   *
+   * Useful in both views. The register mixes four statuses once anything has
+   * been retired, and even the unsanctioned list holds two — an agent someone
+   * flagged for review is a different queue from one nobody has looked at.
+   */
+  status: string;
   query: string;
   unattributedOnly: boolean;
 }
 
 export const NO_FILTERS: FilterState = {
   radius: "all",
+  status: "all",
   query: "",
   unattributedOnly: false,
 };
 
 export function isFiltered(f: FilterState): boolean {
-  return f.radius !== "all" || f.query.trim() !== "" || f.unattributedOnly;
+  return (
+    f.radius !== "all"
+    || f.status !== "all"
+    || f.query.trim() !== ""
+    || f.unattributedOnly
+  );
 }
 
 /**
@@ -39,6 +53,7 @@ export function isFiltered(f: FilterState): boolean {
  */
 export function matches(agent: Agent, f: FilterState): boolean {
   if (f.radius !== "all" && agent.blast_radius !== f.radius) return false;
+  if (f.status !== "all" && agent.status !== f.status) return false;
   if (f.unattributedOnly && agent.attributed) return false;
 
   const query = f.query.trim().toLowerCase();
