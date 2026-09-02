@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+
 import { RADIUS_LABEL, type BlastRadius } from "../api/types";
 import { NO_FILTERS, isFiltered, type FilterState } from "../filters";
 
@@ -32,6 +34,28 @@ export function Filters({
   showing: number;
   total: number;
 }) {
+  const search = useRef<HTMLInputElement>(null);
+
+  // "/" to search, the convention everywhere a list is triaged. Someone
+  // working through forty findings should not have to reach for the mouse to
+  // look one up.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+      const active = document.activeElement;
+      // Not while they are typing somewhere else — a reason field, or the
+      // search box itself, where "/" is a character rather than a command.
+      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+        return;
+      }
+      event.preventDefault();
+      search.current?.focus();
+      search.current?.select();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <div className="filters">
       <div className="radios" role="group" aria-label="Filter by blast radius">
@@ -70,10 +94,20 @@ export function Filters({
       <label className="search">
         <span className="visually-hidden">Search the register</span>
         <input
+          ref={search}
           type="search"
           value={value.query}
-          placeholder="role, team, or something it reaches"
+          placeholder="role, team, or something it reaches   ( / )"
           onChange={(event) => onChange({ ...value, query: event.target.value })}
+          onKeyDown={(event) => {
+            // Escape clears the search rather than only blurring it. A box
+            // that looks empty because focus left it, while the list is still
+            // filtered, is the shape of "the account is clean".
+            if (event.key === "Escape") {
+              onChange({ ...value, query: "" });
+              event.currentTarget.blur();
+            }
+          }}
         />
       </label>
 

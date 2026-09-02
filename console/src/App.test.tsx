@@ -776,3 +776,43 @@ describe("opening the report", () => {
     expect(open).not.toHaveBeenCalled();
   });
 });
+
+describe("keyboard", () => {
+  async function loaded() {
+    install({ agents: [agent({ id: "a1", principal: "arn:aws:iam::1:role/ops" })] });
+    session.save({ token: "tok-abc", operator: "ezra@custos.dev" });
+    render(<App />);
+    await screen.findByText("ops");
+  }
+
+  it("focuses the search on /", async () => {
+    await loaded();
+    await userEvent.keyboard("/");
+    expect(screen.getByRole("searchbox")).toHaveFocus();
+  });
+
+  it("does not steal / from a field someone is typing in", async () => {
+    // A reason field can legitimately contain a slash — a path, a ticket
+    // reference — and losing focus mid-sentence is worse than no shortcut.
+    await loaded();
+    await userEvent.click(screen.getByRole("button", { name: /^retire$/i }));
+    const reason = await screen.findByLabelText(/why/i);
+    await userEvent.type(reason, "moved to k8s/prod");
+
+    expect(reason).toHaveFocus();
+    expect(reason).toHaveValue("moved to k8s/prod");
+  });
+
+  it("clears the search on escape rather than only blurring it", async () => {
+    // A box that looks empty because focus left it, while the list is still
+    // filtered, is the shape of "the account is clean".
+    await loaded();
+    const box = screen.getByRole("searchbox");
+    await userEvent.type(box, "nothing-matches-this");
+    expect(await screen.findByText(/no agents match/i)).toBeInTheDocument();
+
+    await userEvent.keyboard("{Escape}");
+    expect(box).toHaveValue("");
+    expect(screen.getByText("ops")).toBeInTheDocument();
+  });
+});
