@@ -220,6 +220,20 @@ answer to "why is this agent sanctioned", and it has no retention window.
 
 ---
 
+## `GET /v1/report`
+
+The current register as the HTML report a customer reads. Same document
+`custos scan --out` writes, rendered from what is in the database now rather
+than from one scan.
+
+Served rather than only written to a file because from the second scan onward
+someone wants a link rather than an attachment, and an attachment that has to
+be re-sent every week is a report that stops being sent.
+
+It needs the credential in a header like every other route, so it cannot be
+opened by pasting the URL into a browser. The console fetches it and opens the
+result; a client wanting a shareable artefact should save the response.
+
 ## Errors
 
 Standard FastAPI shape: `{"detail": "..."}`. Failures are deliberately
