@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
@@ -26,7 +28,34 @@ import (
 // discovers nothing it was not already looking at (SEC-16).
 type DestinationResolver struct {
 	API awsread.NetworkAPI
+
+	// TTL is how long a resolved name is reused before being asked again.
+	// Zero means DefaultTTL; negative disables the cache entirely, which is
+	// what someone debugging why a service is not being named wants.
+	//
+	// In daemon mode the same internal services are reached every window, and
+	// what an ENI is called changes on the order of never. Without a cache the
+	// collector re-asks AWS the same question hourly, forever, on an API whose
+	// rate limit it shares with the customer's own tooling. With one, a steady
+	// account costs a handful of calls a day.
+	TTL time.Duration
+
+	mu    sync.Mutex
+	cache map[string]cached
 }
+
+type cached struct {
+	destination wire.Destination
+	at          time.Time
+	// found records that AWS was asked and had nothing to say. Cached like any
+	// other answer: an untagged ENI is the common case, and re-asking about
+	// every unnamed address every window is most of the cost this avoids.
+	found bool
+}
+
+// DefaultTTL is long enough that a steady account costs almost nothing and
+// short enough that tagging an ENI shows up in the same working day.
+const DefaultTTL = 6 * time.Hour
 
 // describeChunk is the number of addresses per DescribeNetworkInterfaces call.
 // The filter list is capped, and one call per address would be thousands of
@@ -44,26 +73,83 @@ func (r *DestinationResolver) Resolve(ctx context.Context, addresses []string) (
 		return nil, nil
 	}
 
-	var out []wire.Destination
-	for start := 0; start < len(internal); start += describeChunk {
-		end := min(start+describeChunk, len(internal))
+	out, ask := r.fromCache(internal)
+	for start := 0; start < len(ask); start += describeChunk {
+		end := min(start+describeChunk, len(ask))
+		batch := ask[start:end]
 
-		ifaces, err := r.describeByAddress(ctx, internal[start:end])
+		ifaces, err := r.describeByAddress(ctx, batch)
 		if err != nil {
 			// Naming is an improvement on the report, not a precondition for
-			// it. A failure here must not cost the customer the scan.
+			// it. A failure here must not cost the customer the scan, and what
+			// was already resolved is still worth returning.
+			sortByAddress(out)
 			return out, err
 		}
+
+		resolved := map[string]wire.Destination{}
 		for _, iface := range ifaces {
+			name, kind := nameOf(iface)
+			if name == "" {
+				continue
+			}
 			for _, address := range privateAddresses(iface) {
-				if name, kind := nameOf(iface); name != "" {
-					out = append(out, wire.Destination{Address: address, Name: name, Kind: kind})
-				}
+				resolved[address] = wire.Destination{Address: address, Name: name, Kind: kind}
+			}
+		}
+
+		// Every address in the batch gets a cache entry, including the ones
+		// AWS had nothing to say about. Those are the common case and would
+		// otherwise be re-asked every window forever.
+		for _, address := range batch {
+			d, ok := resolved[address]
+			r.remember(address, d, ok)
+			if ok {
+				out = append(out, d)
 			}
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Address < out[j].Address })
+	sortByAddress(out)
 	return out, nil
+}
+
+func sortByAddress(d []wire.Destination) {
+	sort.Slice(d, func(i, j int) bool { return d[i].Address < d[j].Address })
+}
+
+// fromCache splits addresses into what is already known and what to ask about.
+func (r *DestinationResolver) fromCache(addresses []string) (known []wire.Destination, ask []string) {
+	if r.TTL < 0 {
+		return nil, addresses
+	}
+	ttl := r.TTL
+	if ttl == 0 {
+		ttl = DefaultTTL
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := time.Now()
+	for _, address := range addresses {
+		entry, ok := r.cache[address]
+		if !ok || now.Sub(entry.at) > ttl {
+			ask = append(ask, address)
+			continue
+		}
+		if entry.found {
+			known = append(known, entry.destination)
+		}
+	}
+	return known, ask
+}
+
+func (r *DestinationResolver) remember(address string, d wire.Destination, found bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.cache == nil {
+		r.cache = map[string]cached{}
+	}
+	r.cache[address] = cached{destination: d, at: time.Now(), found: found}
 }
 
 func (r *DestinationResolver) describeByAddress(ctx context.Context, addresses []string) ([]ec2types.NetworkInterface, error) {

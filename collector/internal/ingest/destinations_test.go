@@ -3,6 +3,7 @@ package ingest
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
@@ -150,5 +151,100 @@ func TestBothEndsOfAConversationAreAskedAbout(t *testing.T) {
 		if a == "10.0.1.5" {
 			t.Fatal("collected our own address as a peer")
 		}
+	}
+}
+
+// TestASecondWindowAsksAWSNothing: in daemon mode the same internal services
+// are reached every hour, and what an ENI is called changes on the order of
+// never. Without a cache the collector re-asks the same question forever, on
+// an API whose rate limit it shares with the customer's own tooling.
+func TestASecondWindowAsksAWSNothing(t *testing.T) {
+	fake := &fakeEC2{interfaces: []ec2types.NetworkInterface{
+		destEni("10.0.4.23", "ELB app/billing-api/50dc"),
+	}}
+	r := &DestinationResolver{API: fake}
+
+	first, err := r.Resolve(context.Background(), []string{"10.0.4.23"})
+	if err != nil || len(first) != 1 {
+		t.Fatalf("first resolve: %v, %v", first, err)
+	}
+	calls := fake.describes
+
+	second, err := r.Resolve(context.Background(), []string{"10.0.4.23"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fake.describes != calls {
+		t.Fatalf("asked again: %d calls became %d", calls, fake.describes)
+	}
+	if len(second) != 1 || second[0].Name != "billing-api" {
+		t.Fatalf("cache returned %v", second)
+	}
+}
+
+// TestAnUnnamedAddressIsAlsoRemembered: untagged ENIs are the common case, and
+// re-asking about every one of them every window is most of the cost the cache
+// exists to avoid.
+func TestAnUnnamedAddressIsAlsoRemembered(t *testing.T) {
+	fake := &fakeEC2{interfaces: []ec2types.NetworkInterface{
+		destEni("10.0.4.23", "somebody's note about an incident"),
+	}}
+	r := &DestinationResolver{API: fake}
+
+	if _, err := r.Resolve(context.Background(), []string{"10.0.4.23"}); err != nil {
+		t.Fatal(err)
+	}
+	calls := fake.describes
+	if _, err := r.Resolve(context.Background(), []string{"10.0.4.23"}); err != nil {
+		t.Fatal(err)
+	}
+	if fake.describes != calls {
+		t.Fatalf("re-asked about an address it could not name: %d -> %d", calls, fake.describes)
+	}
+}
+
+// TestTheCacheCanBeTurnedOff: a negative TTL disables it, which is what
+// someone debugging why a service is not being named wants — and it is how
+// this test avoids sleeping to prove an entry expires.
+func TestTheCacheCanBeTurnedOff(t *testing.T) {
+	fake := &fakeEC2{interfaces: []ec2types.NetworkInterface{
+		destEni("10.0.4.23", "ELB app/billing-api/50dc"),
+	}}
+	r := &DestinationResolver{API: fake, TTL: -time.Second}
+
+	if _, err := r.Resolve(context.Background(), []string{"10.0.4.23"}); err != nil {
+		t.Fatal(err)
+	}
+	calls := fake.describes
+	if _, err := r.Resolve(context.Background(), []string{"10.0.4.23"}); err != nil {
+		t.Fatal(err)
+	}
+	if fake.describes == calls {
+		t.Fatal("a disabled cache was still used")
+	}
+}
+
+// TestOnlyTheUnknownAddressesAreAsked: a window that reaches one new service
+// alongside twenty known ones should cost one address, not twenty-one.
+func TestOnlyTheUnknownAddressesAreAsked(t *testing.T) {
+	fake := &fakeEC2{interfaces: []ec2types.NetworkInterface{
+		destEni("10.0.4.23", "ELB app/billing-api/50dc"),
+		destEni("10.0.4.24", "ELB app/orders-api/60ef"),
+	}}
+	r := &DestinationResolver{API: fake}
+
+	if _, err := r.Resolve(context.Background(), []string{"10.0.4.23"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := r.Resolve(context.Background(), []string{"10.0.4.23", "10.0.4.24"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Both come back; only one was asked about the second time.
+	if len(got) != 2 {
+		t.Fatalf("lost a cached entry: %v", got)
+	}
+	if got[0].Address != "10.0.4.23" || got[1].Address != "10.0.4.24" {
+		t.Fatalf("cached and fresh results were not merged in order: %v", got)
 	}
 }
