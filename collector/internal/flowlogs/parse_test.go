@@ -6,7 +6,7 @@ import (
 )
 
 const okLine = "5 447120043318 eni-01a2b3c4d 10.0.20.11 160.79.104.10 43112 443 6 214 286432 " +
-	"1786370400 1786370460 ACCEPT OK vpc-0a1b2c3d subnet-0ab12345 egress - 18"
+	"1786370400 1786370460 ACCEPT OK vpc-0a1b2c3d subnet-0ab12345 egress - - 18"
 
 func TestParsesAWellFormedLine(t *testing.T) {
 	records, stats, err := Parse(strings.NewReader(okLine))
@@ -29,13 +29,41 @@ func TestParsesAWellFormedLine(t *testing.T) {
 }
 
 func TestAwsServiceAnnotationIsKept(t *testing.T) {
-	line := strings.Replace(okLine, " - 18", " BEDROCK 18", 1)
+	line := strings.Replace(okLine, " - - 18", " - BEDROCK 18", 1)
 	records, _, err := Parse(strings.NewReader(line))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if records[0].DstAWSService != "BEDROCK" {
+	if records[0].DstAWSService != "BEDROCK" || records[0].SrcAWSService != "" {
 		t.Fatalf("lost the service annotation: %+v", records[0])
+	}
+}
+
+// TestTheSourceAnnotationIsKept: on the return leg of a conversation with an
+// AWS service the service is named on the source, not the destination. A
+// collector that reads only the destination annotation sees half of every AWS
+// conversation as traffic to an unrecognised address.
+func TestTheSourceAnnotationIsKept(t *testing.T) {
+	line := strings.Replace(okLine, " egress - - 18", " ingress S3 - 18", 1)
+	records, _, err := Parse(strings.NewReader(line))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if records[0].SrcAWSService != "S3" || records[0].DstAWSService != "" {
+		t.Fatalf("lost the source annotation: %+v", records[0])
+	}
+}
+
+// TestTheTwoAnnotationsDoNotSwap: they are adjacent fields carrying the same
+// kind of value, so a transposition would be invisible in every other test.
+func TestTheTwoAnnotationsDoNotSwap(t *testing.T) {
+	line := strings.Replace(okLine, " - - 18", " ELASTICACHE BEDROCK 18", 1)
+	records, _, err := Parse(strings.NewReader(line))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if records[0].SrcAWSService != "ELASTICACHE" || records[0].DstAWSService != "BEDROCK" {
+		t.Fatalf("annotations transposed: %+v", records[0])
 	}
 }
 

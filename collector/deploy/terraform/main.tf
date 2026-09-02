@@ -55,7 +55,7 @@ variable "create_flow_logs" {
     Whether to create a flow log with the format Custos requires.
 
     Set false if you already have flow logs; Custos reads whatever you have,
-    but coverage of the tcp-flags and pkt-dst-aws-service fields improves both
+    but coverage of the tcp-flags and the two aws-service fields improves both
     accuracy and the ability to attribute a finding.
   EOT
   type        = bool

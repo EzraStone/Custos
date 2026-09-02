@@ -63,7 +63,7 @@ func TestDryRunPrintsTheBatchAndSendsNothing(t *testing.T) {
 	dir := t.TempDir()
 	logPath := dir + "/flow.log"
 	line := "5 447120043318 eni-01a2b3c4d 10.0.20.11 160.79.104.10 43112 443 6 214 286432 " +
-		"1786370400 1786370460 ACCEPT OK vpc-0a1b2c3d subnet-0ab12345 egress - 18\n"
+		"1786370400 1786370460 ACCEPT OK vpc-0a1b2c3d subnet-0ab12345 egress - - 18\n"
 	if err := os.WriteFile(logPath, []byte(line), 0o600); err != nil {
 		t.Fatal(err)
 	}

@@ -24,9 +24,9 @@ import (
 const LogFormat = "${version} ${account-id} ${interface-id} ${srcaddr} ${dstaddr} " +
 	"${srcport} ${dstport} ${protocol} ${packets} ${bytes} ${start} ${end} " +
 	"${action} ${log-status} ${vpc-id} ${subnet-id} ${flow-direction} " +
-	"${pkt-dst-aws-service} ${tcp-flags}"
+	"${pkt-src-aws-service} ${pkt-dst-aws-service} ${tcp-flags}"
 
-const fieldCount = 19
+const fieldCount = 20
 
 // Stats describes what a parse run saw. Reported to the customer and carried
 // into the scan report, because coverage is part of a finding's meaning.
@@ -102,7 +102,7 @@ func parseLine(line string) (wire.FlowRecord, string, error) {
 	}
 
 	ints := make([]int64, 0, 8)
-	for _, idx := range []int{5, 6, 7, 8, 9, 10, 11, 18} {
+	for _, idx := range []int{5, 6, 7, 8, 9, 10, 11, 19} {
 		v, err := strconv.ParseInt(f[idx], 10, 64)
 		if err != nil {
 			return wire.FlowRecord{}, "", err
@@ -110,9 +110,13 @@ func parseLine(line string) (wire.FlowRecord, string, error) {
 		ints = append(ints, v)
 	}
 
-	service := f[17]
-	if service == "-" {
-		service = ""
+	// AWS writes "-" for a field it has no value for.
+	srcService, dstService := f[17], f[18]
+	if srcService == "-" {
+		srcService = ""
+	}
+	if dstService == "-" {
+		dstService = ""
 	}
 
 	return wire.FlowRecord{
@@ -132,7 +136,8 @@ func parseLine(line string) (wire.FlowRecord, string, error) {
 		VpcID:         f[14],
 		SubnetID:      f[15],
 		Direction:     wire.Direction(f[16]),
-		DstAWSService: service,
+		SrcAWSService: srcService,
+		DstAWSService: dstService,
 		TCPFlags:      int(ints[7]),
 	}, "OK", nil
 }

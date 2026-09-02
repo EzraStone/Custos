@@ -18,7 +18,7 @@ var allowedFields = map[string]map[string]bool{
 		"SrcPort": true, "DstPort": true, "Protocol": true, "Packets": true,
 		"Bytes": true, "Start": true, "End": true, "Action": true,
 		"LogStatus": true, "VpcID": true, "SubnetID": true, "Direction": true,
-		"DstAWSService": true, "TCPFlags": true,
+		"SrcAWSService": true, "DstAWSService": true, "TCPFlags": true,
 	},
 	"InboundRequest": {
 		"At": true, "Target": true, "SentBytes": true, "ReceivedBytes": true,

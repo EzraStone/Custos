@@ -24,24 +24,33 @@ const (
 
 // FlowRecord is one aggregated network flow. Byte counts and timings only.
 type FlowRecord struct {
-	AccountID     string    `json:"account_id"`
-	InterfaceID   string    `json:"interface_id"`
-	SrcAddr       string    `json:"srcaddr"`
-	DstAddr       string    `json:"dstaddr"`
-	SrcPort       int       `json:"srcport"`
-	DstPort       int       `json:"dstport"`
-	Protocol      int       `json:"protocol"`
-	Packets       int64     `json:"packets"`
-	Bytes         int64     `json:"bytes"`
-	Start         time.Time `json:"start"`
-	End           time.Time `json:"end"`
-	Action        string    `json:"action"`
-	LogStatus     string    `json:"log_status"`
-	VpcID         string    `json:"vpc_id"`
-	SubnetID      string    `json:"subnet_id"`
-	Direction     Direction `json:"direction"`
-	DstAWSService string    `json:"dst_aws_service"`
-	TCPFlags      int       `json:"tcp_flags"`
+	AccountID   string    `json:"account_id"`
+	InterfaceID string    `json:"interface_id"`
+	SrcAddr     string    `json:"srcaddr"`
+	DstAddr     string    `json:"dstaddr"`
+	SrcPort     int       `json:"srcport"`
+	DstPort     int       `json:"dstport"`
+	Protocol    int       `json:"protocol"`
+	Packets     int64     `json:"packets"`
+	Bytes       int64     `json:"bytes"`
+	Start       time.Time `json:"start"`
+	End         time.Time `json:"end"`
+	Action      string    `json:"action"`
+	LogStatus   string    `json:"log_status"`
+	VpcID       string    `json:"vpc_id"`
+	SubnetID    string    `json:"subnet_id"`
+	Direction   Direction `json:"direction"`
+
+	// SrcAWSService and DstAWSService name the AWS service at each end, when
+	// AWS recognises one. Both are needed because each describes its own end:
+	// on a request to S3 the service is on the destination, and on the reply
+	// it is on the source. Reading only the destination annotation means the
+	// return leg of every AWS conversation arrives unattributed, and half of
+	// what a workload reaches looks like traffic to an unknown address.
+	SrcAWSService string `json:"src_aws_service"`
+	DstAWSService string `json:"dst_aws_service"`
+
+	TCPFlags int `json:"tcp_flags"`
 }
 
 // InboundRequest is one load balancer access log line, reduced to timing and

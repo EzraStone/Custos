@@ -11,7 +11,8 @@ locals {
     "$${version}", "$${account-id}", "$${interface-id}", "$${srcaddr}", "$${dstaddr}",
     "$${srcport}", "$${dstport}", "$${protocol}", "$${packets}", "$${bytes}",
     "$${start}", "$${end}", "$${action}", "$${log-status}", "$${vpc-id}",
-    "$${subnet-id}", "$${flow-direction}", "$${pkt-dst-aws-service}", "$${tcp-flags}",
+    "$${subnet-id}", "$${flow-direction}",
+    "$${pkt-src-aws-service}", "$${pkt-dst-aws-service}", "$${tcp-flags}",
   ])
 }
 
