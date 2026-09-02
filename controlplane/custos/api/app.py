@@ -438,6 +438,8 @@ def create_app(
         coverage = Coverage(
             parsed_fraction=latest.coverage if latest else 1.0,
             truncated=latest.truncated if latest else False,
+            scope_named=latest.scope_named if latest else 0,
+            scope_total=latest.scope_total if latest else 0,
         ) if latest else None
 
         diff = ScanDiff()

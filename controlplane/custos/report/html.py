@@ -222,10 +222,41 @@ class Coverage:
     parsed_fraction: float = 1.0
     truncated: bool = False
     skipped_records: int = 0
+    scope_named: int = 0
+    scope_total: int = 0
 
     @property
     def complete(self) -> bool:
         return self.parsed_fraction >= 0.95 and not self.truncated and not self.skipped_records
+
+    @property
+    def scope_readable(self) -> float:
+        """Zero destinations is fully readable. There is no unreadable scope on
+        a scan that reached nothing internal."""
+        if self.scope_total <= 0:
+            return 1.0
+        return self.scope_named / self.scope_total
+
+
+def _scope_banner(coverage: Coverage | None) -> str:
+    """A separate banner, because it is a separate problem.
+
+    Incomplete coverage says findings may be missing. An unreadable scope says
+    every finding below is present and correct, and the approval decision on
+    each one is a list of IP addresses. Folding the two together would let a
+    reader discharge both with one glance at a caveat.
+    """
+    if coverage is None or coverage.scope_total <= 0 or coverage.scope_readable >= 0.5:
+        return ""
+
+    return f"""
+<div class="banner">
+  <span class="tag">Scope is mostly addresses</span>
+  <p>{coverage.scope_named} of {coverage.scope_total} internal destinations
+  could be named. The findings below are unaffected — but approving one means
+  approving a list of IP addresses rather than a list of services. Tagging the
+  network interfaces behind those services is what makes this readable.</p>
+</div>"""
 
 
 def _coverage_banner(coverage: Coverage | None) -> str:
@@ -283,6 +314,7 @@ def render(
 </head><body><main class="sheet">
 
 {_coverage_banner(coverage)}
+{_scope_banner(coverage)}
 
 <header class="masthead">
   <p class="gloss">Agent discovery scan</p>

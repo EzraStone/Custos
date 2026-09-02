@@ -149,7 +149,7 @@ def to_scan_input(batch: Batch, interval: timedelta = DEFAULT_INTERVAL) -> ScanI
     )
 
 
-def _coverage(batch: Batch) -> Coverage:
+def _coverage(batch: Batch, scope: tuple[int, int] = (0, 0)) -> Coverage:
     """Build the report's coverage summary from what the collector reported.
 
     A batch carrying no collection statistics gets the default, which renders
@@ -159,11 +159,16 @@ def _coverage(batch: Batch) -> Coverage:
     """
     stats = batch.collection
     if stats.lines_read <= 0:
-        return Coverage()
+        # Unknown coverage, but the scope figures are still known: they come
+        # from what the flow logs contained, not from what the collector said
+        # about its own reading.
+        return Coverage(scope_named=scope[0], scope_total=scope[1])
     return Coverage(
         parsed_fraction=stats.parsed_fraction,
         truncated=stats.truncated,
         skipped_records=stats.records_skipped,
+        scope_named=scope[0],
+        scope_total=scope[1],
     )
 
 
@@ -300,7 +305,7 @@ def ingest(
     return IngestResult(
         batch=record, scan_id=scan_id, result=result,
         coverage_note=_coverage_note(batch, result),
-        coverage=_coverage(batch),
+        coverage=_coverage(batch, (named, total)),
         diff=diff, drift=drift,
     )
 

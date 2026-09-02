@@ -249,3 +249,44 @@ def test_the_banner_says_what_incompleteness_means():
 
     page = prose(render(result([agent()]), "acme", T0, coverage=Coverage(truncated=True)))
     assert "an absence of findings means less here" in page
+
+
+def test_an_unreadable_scope_gets_its_own_banner():
+    """Separate from the coverage banner, because it is a separate problem.
+
+    Incomplete coverage says findings may be missing. An unreadable scope says
+    every finding is present and correct and the approval decision on each one
+    is a list of IP addresses. Folding them together would let a reader
+    discharge both with one glance.
+    """
+    from custos.report.html import Coverage
+
+    html = render(
+        result(), "447120043318", datetime(2026, 8, 20, tzinfo=UTC),
+        coverage=Coverage(scope_named=1, scope_total=5),
+    )
+    assert "Scope is mostly addresses" in html
+    assert "1 of 5 internal destinations" in html
+    assert "findings below are unaffected" in html.lower() or "unaffected" in html
+
+
+def test_a_readable_scope_gets_no_banner():
+    from custos.report.html import Coverage
+
+    html = render(
+        result(), "447120043318", datetime(2026, 8, 20, tzinfo=UTC),
+        coverage=Coverage(scope_named=4, scope_total=5),
+    )
+    assert "Scope is mostly addresses" not in html
+
+
+def test_no_internal_destinations_is_not_an_unreadable_scope():
+    # A scan that reached nothing internal has no unreadable scope. Warning
+    # here would be the empty-read-as-full-coverage mistake in reverse.
+    from custos.report.html import Coverage
+
+    html = render(
+        result(), "447120043318", datetime(2026, 8, 20, tzinfo=UTC),
+        coverage=Coverage(scope_named=0, scope_total=0),
+    )
+    assert "Scope is mostly addresses" not in html
