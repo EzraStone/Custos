@@ -15,7 +15,7 @@ A console makes sanctioning easy. If sanctioning is easier than reading the
 evidence, the register becomes a rubber stamp and SEC-17 is upheld in code while
 being defeated in practice.
 
-So three things are deliberate and should not be optimised away:
+So these are deliberate and should not be optimised away:
 
 - **No bulk approve.** Forty agents is forty decisions. A button that approves
   them together is a button that approves them unread.
@@ -23,15 +23,41 @@ So three things are deliberate and should not be optimised away:
   finding's evidence has actually been opened.
 - **The scope is shown before it is granted.** An operator approving an agent is
   approving what it was seen doing, and the tools and data stores in that scope
-  are listed on the button's own dialog.
+  are listed on the button's own dialog — by name where one exists, and by
+  address where none does, because an invented name is worse than an honest
+  address.
+- **A filtered list always shows the total.** "1 agent" on its own is how
+  somebody concludes an account is nearly clean while looking at a third of it,
+  and an empty filtered list is worded so it cannot be read as an empty account.
+- **`sanctioned` is not in the status control.** There is one door to it, and a
+  dropdown containing it would be a second.
 
-The fourth is not a constraint but a consequence of the same reasoning:
+One more is not a constraint but a consequence of the same reasoning:
 **every finding carries its history**. Who sanctioned an agent and when is
 recorded whether or not anyone reads it, and a record nobody can read is a
 record nobody can check. The history section is where an operator finds out
 that the agent in front of them was approved last March by someone who has
 since left. It loads on open, because forty findings would otherwise be forty
 audit requests for history nobody asked to see.
+
+## What else is on a finding
+
+**Behaviour** compares an agent against its own history and puts what changed
+as a question — "it reached `rds 10.0.9.45` for the first time. Is that
+expected?" A question gets answered; an accusation gets argued with. Nothing is
+shown until there is enough history for the comparison to mean something,
+because drift over two observations is noise and a heading would give it the
+standing of a finding.
+
+**Retire** is the control that keeps the queue readable. A decommissioned
+workload nobody retires keeps surfacing as an unsanctioned finding forever, and
+a queue full of dead roles is a queue nobody reads — after which the real
+finding in the middle of it goes unread too. It asks for a reason, because a
+decision with no reason is one nobody can review later.
+
+Above the register, **what changed since the last scan**. That is the whole
+argument for scanning twice: a report repeating last week's findings verbatim
+gets skimmed the second time and deleted the third.
 
 ## Running it
 

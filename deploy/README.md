@@ -25,6 +25,7 @@ of it.
 | `CUSTOS_SLACK_WEBHOOK` | Optional. Findings go here as they are ingested. |
 | `CUSTOS_SIEM_WEBHOOK` | Optional. Every field of every finding, one request per scan. |
 | `CUSTOS_SIEM_HEADERS` | Optional. `X-Api-Key: secret, X-Tenant: acme`. |
+| `CUSTOS_CONSOLE_DIR` | Where the built console lives. The image sets this; a checkout finds `console/dist` on its own. |
 
 A token appearing against several accounts covers all of them, which is how one
 customer's fleet is expressed:
@@ -38,6 +39,26 @@ customer, and a token still cannot reach an account it was not issued for.
 
 An unconfigured control plane authenticates nobody. That is the correct
 direction for that failure to fall.
+
+## The console
+
+The image builds it and the control plane serves it at `/`, behind every API
+route — there is nothing else to deploy and no second origin, so no CORS to
+configure and no second place a credential has to be present.
+
+Give an operator their account's token and tell them to use their own name. The
+name is not a credential; it is what goes in the audit trail against every
+decision they make, and someone who types a service account name into that
+field has not been stopped by anything.
+
+Running from a checkout instead of the image, build it once:
+
+```
+make console        # emits console/dist
+```
+
+The control plane starts fine without it and serves the API alone. A missing
+build costs the console, not the service.
 
 ## Without Docker
 
