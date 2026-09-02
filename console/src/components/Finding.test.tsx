@@ -175,3 +175,54 @@ describe("a sanctioned agent", () => {
     expect(screen.getByText(/sanctioned by ezra@custos.dev/i)).toBeTruthy();
   });
 });
+
+describe("an agent that is not awaiting a decision", () => {
+  it("names who sanctioned it and when", () => {
+    render(
+      <Finding
+        agent={agent({
+          unsanctioned: false,
+          status: "sanctioned",
+          imprimatur: {
+            granted_by: "priya@custos.dev",
+            granted_at: "2026-03-14T09:30:00+00:00",
+            approved_tools: [],
+            approved_data: [],
+          },
+        })}
+        operator="ezra"
+        onGrant={vi.fn()}
+        onTransition={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/sanctioned by priya@custos.dev/i)).toBeInTheDocument();
+  });
+
+  it("does not claim a retired agent was sanctioned", () => {
+    // Retiring clears the imprimatur and takes the agent out of the
+    // unsanctioned set, so branching on that flag alone put a retired agent in
+    // the sanctioned branch with nobody to name: "Sanctioned by unknown".
+    render(
+      <Finding
+        agent={agent({ unsanctioned: false, status: "retired", imprimatur: null })}
+        operator="ezra"
+        onGrant={vi.fn()}
+        onTransition={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/sanctioned by/i)).toBeNull();
+    expect(screen.getByText(/^retired\./i)).toBeInTheDocument();
+  });
+
+  it("says so plainly when a sanctioned agent has no grant recorded", () => {
+    render(
+      <Finding
+        agent={agent({ unsanctioned: false, status: "sanctioned", imprimatur: null })}
+        operator="ezra"
+        onGrant={vi.fn()}
+        onTransition={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/no grant is recorded/i)).toBeInTheDocument();
+  });
+});

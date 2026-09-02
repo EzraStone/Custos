@@ -131,10 +131,7 @@ export function Finding({
             <span className="hint">{hint(operator, evidenceSeen)}</span>
           </>
         ) : (
-          <span className="hint">
-            Sanctioned by {agent.imprimatur?.granted_by ?? "unknown"}
-            {agent.imprimatur ? ` on ${formatDate(agent.imprimatur.granted_at)}` : ""}
-          </span>
+          <span className="hint">{standing(agent)}</span>
         )}
 
         <span className="spacer" />
@@ -172,6 +169,30 @@ export function Finding({
       </div>
     </article>
   );
+}
+
+/**
+ * What an agent that is not awaiting a decision is.
+ *
+ * Branching on `unsanctioned` alone said "Sanctioned by unknown" for a retired
+ * agent: retiring clears the imprimatur and takes the agent out of the
+ * unsanctioned set, so it fell into the sanctioned branch with nobody to name.
+ * Telling an operator that a decommissioned workload was approved by an
+ * unknown person is worse than saying nothing.
+ */
+function standing(agent: Agent): string {
+  if (agent.status === "retired") {
+    return "Retired. A later scan that sees this again will surface it as a new finding.";
+  }
+  if (!agent.imprimatur) {
+    // Sanctioned with no imprimatur should not be reachable — the grant is the
+    // only path to that status and it always records one — so say what is
+    // true rather than inventing an approver.
+    return "Sanctioned, but no grant is recorded against it.";
+  }
+  return `Sanctioned by ${agent.imprimatur.granted_by} on ${formatDate(
+    agent.imprimatur.granted_at,
+  )}`;
 }
 
 /**
