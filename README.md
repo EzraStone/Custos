@@ -137,7 +137,9 @@ IAM capability, and runs either once or on a schedule.
 | The API | [docs/API.md](docs/API.md) |
 | The console | [console/README.md](console/README.md) |
 
-Language choices and their reasoning: [docs/adr/0001-language-choices.md](docs/adr/0001-language-choices.md).
+Decisions with reasoning worth keeping:
+[0001 language choices](docs/adr/0001-language-choices.md),
+[0002 naming destinations](docs/adr/0002-naming-destinations.md).
 
 The collector is open source and everything else is not. That is a commercial
 decision rather than a philosophical one: it is the only component that runs
