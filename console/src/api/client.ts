@@ -104,6 +104,24 @@ export class Client {
     return this.request<RegisterResponse>(`/v1/register${suffix ? `?${suffix}` : ""}`);
   }
 
+  /**
+   * The account's report, as HTML.
+   *
+   * Fetched rather than linked. Every route needs the credential in a header,
+   * and a browser does not send one for an ordinary link — so a plain anchor
+   * would produce a 401 page and look like the report was gone.
+   */
+  async report(account?: string): Promise<string> {
+    const query = account ? `?account=${encodeURIComponent(account)}` : "";
+    const response = await this.doFetch(`${this.baseUrl}/v1/report${query}`, {
+      headers: { Authorization: `Bearer ${this.token}` },
+    });
+    if (!response.ok) {
+      throw new ApiError(response.status, await detail(response));
+    }
+    return response.text();
+  }
+
   /** What changed between the two most recent scans. */
   diff(account?: string): Promise<DiffResponse> {
     const query = account ? `?account=${encodeURIComponent(account)}` : "";

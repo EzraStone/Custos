@@ -38,6 +38,7 @@ interface Backend {
   truncated?: boolean;
   accounts?: string[];
   diff?: unknown;
+  reportStatus?: number;
   registerStatus?: number;
   registerDetail?: string;
   statusStatus?: number;
@@ -83,6 +84,16 @@ function backend(config: Backend = {}) {
         catalogue_revision: "2026-08-18",
         agents: config.agents ?? [agent()],
       });
+    }
+    if (url.startsWith("/v1/report")) {
+      if (config.reportStatus && config.reportStatus !== 200) {
+        return json(config.reportStatus, { detail: "no report" });
+      }
+      return Promise.resolve(
+        new Response("<html><body>the report</body></html>", {
+          status: 200, headers: { "Content-Type": "text/html" },
+        }),
+      );
     }
     if (url.startsWith("/v1/diff")) {
       return json(200, config.diff ?? {
@@ -715,5 +726,53 @@ describe("what a screen reader is told", () => {
     await waitFor(() =>
       expect(screen.getByRole("status")).toHaveTextContent(/could not load the register/i),
     );
+  });
+});
+
+describe("opening the report", () => {
+  async function signedIn(config: Backend = {}) {
+    const stub = install(config);
+    session.save({ token: "tok-abc", operator: "ezra@custos.dev" });
+    render(<App />);
+    await screen.findByText("finance-close");
+    return stub;
+  }
+
+  it("fetches it with the credential rather than linking to it", async () => {
+    // A browser sends no Authorization header for an anchor, so a plain link
+    // would render a 401 page and read as a missing report.
+    const stub = await signedIn();
+    const createObjectURL = vi.fn(() => "blob:report");
+    vi.stubGlobal("URL", { ...URL, createObjectURL, revokeObjectURL: vi.fn() });
+    vi.stubGlobal("open", vi.fn(() => ({}) as Window));
+
+    await userEvent.click(screen.getByRole("button", { name: /^report$/i }));
+
+    await waitFor(() => {
+      const call = stub.calls.find((c) => c.url.startsWith("/v1/report"));
+      expect(call?.init?.headers).toMatchObject({ Authorization: "Bearer tok-abc" });
+    });
+    expect(createObjectURL).toHaveBeenCalled();
+  });
+
+  it("says so when the tab was blocked", async () => {
+    // Silently doing nothing looks like a broken button.
+    await signedIn();
+    vi.stubGlobal("URL", { ...URL, createObjectURL: () => "blob:x", revokeObjectURL: vi.fn() });
+    vi.stubGlobal("open", vi.fn(() => null));
+
+    await userEvent.click(screen.getByRole("button", { name: /^report$/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/pop-ups/i);
+  });
+
+  it("shows the server's refusal rather than an empty tab", async () => {
+    await signedIn({ reportStatus: 500 });
+    vi.stubGlobal("URL", { ...URL, createObjectURL: () => "blob:x", revokeObjectURL: vi.fn() });
+    const open = vi.fn();
+    vi.stubGlobal("open", open);
+
+    await userEvent.click(screen.getByRole("button", { name: /^report$/i }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(open).not.toHaveBeenCalled();
   });
 });

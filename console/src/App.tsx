@@ -147,6 +147,37 @@ export function App() {
     void load();
   }, [load]);
 
+  /**
+   * Open the account's report in a new tab.
+   *
+   * The report is what gets forwarded to a workload's owner, and it is the one
+   * thing here that has to leave the console. It cannot be a link: every route
+   * needs the credential in a header and a browser sends none for an anchor,
+   * so a plain link would render a 401 and read as a missing report.
+   *
+   * The blob URL this opens belongs to this browser and this tab. It is not
+   * shareable, and pretending otherwise would have someone paste a dead link
+   * into a ticket — so the tab is for reading and saving, and the honest way
+   * to send it onward is the file.
+   */
+  async function openReport() {
+    if (!client) return;
+    setError(null);
+    try {
+      const html = await client.report(auth.account || undefined);
+      const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+      const opened = window.open(url, "_blank", "noopener");
+      if (!opened) {
+        setError("The report opened in a blocked tab. Allow pop-ups for this page.");
+      }
+      // Released once the new tab has read it. Revoking immediately races the
+      // open; leaving it forever leaks the whole report on every click.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (caught) {
+      setError((caught as ApiError).message);
+    }
+  }
+
   async function confirmTransition(reason: string) {
     if (!client || !changing) return;
     setChangeBusy(true);
@@ -259,6 +290,9 @@ export function App() {
           <span className="warn">last scan was truncated</span>
         ) : null}
         <span className="spacer" />
+        <button className="link" onClick={() => void openReport()} disabled={loading}>
+          Report
+        </button>
         <button className="link" onClick={() => void load()} disabled={loading}>
           {loading ? "Refreshing…" : "Refresh"}
         </button>
