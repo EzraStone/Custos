@@ -115,7 +115,7 @@ some, which is why the corpus has one too.
 | `controlplane/` | Python | Classifier, register, attribution, reach, report. |
 | `a0/` | Python | The G0 experiment: synthetic telemetry and evaluation. |
 | `checkpoint/` | Go | Inline enforcement gateway. Not started. |
-| `console/` | TypeScript | The register in a browser: read the findings, read the evidence, sanction an agent. Served by the control plane at `/`. |
+| `console/` | TypeScript | The register in a browser: read the findings and the evidence, sanction an agent, retire one that is gone, see what changed. Served by the control plane at `/`. |
 
 The control plane holds the classifier, the register and its SQLite store,
 attribution, reach, baselines, scan comparison, delivery to Slack and SIEM, the
@@ -131,6 +131,7 @@ IAM capability, and runs either once or on a schedule.
 | Where this stands | [docs/STATUS.md](docs/STATUS.md) |
 | Running a scan | [docs/OPERATIONS.md](docs/OPERATIONS.md) |
 | Turning a finding into a ticket | [docs/ATTRIBUTION.md](docs/ATTRIBUTION.md) |
+| Why a destination is called what it is | [docs/adr/0002-naming-destinations.md](docs/adr/0002-naming-destinations.md) |
 | Getting findings to a human | [docs/DELIVERY.md](docs/DELIVERY.md) |
 | Running continuously | [docs/SCHEDULING.md](docs/SCHEDULING.md) |
 | Answering a security review | [docs/SECURITY-REVIEW.md](docs/SECURITY-REVIEW.md) |
