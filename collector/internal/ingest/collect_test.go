@@ -313,3 +313,23 @@ func TestTrailAttributionIsReportedAsWeaker(t *testing.T) {
 		t.Fatalf("summary should qualify CloudTrail attribution:\n%s", out)
 	}
 }
+
+// TestTheSummaryReportsHowMuchOfTheScopeIsNamed: a customer reading a run
+// summary should be able to see this without opening a report. It is a number
+// they can act on — tag the ENIs — and it is the difference between an
+// approval scope someone can read and a list of IP addresses.
+func TestTheSummaryReportsHowMuchOfTheScopeIsNamed(t *testing.T) {
+	r := Report{Destinations: 2, PeerAddresses: 5}
+	if got := r.Summary(); !strings.Contains(got, "named 2 of 5 internal destinations") {
+		t.Fatalf("summary did not report naming:\n%s", got)
+	}
+}
+
+// TestNothingInternalReachedSaysNothing: a run with no internal destinations
+// has nothing to report here, and "named 0 of 0" reads as a failure.
+func TestNothingInternalReachedSaysNothing(t *testing.T) {
+	r := Report{}
+	if strings.Contains(r.Summary(), "internal destinations") {
+		t.Fatalf("reported on a run with no internal destinations:\n%s", r.Summary())
+	}
+}

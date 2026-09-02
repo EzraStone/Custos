@@ -68,10 +68,13 @@ type Report struct {
 	// collection is running behind and the interval should probably be shorter.
 	Shortened bool
 
-	// Destinations counts the addresses that could be given a name. The rest
-	// appear in the register as addresses, so a low number here is the
-	// difference between a scope an operator can read and one they cannot.
-	Destinations int
+	// Destinations counts the addresses that could be given a name, out of
+	// PeerAddresses that were asked about. The rest appear in the register as
+	// addresses, so the ratio is the difference between a scope an operator
+	// can read and one they cannot — printed every run rather than kept for a
+	// warning, because it is a number the customer can act on.
+	Destinations  int
+	PeerAddresses int
 
 	Degraded []Attribution
 	Errors   []string
@@ -90,6 +93,10 @@ func (r Report) Summary() string {
 		r.Stats.Parsed, r.Stats.Lines, r.Stats.Coverage()*100)
 	fmt.Fprintf(&b, "resolved %d principals across %d interfaces\n",
 		r.Principals, r.Interfaces)
+	if r.PeerAddresses > 0 {
+		fmt.Fprintf(&b, "named %d of %d internal destinations\n",
+			r.Destinations, r.PeerAddresses)
+	}
 
 	if r.HaveALBLogs {
 		fmt.Fprintf(&b, "correlated against %d inbound requests\n", r.Requests)
@@ -234,12 +241,14 @@ func (c *Collector) Collect(ctx context.Context, w awsread.Window) (wire.Batch, 
 	// plane falls back to showing the address, which is what it did before
 	// this existed.
 	destinations := &DestinationResolver{API: c.Network}
-	named, err := destinations.Resolve(ctx, peerAddresses(records))
+	peers := internalOnly(peerAddresses(records))
+	named, err := destinations.Resolve(ctx, peers)
 	if err != nil {
 		report.Errors = append(report.Errors, err.Error())
 	}
 	batch.Destinations = named
 	report.Destinations = len(named)
+	report.PeerAddresses = len(peers)
 
 	if c.Identity == nil {
 		return batch, report, nil
