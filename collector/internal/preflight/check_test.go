@@ -43,7 +43,7 @@ func good() Config {
 }
 
 func run(cfg Config, flows FlowSource) Report {
-	return Run(context.Background(), cfg, flows)
+	return Run(context.Background(), cfg, flows, nil)
 }
 
 func find(t *testing.T, report Report, name string) Result {
@@ -216,5 +216,104 @@ func TestProbeIntervalDefaults(t *testing.T) {
 		stats: flowlogs.Stats{Lines: 1, Parsed: 1}}).String()
 	if !strings.Contains(out, time.Hour.String()) {
 		t.Fatalf("expected an hour probe window:\n%s", out)
+	}
+}
+
+// stubNamer answers with whatever it was told, so the check can be exercised
+// against a role that can name everything, some things, or nothing.
+type stubNamer struct {
+	names map[string]string
+	err   error
+}
+
+func (s stubNamer) Resolve(_ context.Context, addresses []string) ([]wire.Destination, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	var out []wire.Destination
+	for _, a := range addresses {
+		if name, ok := s.names[a]; ok {
+			out = append(out, wire.Destination{Address: a, Name: name})
+		}
+	}
+	return out, nil
+}
+
+func internalTraffic(addresses ...string) []wire.FlowRecord {
+	out := modelTraffic(1)
+	for _, a := range addresses {
+		out = append(out, wire.FlowRecord{
+			Direction: wire.Egress, DstPort: 443, Bytes: 5000, DstAddr: a,
+		})
+	}
+	return out
+}
+
+func runNamed(cfg Config, flows FlowSource, namer Namer) Report {
+	return Run(context.Background(), cfg, flows, namer)
+}
+
+// TestUnnamedDestinationsAreWarnedAboutDuringOnboarding: this is the same class
+// of failure as an empty log group. Every finding is correct, the reach is
+// accurate, and the approval scope is a list of IP addresses nobody can make a
+// decision about. Better said now than discovered by whoever is asked to
+// approve one.
+func TestUnnamedDestinationsAreWarnedAboutDuringOnboarding(t *testing.T) {
+	flows := stubFlows{records: internalTraffic("10.0.4.21", "10.0.4.22", "10.0.4.23")}
+	report := runNamed(good(), flows, stubNamer{names: map[string]string{}})
+
+	result := find(t, report, "destination names")
+	if result.Status != Warn {
+		t.Fatalf("expected a warning, got %v: %s", result.Status, result.Detail)
+	}
+	if !strings.Contains(result.Detail, "none of 3") {
+		t.Fatalf("unhelpful detail: %q", result.Detail)
+	}
+}
+
+func TestMostlyUnnamedIsStillAWarning(t *testing.T) {
+	// One name out of four is not a pass. An operator reading that scope is
+	// still mostly reading addresses.
+	flows := stubFlows{records: internalTraffic("10.0.4.21", "10.0.4.22", "10.0.4.23", "10.0.9.44")}
+	report := runNamed(good(), flows, stubNamer{names: map[string]string{"10.0.4.21": "billing-api"}})
+
+	if result := find(t, report, "destination names"); result.Status != Warn {
+		t.Fatalf("expected a warning, got %v: %s", result.Status, result.Detail)
+	}
+}
+
+func TestNamedDestinationsPass(t *testing.T) {
+	flows := stubFlows{records: internalTraffic("10.0.4.21", "10.0.9.44")}
+	report := runNamed(good(), flows, stubNamer{names: map[string]string{
+		"10.0.4.21": "billing-api", "10.0.9.44": "rds",
+	}})
+
+	if result := find(t, report, "destination names"); result.Status != Pass {
+		t.Fatalf("expected a pass, got %v: %s", result.Status, result.Detail)
+	}
+}
+
+// TestAMissingPermissionNamesItself: a role without
+// ec2:DescribeNetworkInterfaces still produces findings. The remedy has to say
+// that, or someone will read the warning as "the scan will not work".
+func TestAMissingPermissionNamesItself(t *testing.T) {
+	flows := stubFlows{records: internalTraffic("10.0.4.21")}
+	report := runNamed(good(), flows, stubNamer{err: errors.New("AccessDenied")})
+
+	result := find(t, report, "destination names")
+	if result.Status != Warn || !strings.Contains(result.Remedy, "DescribeNetworkInterfaces") {
+		t.Fatalf("got %v, remedy %q", result.Status, result.Remedy)
+	}
+}
+
+// TestNoInternalTrafficIsNotAFinding: with nothing internal reached in the
+// probe window there is nothing this check could have told anyone, and a
+// warning would be noise on an account that is fine.
+func TestNoInternalTrafficIsNotAFinding(t *testing.T) {
+	report := runNamed(good(), stubFlows{records: modelTraffic(3)}, stubNamer{})
+	for _, r := range report.Results {
+		if r.Name == "destination names" {
+			t.Fatalf("reported on a window with no internal destinations: %+v", r)
+		}
 	}
 }

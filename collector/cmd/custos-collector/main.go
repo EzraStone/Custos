@@ -247,10 +247,14 @@ func preflightCheck(ctx context.Context, cfg *config.Config, stdout *os.File) er
 		HaveToken:    cfg.Token != "",
 	}
 
-	var source preflight.FlowSource
+	var (
+		source preflight.FlowSource
+		namer  preflight.Namer
+	)
 	if clients, err := awsclient.New(ctx, awsclient.Options{
 		Region: cfg.Region, RoleARN: cfg.RoleARN, ExternalID: cfg.ExternalID,
 	}); err == nil {
+		namer = &ingest.DestinationResolver{API: clients.Network}
 		if bucket, prefix, ok := cfg.S3Source(); ok {
 			source = &ingest.S3Reader{
 				API: clients.Objects, Bucket: bucket, Prefix: prefix,
@@ -261,7 +265,7 @@ func preflightCheck(ctx context.Context, cfg *config.Config, stdout *os.File) er
 		}
 	}
 
-	report := preflight.Run(ctx, pf, source)
+	report := preflight.Run(ctx, pf, source, namer)
 	fmt.Fprint(stdout, report.String())
 	if !report.Ready() {
 		return errors.New("preflight checks did not pass")

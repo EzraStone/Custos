@@ -14,6 +14,8 @@ package preflight
 import (
 	"context"
 	"fmt"
+	"net/netip"
+	"sort"
 	"strings"
 	"time"
 
@@ -105,12 +107,23 @@ type Config struct {
 	ProbeInterval time.Duration
 }
 
+// Namer resolves destination names, so preflight can say how much of the
+// register's scope will be readable before the customer finds out from a
+// report full of IP addresses.
+//
+// An interface rather than the concrete resolver, because preflight already
+// takes its flow source that way and because the check has to work when
+// nothing implements it.
+type Namer interface {
+	Resolve(ctx context.Context, addresses []string) ([]wire.Destination, error)
+}
+
 // Run performs every check it can with the given configuration.
 //
 // The flow source may be nil, in which case reachability is skipped and
 // reported as skipped. A configuration check that requires credentials is
 // useless in the situation where someone most wants to run one.
-func Run(ctx context.Context, cfg Config, flows FlowSource) Report {
+func Run(ctx context.Context, cfg Config, flows FlowSource, names Namer) Report {
 	var report Report
 
 	checkConfiguration(&report, cfg)
@@ -123,8 +136,82 @@ func Run(ctx context.Context, cfg Config, flows FlowSource) Report {
 		return report
 	}
 
-	checkFlowLogs(ctx, &report, cfg, flows)
+	records := checkFlowLogs(ctx, &report, cfg, flows)
+	checkDestinationNames(ctx, &report, names, records)
 	return report
+}
+
+// checkDestinationNames reports how much of the scope an operator will be able
+// to read.
+//
+// This is the same class of failure as an empty log group: it produces a
+// report that looks fine. Every finding is correct, the reach is accurate, and
+// the approval scope is a list of IP addresses that nobody can make a decision
+// about. Better to say so during onboarding than to have it discovered by the
+// person being asked to approve one.
+func checkDestinationNames(ctx context.Context, report *Report, names Namer, records []wire.FlowRecord) {
+	if names == nil || len(records) == 0 {
+		return
+	}
+
+	peers := internalPeers(records)
+	if len(peers) == 0 {
+		// Nothing internal was reached in the probe window. Not a finding:
+		// there is nothing this check could have told anyone.
+		return
+	}
+
+	named, err := names.Resolve(ctx, peers)
+	if err != nil {
+		report.add("destination names", Warn, err.Error(),
+			"the role needs ec2:DescribeNetworkInterfaces - findings still "+
+				"work without it, but the approval scope will be addresses")
+		return
+	}
+
+	covered := map[string]bool{}
+	for _, d := range named {
+		if d.Name != "" {
+			covered[d.Address] = true
+		}
+	}
+
+	switch {
+	case len(covered) == 0:
+		report.add("destination names", Warn,
+			fmt.Sprintf("none of %d internal destinations could be named", len(peers)),
+			"the approval scope will be IP addresses - tag the ENIs behind "+
+				"these services, or expect operators to approve 10.0.4.23")
+	case len(covered)*2 < len(peers):
+		report.add("destination names", Warn,
+			fmt.Sprintf("%d of %d internal destinations named", len(covered), len(peers)),
+			"most of the approval scope will be addresses; tagging the "+
+				"remaining ENIs is what makes it readable")
+	default:
+		report.add("destination names", Pass,
+			fmt.Sprintf("%d of %d internal destinations named", len(covered), len(peers)), "")
+	}
+}
+
+// internalPeers is the private addresses this window's traffic went to or came
+// from, which is the set the register's scope is drawn from.
+func internalPeers(records []wire.FlowRecord) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, r := range records {
+		peer := r.DstAddr
+		if r.Direction == wire.Ingress {
+			peer = r.SrcAddr
+		}
+		addr, err := netip.ParseAddr(peer)
+		if err != nil || !addr.IsPrivate() || seen[peer] {
+			continue
+		}
+		seen[peer] = true
+		out = append(out, peer)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func checkConfiguration(report *Report, cfg Config) {
@@ -181,7 +268,7 @@ func checkAccessLogs(report *Report, cfg Config) {
 	report.add("access logs", Pass, cfg.AccessLogs, "")
 }
 
-func checkFlowLogs(ctx context.Context, report *Report, cfg Config, flows FlowSource) {
+func checkFlowLogs(ctx context.Context, report *Report, cfg Config, flows FlowSource) []wire.FlowRecord {
 	interval := cfg.ProbeInterval
 	if interval <= 0 {
 		interval = time.Hour
@@ -193,7 +280,7 @@ func checkFlowLogs(ctx context.Context, report *Report, cfg Config, flows FlowSo
 	if err != nil {
 		report.add("flow logs readable", Fail, err.Error(),
 			"check that the role can read the log group and that the region is right")
-		return
+		return nil
 	}
 
 	if len(records) == 0 {
@@ -203,7 +290,7 @@ func checkFlowLogs(ctx context.Context, report *Report, cfg Config, flows FlowSo
 			"check that this is the log group carrying the traffic - an empty "+
 				"group produces a report with no findings, which reads exactly "+
 				"like an account with no agents")
-		return
+		return nil
 	}
 
 	report.add("flow logs readable", Pass,
@@ -214,7 +301,7 @@ func checkFlowLogs(ctx context.Context, report *Report, cfg Config, flows FlowSo
 			fmt.Sprintf("%d lines read, none parsed", stats.Malformed),
 			"the log format does not match what Custos expects - apply the "+
 				"Terraform module's log_format, or send us a sample line")
-		return
+		return records
 	}
 
 	if coverage := stats.Coverage(); coverage < 0.95 {
@@ -222,7 +309,7 @@ func checkFlowLogs(ctx context.Context, report *Report, cfg Config, flows FlowSo
 			fmt.Sprintf("only %.0f%% of lines parsed", coverage*100),
 			"some lines do not match the expected format; findings will be "+
 				"based on partial traffic")
-		return
+		return records
 	}
 
 	report.add("flow log format", Pass, "parses cleanly", "")
@@ -233,9 +320,10 @@ func checkFlowLogs(ctx context.Context, report *Report, cfg Config, flows FlowSo
 			"either nothing called a model in the last hour, or the model "+
 				"endpoint is one we do not recognise - a self-hosted gateway "+
 				"is the usual cause and needs declaring")
-		return
+		return records
 	}
 	report.add("model traffic", Pass, "present", "")
+	return records
 }
 
 // hasModelTraffic looks for outbound 443 to any destination.
