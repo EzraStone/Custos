@@ -287,6 +287,69 @@ def create_app(
             ],
         }
 
+    @app.get("/v1/diff")
+    def get_diff(principal: Auth, account: str | None = None) -> dict:
+        """What changed between the two most recent scans.
+
+        The specification is explicit that the unsanctioned set regenerating on
+        every scan is what makes this a subscription rather than an audit
+        engagement — but only if the second scan says something the first did
+        not. The CLI has answered this since the register existed. Nothing else
+        could, so the console showed a register with no sense of time.
+
+        One scan is not an error. It is the normal state of a new account, and
+        it is reported as an empty diff with a headline saying so rather than
+        as a 404 that a client has to special-case.
+        """
+        from ..diff import compare
+
+        account_id = scope(principal, account)
+        scans = ScanStore(app.state.db)
+        agents = AgentStore(app.state.db)
+
+        history = scans.scans_for(account_id, limit=2)
+        if len(history) < 2:
+            return {
+                "account_id": account_id,
+                "previous_scan_id": None,
+                "current_scan_id": history[0].id if history else None,
+                "headline": "Nothing to compare yet — this account has one scan.",
+                "changes": [],
+            }
+
+        current, previous = history[0], history[1]
+        registry = {a.id: a for a in agents.list_for_account(account_id)}
+        result = compare(
+            registry,
+            scans.observations_for_scan(current.id),
+            scans.observations_for_scan(previous.id),
+            previous_scan_id=previous.id,
+            current_scan_id=current.id,
+        )
+        return {
+            "account_id": account_id,
+            "previous_scan_id": result.previous_scan_id,
+            "current_scan_id": result.current_scan_id,
+            "headline": result.headline,
+            "changes": [
+                {
+                    "kind": str(c.kind),
+                    "agent_id": c.agent_id,
+                    "principal": c.principal,
+                    "detail": c.detail,
+                    "owner_team": c.owner_team,
+                    "blast_radius": str(c.blast_radius),
+                }
+                # Actionable only. UNCHANGED entries exist so the comparison can
+                # account for every agent, and shipping them would make the
+                # caller filter out the majority of a large response to find
+                # the handful that moved.
+                for c in sorted(
+                    result.actionable, key=lambda c: (-c.severity, c.principal)
+                )
+            ],
+        }
+
     @app.post("/v1/agents/{agent_id}/imprimatur")
     def grant(agent_id: str, body: GrantRequest, principal: Auth) -> dict:
         """Sanction an agent. The only path to SANCTIONED over HTTP.

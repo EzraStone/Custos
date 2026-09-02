@@ -124,6 +124,33 @@ learn that another exists.
 
 Scan history, newest first, with coverage and truncation per scan.
 
+## `GET /v1/diff`
+
+What changed between the two most recent scans.
+
+```json
+{
+  "account_id": "447120043318",
+  "previous_scan_id": 11, "current_scan_id": 12,
+  "headline": "2 new agents since the last scan; 1 gained permissions that increase what it could destroy.",
+  "changes": [
+    { "kind": "blast_radius_increased", "agent_id": "agt_...",
+      "principal": "arn:aws:iam::447120043318:role/finance-close",
+      "detail": "finance-close can now delete objects it could previously only read",
+      "owner_team": "finance", "blast_radius": "destructive" }
+  ]
+}
+```
+
+Ordered by consequence, not recency. Unchanged agents are omitted: they exist
+in the comparison so every agent is accounted for, and shipping them would make
+the caller filter out the majority of a large response to find the few that
+moved.
+
+One scan is not an error. It is the normal state of a new account and returns
+an empty `changes` with a headline saying so, rather than a `404` every client
+has to special-case in its first week.
+
 ## `POST /v1/agents/{id}/imprimatur`
 
 Sanction an agent. **The only path to `sanctioned` in the entire system.**

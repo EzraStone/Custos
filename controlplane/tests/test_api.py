@@ -581,3 +581,43 @@ def test_accounts_does_not_leak_accounts_the_token_does_not_cover():
     client = _client_for({"a": ["111111111111"], "b": ["222222222222"]})
     r = client.get("/v1/accounts", headers={"Authorization": "Bearer a"})
     assert r.json() == {"accounts": ["111111111111"]}
+
+
+def _scan_twice(client, headers, *, second_flows=None):
+    """Ingest two windows so there is something to compare."""
+    first = batch(start=W0)
+    client.post("/v1/batches", json=first, headers=headers)
+    second = batch(start=W0 + timedelta(hours=1), flows=second_flows)
+    client.post("/v1/batches", json=second, headers=headers)
+
+
+def test_diff_needs_two_scans_before_it_says_anything(client):
+    client.post("/v1/batches", json=batch(), headers=AUTH)
+    body = client.get("/v1/diff", headers=AUTH).json()
+    # One scan is the normal state of a new account, not an error. A 404 here
+    # would make every client special-case the first week.
+    assert body["previous_scan_id"] is None
+    assert body["changes"] == []
+    assert "one scan" in body["headline"]
+
+
+def test_diff_reports_between_the_two_most_recent_scans(client):
+    _scan_twice(client, AUTH)
+    body = client.get("/v1/diff", headers=AUTH).json()
+    assert body["previous_scan_id"] is not None
+    assert body["current_scan_id"] != body["previous_scan_id"]
+
+
+def test_diff_omits_the_agents_that_did_not_move(client):
+    _scan_twice(client, AUTH)
+    body = client.get("/v1/diff", headers=AUTH).json()
+    assert all(c["kind"] != "unchanged" for c in body["changes"])
+
+
+def test_diff_needs_a_credential(client):
+    assert client.get("/v1/diff").status_code == 401
+
+
+def test_diff_is_scoped_to_the_account(client):
+    r = client.get("/v1/diff?account=999999999999", headers=AUTH)
+    assert r.status_code == 404
