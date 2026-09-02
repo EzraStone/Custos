@@ -4,6 +4,44 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### The approval is readable
+
+**The operator console.** The register in a browser, served by the control
+plane at `/`: read the findings, read the evidence, sanction an agent, retire
+one that no longer exists. Ordered by what each agent could destroy rather than
+by how confident the classifier is. The grant control stays disabled until the
+evidence has been opened — a console that makes approving easier than reading
+upholds SEC-17 in code while defeating it in practice.
+
+Built ahead of the schedule §12 sets, which put it after a paying customer.
+That ordering was right and the deviation is recorded in `docs/STATUS.md`.
+
+**Destinations have names.** The approval scope read `10.0.4.23`,
+`52.216.10.7`. Nobody can make a decision about an IP address, and that was the
+one screen in the product where a human confers authority. It now reads
+`billing-api 10.0.4.21`, `rds 10.0.9.45`, `s3` — from the ENI behind an
+address, from AWS's own description of a managed service, or from the flow
+log's service annotation. What none of those cover stays an address, honestly,
+and every surface reports how much of a scan is in that state.
+
+Three things this uncovered. The tools/data-stores split was inferred from what
+a whole window saw, so an internal API could be filed as a data store on the
+strength of unrelated traffic in the same minute. The collector read only
+`pkt-dst-aws-service`, so the return leg of every AWS conversation arrived
+unattributed in production — hidden here by a corpus that annotated both ends,
+which is not what AWS emits. And a column added to the schema after a database
+was created never reached it, because the schema is applied with `CREATE TABLE
+IF NOT EXISTS`.
+
+**SEC-23.** Only names matching a shape AWS writes leave the account. An ENI
+description is free text a person typed into, and what people write there is
+"temp box for INC-4471, ask Sam before deleting".
+
+**What changed since the last scan**, over HTTP and in the console. The CLI has
+answered this since the register existed; nothing else could, so the console
+showed a register with no sense of time — which is the difference between a
+subscription and an audit.
+
 ### Continuous, and harder to fool
 
 **Delivery.** Findings reach Slack and a SIEM without anyone opening a report.
