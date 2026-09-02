@@ -1,10 +1,13 @@
 """The CLI, exercised end to end against a temporary database."""
 
 import json
+from datetime import UTC, datetime
 
 import pytest
 
 from custos.cli import main
+from custos.store.db import open_database
+from custos.store.scans import ScanStore
 
 
 @pytest.fixture(scope="module")
@@ -219,3 +222,59 @@ def test_accounts_counts_sanctioned_separately(db, batch_file, capsys):
 def test_accounts_on_an_empty_database_says_so(db, capsys):
     assert main(["--db", db, "accounts"]) == 0
     assert "No accounts" in capsys.readouterr().out
+
+
+def test_history_shows_scope_alongside_coverage(tmp_path, capsys):
+    """Two columns because they answer different questions. 100% coverage with
+    20% scope is a set of correct findings nobody can approve."""
+    db = tmp_path / "h.db"
+    conn = open_database(db)
+    scans = ScanStore(conn)
+    record = scans.record_batch(
+        account_id="1", region="us-east-1",
+        window_start=datetime(2026, 8, 10, tzinfo=UTC),
+        window_end=datetime(2026, 8, 10, 1, tzinfo=UTC),
+        collector="test", received_at=datetime(2026, 8, 10, 1, tzinfo=UTC),
+        flow_records=10, requests=0, have_alb_logs=False,
+    )
+    scans.record_scan(
+        batch_id=record.id, account_id="1",
+        started_at=datetime(2026, 8, 10, 1, tzinfo=UTC),
+        principals_seen=3, agents_found=2, review_candidates=0,
+        coverage=1.0, truncated=False, catalogue_revision="x",
+        scope_named=1, scope_total=5,
+    )
+    conn.commit()
+    conn.close()
+
+    assert main(["--db", str(db), "history", "--account", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "scope" in out
+    assert "20%" in out
+
+
+def test_history_shows_a_dash_when_nothing_internal_was_reached(tmp_path, capsys):
+    # Not 0%. A scan that reached nothing internal has no unreadable scope,
+    # and a zero in that column would read as a problem.
+    db = tmp_path / "h2.db"
+    conn = open_database(db)
+    scans = ScanStore(conn)
+    record = scans.record_batch(
+        account_id="1", region="us-east-1",
+        window_start=datetime(2026, 8, 10, tzinfo=UTC),
+        window_end=datetime(2026, 8, 10, 1, tzinfo=UTC),
+        collector="test", received_at=datetime(2026, 8, 10, 1, tzinfo=UTC),
+        flow_records=10, requests=0, have_alb_logs=False,
+    )
+    scans.record_scan(
+        batch_id=record.id, account_id="1",
+        started_at=datetime(2026, 8, 10, 1, tzinfo=UTC),
+        principals_seen=3, agents_found=2, review_candidates=0,
+        coverage=1.0, truncated=False, catalogue_revision="x",
+    )
+    conn.commit()
+    conn.close()
+
+    assert main(["--db", str(db), "history", "--account", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "0%" not in out.split("coverage")[-1].replace("100%", "")

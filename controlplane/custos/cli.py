@@ -184,14 +184,22 @@ def cmd_history(args: argparse.Namespace) -> int:
         print("No scans recorded for this account.")
         return 0
 
-    print(f"{'when':<26}{'principals':>11}{'agents':>8}{'review':>8}{'coverage':>10}")
-    print("-" * 63)
+    # Two coverage columns, because they answer different questions. `coverage`
+    # is how much of the traffic was read; `scope` is how much of what was
+    # found could be named rather than shown as an address. A run of 100%
+    # coverage and 20% scope is a set of correct findings nobody can approve.
+    print(
+        f"{'when':<26}{'principals':>11}{'agents':>8}{'review':>8}"
+        f"{'coverage':>10}{'scope':>8}"
+    )
+    print("-" * 71)
     for s in scans:
         flag = " (truncated)" if s.truncated else ""
+        scope = f"{s.scope_readable:>7.0%}" if s.scope_total else f"{'-':>8}"
         print(
             f"{s.started_at.strftime('%Y-%m-%d %H:%M UTC'):<26}"
             f"{s.principals_seen:>11}{s.agents_found:>8}{s.review_candidates:>8}"
-            f"{s.coverage:>9.0%}{flag}"
+            f"{s.coverage:>9.0%}{scope}{flag}"
         )
     return 0
 
