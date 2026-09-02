@@ -14,6 +14,7 @@ import { Changes } from "./components/Changes";
 import { Filters } from "./components/Filters";
 import { Finding } from "./components/Finding";
 import { GrantDialog } from "./components/GrantDialog";
+import { Scans } from "./components/Scans";
 import { SignIn } from "./components/SignIn";
 import { StatusDialog } from "./components/StatusDialog";
 import { NO_FILTERS, matches, type FilterState } from "./filters";
@@ -328,6 +329,8 @@ export function App() {
           }}
         />
       ) : null}
+
+      <Scans scans={scans} />
 
       <h2>{view === "unsanctioned" ? "Unsanctioned agents" : "The register"}</h2>
       <p className="lede">
