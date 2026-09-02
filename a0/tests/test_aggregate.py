@@ -109,3 +109,26 @@ def test_alb_logs_can_be_absent():
 def test_records_are_time_ordered():
     recs = _cap(60).records
     assert all(a.start <= b.start for a, b in zip(recs, recs[1:], strict=False))
+
+
+def test_only_the_end_that_is_the_service_is_annotated():
+    """The corpus must not be more informative than a real account.
+
+    AWS names an AWS service on the destination of a request and on the source
+    of the reply — never both. Annotating both ends from the peer made every
+    return leg attributable here and unattributable in production, which is the
+    direction a corpus must never be wrong in: it hid the fact that the
+    collector was reading only one of the two fields.
+    """
+    capture = aggregate(corpus.build(), AggregationConfig(interval=timedelta(seconds=60)))
+    annotated = [r for r in capture.records if r.src_aws_service or r.dst_aws_service]
+    assert annotated, "no record carries a service annotation; the corpus lost the signal"
+
+    for r in annotated:
+        assert not (r.src_aws_service and r.dst_aws_service), (
+            f"both ends annotated on one record: {r.to_line()}"
+        )
+        if r.direction is Direction.EGRESS:
+            assert r.dst_aws_service and not r.src_aws_service
+        else:
+            assert r.src_aws_service and not r.dst_aws_service

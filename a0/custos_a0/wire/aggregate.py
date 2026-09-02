@@ -161,7 +161,20 @@ def aggregate(corpus: Corpus, config: AggregationConfig | None = None) -> Captur
                     end=max(b.last, min(window_end, b.last)),
                     direction=direction,
                     subnet_id=w.subnet,
-                    dst_aws_service=aws_service.get(dstaddr, ""),
+                    # Annotate the end that is actually the service. AWS
+                    # names it on the destination of a request and on the
+                    # source of the reply; setting the destination field both
+                    # ways made the corpus more informative than a real
+                    # account, which is the wrong direction for a corpus to be
+                    # wrong in.
+                    src_aws_service=(
+                        "" if direction is Direction.EGRESS
+                        else aws_service.get(dstaddr, "")
+                    ),
+                    dst_aws_service=(
+                        aws_service.get(dstaddr, "")
+                        if direction is Direction.EGRESS else ""
+                    ),
                     tcp_flags=b.flags,
                 )
             )

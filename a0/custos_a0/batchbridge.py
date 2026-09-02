@@ -44,7 +44,9 @@ def build_batch(
             dstport=r.dstport, protocol=r.protocol, packets=r.packets,
             bytes=r.bytes, start=r.start, end=r.end, action=r.action,
             log_status=r.log_status, vpc_id=r.vpc_id, subnet_id=r.subnet_id,
-            direction=str(r.direction), dst_aws_service=r.dst_aws_service,
+            direction=str(r.direction),
+            src_aws_service=r.src_aws_service,
+            dst_aws_service=r.dst_aws_service,
             tcp_flags=r.tcp_flags,
         )
         for r in capture.records

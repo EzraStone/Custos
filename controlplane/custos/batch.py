@@ -53,6 +53,7 @@ class FlowRecord(BaseModel):
     vpc_id: str = ""
     subnet_id: str = ""
     direction: Literal["egress", "ingress"]
+    src_aws_service: str = ""
     dst_aws_service: str = ""
     tcp_flags: int = 0
 

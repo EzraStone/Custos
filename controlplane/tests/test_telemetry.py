@@ -10,8 +10,8 @@ from custos.telemetry import Direction, FlowRecord, InboundRequest
 ALLOWED_FLOW_FIELDS = {
     "version", "account_id", "interface_id", "srcaddr", "dstaddr", "srcport",
     "dstport", "protocol", "packets", "bytes", "start", "end", "action",
-    "log_status", "vpc_id", "subnet_id", "direction", "dst_aws_service",
-    "tcp_flags",
+    "log_status", "vpc_id", "subnet_id", "direction",
+    "src_aws_service", "dst_aws_service", "tcp_flags",
 }
 ALLOWED_REQUEST_FIELDS = {"at", "target", "sent_bytes", "received_bytes"}
 
@@ -43,6 +43,22 @@ def test_flow_record_roundtrips_through_the_native_format():
     assert FlowRecord.from_line(r.to_line()) == r
 
 
+def test_the_two_service_annotations_do_not_swap():
+    """Adjacent fields carrying the same kind of value. A transposition would
+    survive every other test in this file, and would attribute a workload's
+    outbound traffic to whatever answered it."""
+    r = FlowRecord(
+        account_id="1", interface_id="eni-1", srcaddr="10.0.0.1", dstaddr="10.0.0.2",
+        srcport=1, dstport=2, protocol=6, packets=1, bytes=1,
+        start=datetime(2026, 8, 10, 14, 0, tzinfo=UTC),
+        end=datetime(2026, 8, 10, 14, 1, tzinfo=UTC),
+        direction=Direction.INGRESS,
+        src_aws_service="S3", dst_aws_service="BEDROCK",
+    )
+    back = FlowRecord.from_line(r.to_line())
+    assert (back.src_aws_service, back.dst_aws_service) == ("S3", "BEDROCK")
+
+
 def test_absent_aws_service_roundtrips_as_dash():
     r = FlowRecord(
         account_id="1", interface_id="eni-1", srcaddr="10.0.0.1", dstaddr="10.0.0.2",
@@ -55,5 +71,5 @@ def test_absent_aws_service_roundtrips_as_dash():
 
 
 def test_malformed_line_is_rejected():
-    with pytest.raises(ValueError, match="expected 19 fields"):
+    with pytest.raises(ValueError, match="expected 20 fields"):
         FlowRecord.from_line("5 447120043318 eni-1")

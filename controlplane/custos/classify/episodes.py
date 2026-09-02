@@ -31,9 +31,8 @@ class Seen:
     one S3 destination appeared in a scope twice — as `s3` from the request and
     as an address from its reply.
 
-    Whether the annotation should be trusted on the return leg at all is a
-    separate question, tracked in docs/STATUS.md. Whatever the answer, the two
-    must agree, and this is the record that makes them.
+    Both are answered about the peer, using whichever end's annotation
+    describes it.
     """
 
     cls: DestinationClass
@@ -168,7 +167,13 @@ def build_windows(
         egress = r.direction is Direction.EGRESS
         peer = r.dstaddr if egress else r.srcaddr
         port = r.dstport if egress else r.srcport
-        cls = classify(peer, port, r.dst_aws_service)
+        # The annotation that describes the peer, not the one that describes
+        # us. On a request to S3 the service is named on the destination; on
+        # the reply it is named on the source. Taking the destination field
+        # both ways attributes the reply to whichever service we happen to be
+        # sitting behind, which is us.
+        peer_service = r.dst_aws_service if egress else r.src_aws_service
+        cls = classify(peer, port, peer_service)
 
         if cls is DestinationClass.MODEL:
             w.model_addresses.add(peer)
@@ -186,7 +191,7 @@ def build_windows(
             w.tool_addresses.add(peer)
             # The same three values `classify` was called with, above. Naming
             # and classification must not disagree about a destination.
-            seen = Seen(cls=cls, port=port, aws_service=r.dst_aws_service)
+            seen = Seen(cls=cls, port=port, aws_service=peer_service)
             known = w.tool_seen.get(peer)
             if known is None or seen.better_than(known):
                 w.tool_seen[peer] = seen

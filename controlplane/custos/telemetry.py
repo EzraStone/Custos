@@ -69,7 +69,14 @@ class FlowRecord:
     subnet_id: str = "subnet-0ab12345"
     action: str = "ACCEPT"
     log_status: str = "OK"
+    src_aws_service: str = ""
     dst_aws_service: str = ""
+    """The AWS service at each end, when AWS recognises one.
+
+    Both, because each names its own end. On a request to S3 the service is on
+    the destination; on the reply it is on the source. Reading one leaves the
+    return leg of every AWS conversation unattributed.
+    """
     tcp_flags: int = ACK
     version: int = 5
 
@@ -82,16 +89,18 @@ class FlowRecord:
                 self.protocol, self.packets, self.bytes,
                 int(self.start.timestamp()), int(self.end.timestamp()),
                 self.action, self.log_status, self.vpc_id, self.subnet_id,
-                self.direction, self.dst_aws_service or "-", self.tcp_flags,
+                self.direction,
+                self.src_aws_service or "-", self.dst_aws_service or "-",
+                self.tcp_flags,
             )
         )
 
     @classmethod
     def from_line(cls, line: str) -> FlowRecord:
         f = line.split()
-        if len(f) != 19:
-            raise ValueError(f"expected 19 fields, got {len(f)}: {line!r}")
-        svc = f[17]
+        if len(f) != 20:
+            raise ValueError(f"expected 20 fields, got {len(f)}: {line!r}")
+        src_svc, dst_svc = f[17], f[18]
         return cls(
             version=int(f[0]), account_id=f[1], interface_id=f[2],
             srcaddr=f[3], dstaddr=f[4], srcport=int(f[5]), dstport=int(f[6]),
@@ -99,8 +108,10 @@ class FlowRecord:
             start=datetime.fromtimestamp(int(f[10]), tz=UTC),
             end=datetime.fromtimestamp(int(f[11]), tz=UTC),
             action=f[12], log_status=f[13], vpc_id=f[14], subnet_id=f[15],
-            direction=Direction(f[16]), dst_aws_service="" if svc == "-" else svc,
-            tcp_flags=int(f[18]),
+            direction=Direction(f[16]),
+            src_aws_service="" if src_svc == "-" else src_svc,
+            dst_aws_service="" if dst_svc == "-" else dst_svc,
+            tcp_flags=int(f[19]),
         )
 
 
