@@ -173,3 +173,54 @@ def test_delivery_history_outlives_its_repeat_window(conn):
 # that migrations and retention both forget about.
 def test_the_deliveries_table_exists_without_constructing_a_suppressor(conn):
     conn.execute("SELECT COUNT(*) FROM deliveries").fetchone()
+
+
+def test_an_account_pruned_back_to_no_scans_still_answers(tmp_path):
+    """An account quiet for longer than the scan retention window loses every
+    scan row while keeping its register — agents and audit entries are never
+    pruned.
+
+    That leaves a state nothing else produces: a register with findings and no
+    scan behind them. Every read path has to degrade rather than fail, because
+    the alternative is a customer's console going blank on the account they
+    stopped scanning rather than saying it has no recent scans.
+    """
+    from fastapi.testclient import TestClient
+
+    from custos.api import TokenStore, create_app
+
+    conn = open_database()
+    client = TestClient(create_app(conn=conn, tokens=TokenStore({"t": ACCOUNT})))
+    headers = {"Authorization": "Bearer t"}
+
+    # A scan old enough to fall outside every retention window.
+    long_ago = now() - timedelta(days=800)
+    scans = ScanStore(conn)
+    record = scans.record_batch(
+        account_id=ACCOUNT, region="us-east-1",
+        window_start=long_ago, window_end=long_ago + timedelta(hours=1),
+        collector="test", received_at=long_ago,
+        flow_records=1, requests=0, have_alb_logs=False,
+    )
+    scans.record_scan(
+        batch_id=record.id, account_id=ACCOUNT, started_at=long_ago,
+        principals_seen=1, agents_found=0, review_candidates=0,
+        coverage=1.0, truncated=False, catalogue_revision="x",
+    )
+    conn.commit()
+
+    prune(conn)
+    conn.commit()
+    assert scans.scans_for(ACCOUNT) == [], "the old scan should have been pruned"
+
+    # Every read path the console makes on load.
+    assert client.get("/v1/register", headers=headers).status_code == 200
+    assert client.get("/v1/scans", headers=headers).json()["scans"] == []
+    assert client.get("/v1/accounts", headers=headers).status_code == 200
+
+    diff = client.get("/v1/diff", headers=headers)
+    assert diff.status_code == 200
+    assert diff.json()["previous_scan_id"] is None
+
+    report = client.get("/v1/report", headers=headers)
+    assert report.status_code == 200, "the report must render without a scan behind it"
