@@ -98,11 +98,12 @@ These are the real console against a real scanned database, but the traffic is
 the A0 synthetic corpus rather than a customer account — nobody has run this
 against an account we did not build. Regenerate them with `make screenshots`.
 
-One thing the third image gives away: the scope reads `10.0.4.23`,
-`52.216.10.7`. Flow logs carry no hostname, and the destination names that *are*
-available are currently discarded before they reach the register. Asking an
-operator to approve an IP address is a real gap, and it is tracked in
-[docs/STATUS.md](docs/STATUS.md) rather than cropped out of the screenshot.
+The scope names what it can: `s3` for a service whose addresses rotate,
+`postgres 10.0.9.44` for a host that does not, `mcp 10.0.5.11` for a tool
+server. What it cannot name it leaves as an address — an internal HTTPS API is
+still `10.0.4.23`, because nothing in a flow log says what that is. An honest
+address beats an invented name, and the gap is tracked in
+[docs/STATUS.md](docs/STATUS.md).
 
 ## Layout
 

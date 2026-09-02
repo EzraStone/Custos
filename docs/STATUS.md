@@ -75,17 +75,14 @@ signal exists and which features carry it — not that these weights generalise.
 One real scan answers it, and the thresholds sit in measured empty space so
 there is room to move them.
 
-**An operator is being asked to approve IP addresses.** The first
-end-to-end run against real scanned data made this visible: the grant dialog
-lists the scope being approved, and on corpus data that scope reads
-`approved_tools: ["10.0.4.23", "10.0.5.11"]`, `approved_data:
-["52.216.10.7"]`. Nobody can make a decision about an IP address. Flow logs
-carry no hostname, but they do carry `pkt-dst-aws-service`, and the classifier
-already reads it — `classify(peer, port, r.dst_aws_service)` in
-`classify/episodes.py`, one line above the point where only the address is
-kept. Naming the destination is available and thrown away. Until it is
-carried through, the most consequential screen in the product asks for
-approval in terms the approver cannot evaluate.
+**Destination naming is partial.** The scope an operator approves now reads
+`s3`, `postgres 10.0.9.44`, `mcp 10.0.5.11` rather than bare addresses — but
+only where AWS annotates the service or the port is unambiguous. An internal
+HTTPS API is still `10.0.4.23`, because nothing in a flow log says what it is.
+Closing that needs a source the collector does not read yet: Route 53 Resolver
+query logs, VPC endpoint names, or the tags on the destination's own ENI. Until
+then a real account will show a mix, and the unnamed half is the half an
+operator can say least about.
 
 **The console was built ahead of the schedule the specification set.** §12
 puts it after a paying customer, and that ordering was right: a UI built before
@@ -103,6 +100,17 @@ all real and all unmeasured.
 **Spend figures use placeholder pricing.** `PRICES_REVISION` reads
 `unverified-placeholder` and a test pins it there. Verify real provider pricing
 before a dollar figure reaches a customer.
+
+**A corpus that was more informative than production.** The A0 corpus
+annotated both ends of every AWS conversation with the peer's service. Real
+flow logs annotate one end — the destination of a request, the source of its
+reply — and the collector was reading only the destination field, so the return
+leg of every AWS conversation would have arrived unattributed in a customer's
+account and did not here. Fixed in both places, and a test now asserts the
+corpus emits what AWS emits. Worth stating plainly because it is the second
+time the corpus has been wrong in the flattering direction, and there is no
+reason to think it is the last: every signal measured against synthetic
+traffic carries this risk until an account we did not build disagrees with it.
 
 ## The blocker
 
