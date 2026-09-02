@@ -53,6 +53,32 @@ export interface Agent {
   imprimatur: Imprimatur | null;
 }
 
+/**
+ * The statuses an operator can move an agent to from the console.
+ *
+ * `sanctioned` is deliberately absent. It is reachable only through the
+ * imprimatur endpoint, which requires an approval scope and records who
+ * granted it — SEC-17 is that there is one door, and a status dropdown
+ * containing "sanctioned" would be a second one.
+ */
+export type TransitionableStatus = "discovered" | "pending_review" | "retired";
+
+export const TRANSITION_LABEL: Record<TransitionableStatus, string> = {
+  discovered: "Return to the queue",
+  pending_review: "Mark for review",
+  retired: "Retire",
+};
+
+/** What each transition means, shown before it is made. */
+export const TRANSITION_MEANING: Record<TransitionableStatus, string> = {
+  discovered:
+    "Puts this back in the unsanctioned list as though nobody had looked at it.",
+  pending_review:
+    "Flags this as someone's open question. It stays unsanctioned and keeps appearing.",
+  retired:
+    "Says this workload is gone. Any imprimatur it held is revoked, and a later scan that sees it again will surface it as a new finding.",
+};
+
 export interface AccountsResponse {
   accounts: string[];
 }

@@ -50,7 +50,7 @@ describe("the evidence gate", () => {
   // A console that lets someone sanction an agent they have not read about
   // upholds SEC-17 in code while defeating it in practice.
   it("disables granting until the evidence has been opened", async () => {
-    render(<Finding agent={agent()} operator="ezra@custos.dev" onGrant={vi.fn()} />);
+    render(<Finding agent={agent()} operator="ezra@custos.dev" onGrant={vi.fn()} onTransition={vi.fn()} />);
 
     expect(grantButton()).toBeDisabled();
     expect(screen.getByText(/read why this was flagged first/i)).toBeTruthy();
@@ -61,7 +61,7 @@ describe("the evidence gate", () => {
 
   it("does not fire the grant callback while gated", async () => {
     const onGrant = vi.fn();
-    render(<Finding agent={agent()} operator="ezra" onGrant={onGrant} />);
+    render(<Finding agent={agent()} operator="ezra" onGrant={onGrant} onTransition={vi.fn()} />);
 
     await userEvent.click(grantButton()).catch(() => undefined);
     expect(onGrant).not.toHaveBeenCalled();
@@ -69,7 +69,7 @@ describe("the evidence gate", () => {
 
   it("fires once the evidence is open", async () => {
     const onGrant = vi.fn();
-    render(<Finding agent={agent()} operator="ezra" onGrant={onGrant} />);
+    render(<Finding agent={agent()} operator="ezra" onGrant={onGrant} onTransition={vi.fn()} />);
 
     await userEvent.click(evidenceToggle());
     await userEvent.click(grantButton());
@@ -80,7 +80,7 @@ describe("the evidence gate", () => {
 describe("the operator requirement", () => {
   // SEC-17 needs a person. A token is a machine.
   it("cannot grant without a name, even with the evidence open", async () => {
-    render(<Finding agent={agent()} operator={null} onGrant={vi.fn()} />);
+    render(<Finding agent={agent()} operator={null} onGrant={vi.fn()} onTransition={vi.fn()} />);
 
     await userEvent.click(evidenceToggle());
     expect(grantButton()).toBeDisabled();
@@ -89,12 +89,12 @@ describe("the operator requirement", () => {
 
   // A disabled control with no explanation is a bug report.
   it("names the missing thing rather than leaving it disabled silently", () => {
-    render(<Finding agent={agent()} operator={null} onGrant={vi.fn()} />);
+    render(<Finding agent={agent()} operator={null} onGrant={vi.fn()} onTransition={vi.fn()} />);
     expect(screen.getByText(/enter your name above/i)).toBeTruthy();
   });
 
   it("names whose identity is recorded once it can grant", async () => {
-    render(<Finding agent={agent()} operator="ezra@custos.dev" onGrant={vi.fn()} />);
+    render(<Finding agent={agent()} operator="ezra@custos.dev" onGrant={vi.fn()} onTransition={vi.fn()} />);
     await userEvent.click(evidenceToggle());
     expect(screen.getByText(/recorded against ezra@custos.dev/i)).toBeTruthy();
   });
@@ -102,7 +102,7 @@ describe("the operator requirement", () => {
 
 describe("what a finding shows", () => {
   it("shows the evidence sentences verbatim", async () => {
-    render(<Finding agent={agent()} operator="ezra" onGrant={vi.fn()} />);
+    render(<Finding agent={agent()} operator="ezra" onGrant={vi.fn()} onTransition={vi.fn()} />);
     await userEvent.click(evidenceToggle());
 
     expect(screen.getByText(/a ratio of 7\.9:1/)).toBeTruthy();
@@ -110,7 +110,7 @@ describe("what a finding shows", () => {
   });
 
   it("says so when a finding has no evidence rather than showing nothing", async () => {
-    render(<Finding agent={agent({ evidence: [] })} operator="ezra" onGrant={vi.fn()} />);
+    render(<Finding agent={agent({ evidence: [] })} operator="ezra" onGrant={vi.fn()} onTransition={vi.fn()} />);
     await userEvent.click(evidenceToggle());
     expect(screen.getByText(/no evidence recorded/i)).toBeTruthy();
   });
@@ -120,7 +120,7 @@ describe("what a finding shows", () => {
       <Finding
         agent={agent({ owner_team: "", owner_human: "", attributed: false })}
         operator="ezra"
-        onGrant={vi.fn()}
+        onGrant={vi.fn()} onTransition={vi.fn()}
       />,
     );
     expect(screen.getByText("unattributed")).toBeTruthy();
@@ -128,7 +128,7 @@ describe("what a finding shows", () => {
 
   it("lists reach, or says none was observed", () => {
     const { unmount } = render(
-      <Finding agent={agent()} operator="ezra" onGrant={vi.fn()} />,
+      <Finding agent={agent()} operator="ezra" onGrant={vi.fn()} onTransition={vi.fn()} />,
     );
     expect(screen.getByText(/billing-api, billing-db/)).toBeTruthy();
     unmount();
@@ -137,7 +137,7 @@ describe("what a finding shows", () => {
       <Finding
         agent={agent({ tools: [], data_stores: [] })}
         operator="ezra"
-        onGrant={vi.fn()}
+        onGrant={vi.fn()} onTransition={vi.fn()}
       />,
     );
     expect(screen.getByText(/none observed/i)).toBeTruthy();
@@ -146,7 +146,7 @@ describe("what a finding shows", () => {
   // A placeholder price read as a fact is worse than no price at all.
   it("labels spend as an estimate when pricing is unverified", () => {
     render(
-      <Finding agent={agent()} operator="ezra" onGrant={vi.fn()} spendIsEstimate />,
+      <Finding agent={agent()} operator="ezra" onGrant={vi.fn()} onTransition={vi.fn()} spendIsEstimate />,
     );
     expect(screen.getByText(/\(estimate\)/)).toBeTruthy();
   });
@@ -167,7 +167,7 @@ describe("a sanctioned agent", () => {
           },
         })}
         operator="ezra"
-        onGrant={vi.fn()}
+        onGrant={vi.fn()} onTransition={vi.fn()}
       />,
     );
 

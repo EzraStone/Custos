@@ -243,3 +243,13 @@ h2 { font-family: var(--display); font-size: 1.5rem; margin: 2.5rem 0 .5rem; }
 .history .what { font-weight: 600; }
 .history .who { color: var(--ink-soft); }
 .history .why { grid-column: 2 / -1; color: var(--ink-faint); }
+
+/* ---------- status dialog ---------- */
+.dialog .field { margin: 1.1rem 0; }
+.dialog .field label {
+  display: block; font-size: .72rem; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-faint); margin-bottom: .35rem;
+}
+.dialog .field input { width: 100%; }
+.dialog .field .hint { margin: .4rem 0 0; }
+.actions .spacer { margin-left: auto; }

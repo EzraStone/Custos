@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError, Client } from "./api/client";
-import { byConsequence, type Agent, type Health, type Scan } from "./api/types";
+import {
+  byConsequence,
+  type Agent,
+  type Health,
+  type Scan,
+  type TransitionableStatus,
+} from "./api/types";
 import { AccountPicker } from "./components/AccountPicker";
 import { Finding } from "./components/Finding";
 import { GrantDialog } from "./components/GrantDialog";
 import { SignIn } from "./components/SignIn";
+import { StatusDialog } from "./components/StatusDialog";
 import * as session from "./session";
 
 type View = "unsanctioned" | "all";
@@ -22,6 +29,11 @@ export function App() {
   const [granting, setGranting] = useState<Agent | null>(null);
   const [grantError, setGrantError] = useState<string | null>(null);
   const [grantBusy, setGrantBusy] = useState(false);
+  const [changing, setChanging] = useState<{ agent: Agent; to: TransitionableStatus } | null>(
+    null,
+  );
+  const [changeError, setChangeError] = useState<string | null>(null);
+  const [changeBusy, setChangeBusy] = useState(false);
 
   // Every load takes a ticket, and a response is only allowed to write state
   // if its ticket is still the current one. Toggling the view twice in quick
@@ -113,6 +125,24 @@ export function App() {
     // oxlint-disable-next-line react/set-state-in-effect
     void load();
   }, [load]);
+
+  async function confirmTransition(reason: string) {
+    if (!client || !changing) return;
+    setChangeBusy(true);
+    setChangeError(null);
+
+    try {
+      await client.setStatus(changing.agent.id, changing.to, auth.operator, reason);
+      setChanging(null);
+      await load();
+    } catch (caught) {
+      // A refused transition is the server enforcing SEC-17's state machine,
+      // not a fault. It stays on screen with the server's own words.
+      setChangeError((caught as ApiError).message);
+    } finally {
+      setChangeBusy(false);
+    }
+  }
 
   async function confirmGrant() {
     if (!client || !granting) return;
@@ -265,9 +295,28 @@ export function App() {
               setGrantError(null);
               setGranting(target);
             }}
+            onTransition={(target, to) => {
+              setChangeError(null);
+              setChanging({ agent: target, to });
+            }}
           />
         ))
       )}
+
+      {changing ? (
+        <StatusDialog
+          agent={changing.agent}
+          to={changing.to}
+          operator={auth.operator}
+          busy={changeBusy}
+          error={changeError}
+          onConfirm={(reason) => void confirmTransition(reason)}
+          onCancel={() => {
+            setChanging(null);
+            setChangeError(null);
+          }}
+        />
+      ) : null}
 
       {granting ? (
         <GrantDialog

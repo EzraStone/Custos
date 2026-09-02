@@ -1,6 +1,11 @@
 import { useState } from "react";
 
-import { RADIUS_LABEL, type Agent, type AuditEntry } from "../api/types";
+import {
+  RADIUS_LABEL,
+  type Agent,
+  type AuditEntry,
+  type TransitionableStatus,
+} from "../api/types";
 import { History } from "./History";
 
 /**
@@ -24,6 +29,7 @@ export interface FindingProps {
   onGrant: (agent: Agent) => void;
   /** Fetches the audit trail. Omitted, the history section is not offered. */
   loadHistory?: (agentId: string) => Promise<AuditEntry[]>;
+  onTransition: (agent: Agent, to: TransitionableStatus) => void;
   busy?: boolean;
   /** Spend figures are estimates whenever pricing is unverified. */
   spendIsEstimate?: boolean;
@@ -33,6 +39,7 @@ export function Finding({
   agent,
   operator,
   onGrant,
+  onTransition,
   loadHistory,
   busy = false,
   spendIsEstimate = true,
@@ -111,25 +118,58 @@ export function Finding({
 
       {loadHistory ? <History agentId={agent.id} load={loadHistory} /> : null}
 
-      {agent.unsanctioned ? (
-        <div className="actions">
-          <button
-            className="primary"
-            disabled={!operator || !evidenceSeen || busy}
-            onClick={() => onGrant(agent)}
-          >
-            {busy ? "Granting…" : "Grant imprimatur"}
-          </button>
-          <span className="hint">{hint(operator, evidenceSeen)}</span>
-        </div>
-      ) : (
-        <div className="actions">
+      <div className="actions">
+        {agent.unsanctioned ? (
+          <>
+            <button
+              className="primary"
+              disabled={!operator || !evidenceSeen || busy}
+              onClick={() => onGrant(agent)}
+            >
+              {busy ? "Granting…" : "Grant imprimatur"}
+            </button>
+            <span className="hint">{hint(operator, evidenceSeen)}</span>
+          </>
+        ) : (
           <span className="hint">
             Sanctioned by {agent.imprimatur?.granted_by ?? "unknown"}
             {agent.imprimatur ? ` on ${formatDate(agent.imprimatur.granted_at)}` : ""}
           </span>
-        </div>
-      )}
+        )}
+
+        <span className="spacer" />
+
+        {/*
+          Retiring is not gated on the evidence. Reading why a workload was
+          flagged is what an approval needs; saying "this is gone" is a fact
+          about the world, and someone decommissioning forty dead roles should
+          not have to open forty evidence sections to do it.
+        */}
+        {agent.status !== "pending_review" ? (
+          <button
+            className="link"
+            disabled={!operator || busy}
+            onClick={() => onTransition(agent, "pending_review")}
+          >
+            Mark for review
+          </button>
+        ) : (
+          <button
+            className="link"
+            disabled={!operator || busy}
+            onClick={() => onTransition(agent, "discovered")}
+          >
+            Clear review flag
+          </button>
+        )}
+        <button
+          className="link"
+          disabled={!operator || busy}
+          onClick={() => onTransition(agent, "retired")}
+        >
+          Retire
+        </button>
+      </div>
     </article>
   );
 }

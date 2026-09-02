@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -36,6 +36,8 @@ interface Backend {
   accounts?: string[];
   registerStatus?: number;
   registerDetail?: string;
+  statusStatus?: number;
+  statusDetail?: string;
   grantStatus?: number;
   grantDetail?: string;
   pricesRevision?: string;
@@ -102,6 +104,12 @@ function backend(config: Backend = {}) {
           detail: "",
         }],
       });
+    }
+    if (url.includes("/status")) {
+      if (config.statusStatus && config.statusStatus !== 200) {
+        return json(config.statusStatus, { detail: config.statusDetail ?? "refused" });
+      }
+      return json(200, agent({ status: "retired", unsanctioned: false }));
     }
     if (url.includes("/imprimatur")) {
       if (config.grantStatus && config.grantStatus !== 200) {
@@ -470,5 +478,72 @@ describe("the grant dialog", () => {
     await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(document.body.style.overflow).not.toBe("hidden");
+  });
+});
+
+describe("retiring an agent", () => {
+  async function signedInWithAgent(config: Backend = {}) {
+    const stub = install(config);
+    session.save({ token: "tok-abc", operator: "ezra@custos.dev" });
+    render(<App />);
+    await screen.findByText("finance-close");
+    return stub;
+  }
+
+  it("asks why before it does anything", async () => {
+    const stub = await signedInWithAgent();
+    await userEvent.click(screen.getByRole("button", { name: /^retire$/i }));
+
+    await screen.findByRole("dialog");
+    expect(stub.calls.some((c) => c.url.includes("/status"))).toBe(false);
+  });
+
+  it("sends the reason and the operator", async () => {
+    const stub = await signedInWithAgent();
+    await userEvent.click(screen.getByRole("button", { name: /^retire$/i }));
+    await userEvent.type(await screen.findByLabelText(/why/i), "decommissioned in DEP-812");
+    // The card has a Retire button too. Scope to the dialog rather than
+    // picking by index, which would silently follow the DOM around.
+    await userEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: /^retire$/i }),
+    );
+
+    await waitFor(() => {
+      const call = stub.calls.find((c) => c.url.includes("/status"));
+      expect(call).toBeDefined();
+      expect(JSON.parse(String(call?.init?.body))).toEqual({
+        status: "retired",
+        operator: "ezra@custos.dev",
+        reason: "decommissioned in DEP-812",
+      });
+    });
+  });
+
+  it("keeps the dialog open when the server refuses", async () => {
+    // A refused transition is the state machine doing its job. Closing the
+    // dialog would look like the change had been made.
+    await signedInWithAgent({
+      statusStatus: 409,
+      statusDetail: "retired -> discovered is not a permitted transition",
+    });
+    await userEvent.click(screen.getByRole("button", { name: /^retire$/i }));
+    await userEvent.type(await screen.findByLabelText(/why/i), "gone");
+    await userEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: /^retire$/i }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/not a permitted transition/i);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("does not offer transitions to a reader with no name", async () => {
+    // Every transition is recorded against a person. Someone reading with a
+    // token and no identity has nobody to record it against.
+    install();
+    session.save({ token: "tok-abc", operator: "" });
+    render(<App />);
+    await screen.findByText("finance-close");
+
+    expect(screen.getByRole("button", { name: /^retire$/i })).toBeDisabled();
   });
 });

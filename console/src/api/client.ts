@@ -22,6 +22,7 @@ import type {
   Health,
   RegisterResponse,
   ScansResponse,
+  TransitionableStatus,
 } from "./types";
 
 export class ApiError extends Error {
@@ -109,6 +110,25 @@ export class Client {
   audit(agentId: string): Promise<AuditResponse> {
     return this.request<AuditResponse>(
       `/v1/agents/${encodeURIComponent(agentId)}/audit`,
+    );
+  }
+
+  /**
+   * Move an agent between discovered, pending_review and retired.
+   *
+   * Not a path to sanctioned — that is `grant` alone, and the server refuses
+   * it here. `reason` is free text and goes in the audit trail: an agent
+   * retired with no explanation is a decision nobody can review later.
+   */
+  setStatus(
+    agentId: string,
+    status: TransitionableStatus,
+    operator: string,
+    reason: string,
+  ): Promise<Agent> {
+    return this.request<Agent>(
+      `/v1/agents/${encodeURIComponent(agentId)}/status`,
+      { method: "POST", body: JSON.stringify({ status, operator, reason }) },
     );
   }
 
