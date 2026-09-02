@@ -129,6 +129,14 @@ export function App() {
     [client],
   );
 
+  const loadDrift = useCallback(
+    async (agentId: string) => {
+      if (!client) throw new Error("not signed in");
+      return client.drift(agentId);
+    },
+    [client],
+  );
+
   // load() raises a spinner before awaiting the API. Fetching from the control
   // plane is the external system this effect exists to synchronise with, which
   // is the case the rule's own guidance carves out; the state it objects to is
@@ -371,6 +379,7 @@ export function App() {
             agent={agent}
             operator={session.canSanction(auth) ? auth.operator : null}
             loadHistory={loadHistory}
+            loadDrift={loadDrift}
             spendIsEstimate={spendIsEstimate}
             busy={granting?.id === agent.id && grantBusy}
             onGrant={(target) => {

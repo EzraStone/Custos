@@ -119,6 +119,26 @@ export const CHANGE_LABEL: Record<string, string> = {
   volume_jumped: "busier",
 };
 
+export interface DriftItem {
+  kind: string;
+  observed_at: string;
+  /** The phrasing to show. A question gets answered; an accusation gets argued with. */
+  question: string;
+  detail: string;
+}
+
+export interface DriftResponse {
+  agent_id: string;
+  observations: number;
+  drift: DriftItem[];
+  baseline: {
+    tools: string[];
+    observations: number;
+    /** Whether there is enough history for any of this to mean anything. */
+    established: boolean;
+  };
+}
+
 export interface AccountsResponse {
   accounts: string[];
 }

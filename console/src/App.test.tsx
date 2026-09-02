@@ -112,6 +112,12 @@ function backend(config: Backend = {}) {
         }],
       });
     }
+    if (url.includes("/drift")) {
+      return json(200, {
+        agent_id: "agt_1", observations: 1, drift: [],
+        baseline: { tools: [], observations: 0, established: false },
+      });
+    }
     if (url.includes("/audit")) {
       return json(200, {
         agent_id: "agt_1",

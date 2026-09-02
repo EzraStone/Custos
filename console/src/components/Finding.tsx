@@ -4,8 +4,10 @@ import {
   RADIUS_LABEL,
   type Agent,
   type AuditEntry,
+  type DriftResponse,
   type TransitionableStatus,
 } from "../api/types";
+import { Drift } from "./Drift";
 import { History } from "./History";
 
 /**
@@ -29,6 +31,8 @@ export interface FindingProps {
   onGrant: (agent: Agent) => void;
   /** Fetches the audit trail. Omitted, the history section is not offered. */
   loadHistory?: (agentId: string) => Promise<AuditEntry[]>;
+  /** Fetches the baseline comparison. Omitted, the section is not offered. */
+  loadDrift?: (agentId: string) => Promise<DriftResponse>;
   onTransition: (agent: Agent, to: TransitionableStatus) => void;
   busy?: boolean;
   /** Spend figures are estimates whenever pricing is unverified. */
@@ -41,6 +45,7 @@ export function Finding({
   onGrant,
   onTransition,
   loadHistory,
+  loadDrift,
   busy = false,
   spendIsEstimate = true,
 }: FindingProps) {
@@ -116,6 +121,7 @@ export function Finding({
         </ul>
       </details>
 
+      {loadDrift ? <Drift agentId={agent.id} load={loadDrift} /> : null}
       {loadHistory ? <History agentId={agent.id} load={loadHistory} /> : null}
 
       <div className="actions">

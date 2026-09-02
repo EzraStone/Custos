@@ -20,6 +20,7 @@ import type {
   Agent,
   AuditResponse,
   DiffResponse,
+  DriftResponse,
   Health,
   RegisterResponse,
   ScansResponse,
@@ -112,6 +113,13 @@ export class Client {
   scans(account?: string): Promise<ScansResponse> {
     const query = account ? `?account=${encodeURIComponent(account)}` : "";
     return this.request<ScansResponse>(`/v1/scans${query}`);
+  }
+
+  /** How one agent's behaviour compares with its own history. */
+  drift(agentId: string): Promise<DriftResponse> {
+    return this.request<DriftResponse>(
+      `/v1/agents/${encodeURIComponent(agentId)}/drift`,
+    );
   }
 
   audit(agentId: string): Promise<AuditResponse> {
