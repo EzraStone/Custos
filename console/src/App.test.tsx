@@ -561,3 +561,65 @@ describe("retiring an agent", () => {
     expect(screen.getByRole("button", { name: /^retire$/i })).toBeDisabled();
   });
 });
+
+describe("filtering the register", () => {
+  const many = [
+    agent({ id: "a1", principal: "arn:aws:iam::1:role/ops-automation",
+            blast_radius: "destructive", owner_team: "platform" }),
+    agent({ id: "a2", principal: "arn:aws:iam::1:role/finance-close",
+            blast_radius: "write", owner_team: "finance" }),
+    agent({ id: "a3", principal: "arn:aws:iam::1:role/support-triage",
+            blast_radius: "read", owner_team: "", attributed: false }),
+  ];
+
+  async function loaded() {
+    install({ agents: many });
+    session.save({ token: "tok-abc", operator: "ezra@custos.dev" });
+    render(<App />);
+    await screen.findByText("ops-automation");
+  }
+
+  it("narrows by blast radius", async () => {
+    await loaded();
+    await userEvent.click(screen.getByRole("button", { name: /can destroy/i }));
+
+    expect(screen.getByText("ops-automation")).toBeInTheDocument();
+    expect(screen.queryByText("finance-close")).not.toBeInTheDocument();
+  });
+
+  it("always says how many are hidden", async () => {
+    // A filtered view that says "1 agent" and nothing else is how someone
+    // concludes an account is nearly clean while looking at a third of it.
+    await loaded();
+    await userEvent.click(screen.getByRole("button", { name: /can destroy/i }));
+    expect(screen.getByText(/showing 1 of 3/i)).toBeInTheDocument();
+  });
+
+  it("distinguishes no matches from an empty account", async () => {
+    await loaded();
+    await userEvent.type(screen.getByRole("searchbox"), "nothing-called-this");
+
+    // The wording must not be mistakable for "this account is clean", which is
+    // the one conclusion a filtered view can never support.
+    expect(await screen.findByText(/no agents match these filters/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 are hidden/i)).toBeInTheDocument();
+    expect(screen.queryByText(/before concluding the account is clean/i)).toBeNull();
+  });
+
+  it("clears back to everything", async () => {
+    await loaded();
+    await userEvent.click(screen.getByRole("button", { name: /can destroy/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^clear$/i }));
+
+    expect(screen.getByText("finance-close")).toBeInTheDocument();
+    expect(screen.getByText("support-triage")).toBeInTheDocument();
+  });
+
+  it("finds an agent nobody owns", async () => {
+    await loaded();
+    await userEvent.click(screen.getByRole("button", { name: /unattributed/i }));
+
+    expect(screen.getByText("support-triage")).toBeInTheDocument();
+    expect(screen.queryByText("ops-automation")).not.toBeInTheDocument();
+  });
+});

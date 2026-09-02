@@ -11,10 +11,12 @@ import {
 } from "./api/types";
 import { AccountPicker } from "./components/AccountPicker";
 import { Changes } from "./components/Changes";
+import { Filters } from "./components/Filters";
 import { Finding } from "./components/Finding";
 import { GrantDialog } from "./components/GrantDialog";
 import { SignIn } from "./components/SignIn";
 import { StatusDialog } from "./components/StatusDialog";
+import { NO_FILTERS, matches, type FilterState } from "./filters";
 import * as session from "./session";
 
 type View = "unsanctioned" | "all";
@@ -27,6 +29,7 @@ export function App() {
   const [diff, setDiff] = useState<DiffResponse | null>(null);
   const [accounts, setAccounts] = useState<string[] | null>(null);
   const [view, setView] = useState<View>("unsanctioned");
+  const [filters, setFilters] = useState<FilterState>(NO_FILTERS);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [granting, setGranting] = useState<Agent | null>(null);
@@ -189,6 +192,8 @@ export function App() {
   const spendIsEstimate = health?.prices_revision !== undefined
     && health.prices_revision.startsWith("unverified");
 
+  const shown = agents === null ? null : agents.filter((a) => matches(a, filters));
+
   const fleet = (accounts?.length ?? 0) > 1;
   const chooseAccount = (account: string) => {
     session.save({ account });
@@ -297,7 +302,16 @@ export function App() {
         </button>
       </p>
 
-      {agents === null ? (
+      {agents !== null && agents.length > 0 ? (
+        <Filters
+          value={filters}
+          onChange={setFilters}
+          showing={shown?.length ?? 0}
+          total={agents.length}
+        />
+      ) : null}
+
+      {agents === null || shown === null ? (
         <p className="empty">{loading ? "Loading…" : "Nothing loaded."}</p>
       ) : agents.length === 0 ? (
         <p className="empty">
@@ -305,8 +319,20 @@ export function App() {
             ? "No unsanctioned agents. Check the coverage of the last scan before concluding the account is clean."
             : "No agents in this account yet."}
         </p>
+      ) : shown.length === 0 ? (
+        <p className="empty">
+          {/*
+            Deliberately different wording from an empty account. "No agents
+            match" cannot be misread as "this account is clean", which is the
+            one conclusion a filtered view must never invite.
+          */}
+          No agents match these filters. {agents.length} are hidden.{" "}
+          <button className="link" onClick={() => setFilters(NO_FILTERS)}>
+            Clear them
+          </button>
+        </p>
       ) : (
-        agents.map((agent) => (
+        shown.map((agent) => (
           <Finding
             key={agent.id}
             agent={agent}
