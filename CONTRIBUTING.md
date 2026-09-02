@@ -8,9 +8,9 @@ make check
 
 CI runs exactly these targets. If `make check` passes, CI passes.
 
-## The seven invariants
+## The eight invariants
 
-`docs/SECURITY-INVARIANTS.md` lists SEC-16 through SEC-22. Each one names the
+`docs/SECURITY-INVARIANTS.md` lists SEC-16 through SEC-23. Each one names the
 test that enforces it.
 
 **A change that removes or weakens one of those tests is a change to the
@@ -42,6 +42,46 @@ sentence to the engineer who owns the workload is not worth having. Every
 finding gets challenged by that person, and a confidence score loses that
 argument.
 
+## Check that a test fails
+
+A test that passes against broken code is worse than no test: it is a claim
+nobody has verified, sitting where a check appears to be.
+
+Before committing a test for a bug you just fixed, break the fix and watch the
+test go red. It takes a minute and it has been worth it every time. Three tests
+written during the destination-naming work passed against deliberately broken
+code:
+
+- one asserted a duplicate could not appear in an approval scope, when keying
+  that scope by address had already made the shape impossible — it was checking
+  nothing;
+- one exercised a merge that could never run, because the record it fed in was
+  filtered out two steps earlier;
+- one used `offsetParent` to decide whether a control was visible, which is
+  null for every element under jsdom, so the focus trap it tested silently did
+  nothing.
+
+Each looked correct. Each was found by breaking the code under it on purpose.
+
+The same applies to a test for behaviour you are keeping: if you cannot think of
+an edit that would make it fail, it is describing the code rather than
+constraining it.
+
+## Meta-tests
+
+Several tests in this repository test the repository rather than the product:
+every invariant cites a test that exists, every API route is in `docs/API.md`
+and nothing else is, every relative link resolves, the Terraform log format
+matches the parser, the Go wire types match the Pydantic models.
+
+They exist because each of those drifts silently. A renamed test leaves a
+citation pointing at nothing; an undocumented route is a capability nobody can
+use; a documented route that was removed is something an integrator builds
+against and discovers at runtime.
+
+Add one whenever you notice two places that have to agree and nothing making
+them.
+
 ## Changing the corpus
 
 `a0/tests/test_corpus.py` asserts the corpus is hard: volume alone must not
@@ -51,6 +91,14 @@ accumulate context, and some negatives must have no inbound correlation.
 Those tests exist so the corpus cannot quietly become easy and turn a passing
 gate into an artefact. Making the corpus harder is welcome. Making it easier
 needs a reason in the commit message.
+
+**Ask what a new signal looks like when it is absent, and make sure the corpus
+contains that.** This has been got wrong three times, always in the flattering
+direction: signal availability derived per principal rather than per capture, a
+corpus that annotated both ends of a flow record when AWS annotates one, and
+destination names that resolved for every endpoint when real accounts have
+untagged ENIs. Each made the product look better here than it would in a
+customer's account, and each hid a real defect until someone went looking.
 
 ## Changing the G0 result
 
