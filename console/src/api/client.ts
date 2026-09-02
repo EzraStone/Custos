@@ -19,6 +19,7 @@ import type {
   AccountsResponse,
   Agent,
   AuditResponse,
+  DiffResponse,
   Health,
   RegisterResponse,
   ScansResponse,
@@ -100,6 +101,12 @@ export class Client {
     if (unsanctionedOnly) query.set("unsanctioned_only", "true");
     const suffix = query.toString();
     return this.request<RegisterResponse>(`/v1/register${suffix ? `?${suffix}` : ""}`);
+  }
+
+  /** What changed between the two most recent scans. */
+  diff(account?: string): Promise<DiffResponse> {
+    const query = account ? `?account=${encodeURIComponent(account)}` : "";
+    return this.request<DiffResponse>(`/v1/diff${query}`);
   }
 
   scans(account?: string): Promise<ScansResponse> {

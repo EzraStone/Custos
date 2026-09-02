@@ -253,3 +253,33 @@ h2 { font-family: var(--display); font-size: 1.5rem; margin: 2.5rem 0 .5rem; }
 .dialog .field input { width: 100%; }
 .dialog .field .hint { margin: .4rem 0 0; }
 .actions .spacer { margin-left: auto; }
+
+/* ---------- changes since the last scan ---------- */
+.changes { margin: 0 0 2rem; }
+.changes h2 { margin-bottom: .4rem; }
+.changes .headline { margin: 0 0 .9rem; color: var(--ink-soft); }
+.change-list { list-style: none; margin: 0; padding: 0; }
+.change-list .change {
+  display: grid;
+  grid-template-columns: 10rem 12rem 1fr 9rem;
+  gap: .35rem .9rem;
+  align-items: baseline;
+  padding: .5rem 0 .5rem .75rem;
+  border-left: 3px solid var(--hair);
+  border-bottom: 1px solid var(--hair);
+  font-size: .86rem;
+}
+.change-list .change:last-child { border-bottom: 0; }
+.change-list .change.new { border-left-color: var(--verdigris); }
+.change-list .change.escalation { border-left-color: var(--seal); }
+.change-list .kind {
+  font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.change-list .detail { color: var(--ink-soft); }
+.change-list .owner { color: var(--ink-faint); text-align: right; }
+
+@media (max-width: 820px) {
+  .change-list .change { grid-template-columns: 1fr; }
+  .change-list .owner { text-align: left; }
+}

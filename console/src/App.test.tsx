@@ -34,6 +34,7 @@ interface Backend {
   coverage?: number;
   truncated?: boolean;
   accounts?: string[];
+  diff?: unknown;
   registerStatus?: number;
   registerDetail?: string;
   statusStatus?: number;
@@ -78,6 +79,15 @@ function backend(config: Backend = {}) {
         account_id: "447120043318",
         catalogue_revision: "2026-08-18",
         agents: config.agents ?? [agent()],
+      });
+    }
+    if (url.startsWith("/v1/diff")) {
+      return json(200, config.diff ?? {
+        account_id: "447120043318",
+        previous_scan_id: null,
+        current_scan_id: 1,
+        headline: "Nothing to compare yet — this account has one scan.",
+        changes: [],
       });
     }
     if (url.startsWith("/v1/scans")) {
@@ -330,6 +340,10 @@ describe("overlapping loads", () => {
           });
         }
         if (url.startsWith("/v1/accounts")) return json({ accounts: ["1"] });
+        if (url.startsWith("/v1/diff")) {
+          return json({ account_id: "1", previous_scan_id: null,
+                        current_scan_id: null, headline: "", changes: [] });
+        }
         if (url.startsWith("/v1/scans")) return json({ account_id: "1", scans: [] });
         return json({
           status: "ok",

@@ -5,10 +5,12 @@ import {
   byConsequence,
   type Agent,
   type Health,
+  type DiffResponse,
   type Scan,
   type TransitionableStatus,
 } from "./api/types";
 import { AccountPicker } from "./components/AccountPicker";
+import { Changes } from "./components/Changes";
 import { Finding } from "./components/Finding";
 import { GrantDialog } from "./components/GrantDialog";
 import { SignIn } from "./components/SignIn";
@@ -22,6 +24,7 @@ export function App() {
   const [health, setHealth] = useState<Health | null>(null);
   const [agents, setAgents] = useState<Agent[] | null>(null);
   const [scans, setScans] = useState<Scan[]>([]);
+  const [diff, setDiff] = useState<DiffResponse | null>(null);
   const [accounts, setAccounts] = useState<string[] | null>(null);
   const [view, setView] = useState<View>("unsanctioned");
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +57,7 @@ export function App() {
     setAuth({ token: "", operator: "", account: "" });
     setAgents(null);
     setScans([]);
+    setDiff(null);
     setAccounts(null);
     setHealth(null);
   }, []);
@@ -79,14 +83,19 @@ export function App() {
         return;
       }
 
-      const [registry, history, status] = await Promise.all([
+      const [registry, history, status, changes] = await Promise.all([
         client.register(account, view === "unsanctioned"),
         client.scans(account).catch(() => ({ scans: [] })),
         client.health().catch(() => null),
+        // The register is the point; the diff is context. A control plane too
+        // old to have /v1/diff should still show findings rather than an
+        // error, so this one failure is swallowed.
+        client.diff(account).catch(() => null),
       ]);
       if (mine !== ticket.current) return;
       setAgents([...registry.agents].sort(byConsequence));
       setScans("scans" in history ? history.scans : []);
+      setDiff(changes);
       if (status) setHealth(status);
     } catch (caught) {
       if (mine !== ticket.current) return;
@@ -258,6 +267,20 @@ export function App() {
             would.
           </p>
         </div>
+      ) : null}
+
+      {diff ? (
+        <Changes
+          diff={diff}
+          onFocus={(id) => {
+            // Scroll rather than filter. The operator asked where to look, not
+            // to be shown only that one — the surrounding findings are how they
+            // judge whether this change matters.
+            document
+              .querySelector(`[data-testid="finding-${id}"]`)
+              ?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }}
+        />
       ) : null}
 
       <h2>{view === "unsanctioned" ? "Unsanctioned agents" : "The register"}</h2>

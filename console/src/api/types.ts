@@ -79,6 +79,46 @@ export const TRANSITION_MEANING: Record<TransitionableStatus, string> = {
     "Says this workload is gone. Any imprimatur it held is revoked, and a later scan that sees it again will surface it as a new finding.",
 };
 
+/**
+ * A change between two scans.
+ *
+ * `kind` is not narrowed to a union on purpose. The server owns the list, and
+ * a console that threw away a change kind it had not been told about would
+ * hide exactly the new thing someone had just added.
+ */
+export interface Change {
+  kind: string;
+  agent_id: string;
+  principal: string;
+  detail: string;
+  owner_team: string;
+  blast_radius: BlastRadius;
+}
+
+export interface DiffResponse {
+  account_id: string;
+  previous_scan_id: number | null;
+  current_scan_id: number | null;
+  headline: string;
+  changes: Change[];
+}
+
+/** Changes worth colouring. Anything else renders plainly. */
+export const CHANGE_TONE: Record<string, string> = {
+  appeared: "new",
+  blast_radius_increased: "escalation",
+  returned: "new",
+};
+
+export const CHANGE_LABEL: Record<string, string> = {
+  appeared: "new",
+  blast_radius_increased: "can do more damage",
+  reach_expanded: "reaching further",
+  disappeared: "gone",
+  returned: "back",
+  volume_jumped: "busier",
+};
+
 export interface AccountsResponse {
   accounts: string[];
 }
