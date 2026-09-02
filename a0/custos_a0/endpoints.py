@@ -41,6 +41,16 @@ class Endpoint:
     aws_service: str = ""
     writes: bool = False
     """Ground truth for reach validation: does the principal hold write access here."""
+    eni_name: str = ""
+    """What the collector would find on this address's ENI, or "" for nothing.
+
+    Modelling the lookup as always succeeding would be the same mistake as
+    annotating both ends of a flow record: a corpus more informative than a
+    real account, hiding the case the product has to handle. Real accounts have
+    ENIs nobody tagged, so some endpoints here have no name and appear in the
+    register as addresses.
+    """
+    eni_kind: str = ""
 
 
 # Model providers.
@@ -53,29 +63,37 @@ BEDROCK = Endpoint(
 
 # MCP servers.
 MCP_GITHUB = Endpoint(
-    "mcp-github.svc.internal", "10.0.5.11", 8931, EndpointClass.MCP, writes=True
+    "mcp-github.svc.internal", "10.0.5.11", 8931, EndpointClass.MCP, writes=True,
+    eni_name="mcp-github", eni_kind="tag",
 )
 MCP_FILES = Endpoint(
-    "mcp-filesystem.svc.internal", "10.0.5.12", 8931, EndpointClass.MCP, writes=True
+    "mcp-filesystem.svc.internal", "10.0.5.12", 8931, EndpointClass.MCP, writes=True,
+    eni_name="mcp-filesystem", eni_kind="tag",
 )
 
 # Internal APIs.
 BILLING_API = Endpoint(
-    "billing-api.svc.internal", "10.0.4.21", 8080, EndpointClass.INTERNAL_API, writes=True
+    "billing-api.svc.internal", "10.0.4.21", 8080, EndpointClass.INTERNAL_API, writes=True,
+    eni_name="billing-api", eni_kind="load-balancer",
 )
 TICKET_API = Endpoint(
-    "ticketing.svc.internal", "10.0.4.22", 8080, EndpointClass.INTERNAL_API, writes=True
+    "ticketing.svc.internal", "10.0.4.22", 8080, EndpointClass.INTERNAL_API, writes=True,
+    eni_name="ticketing", eni_kind="load-balancer",
 )
+# Deliberately unnamed. Every real account has ENIs nobody tagged, and this is
+# the one that shows up in the register as a bare address.
 DEPLOY_API = Endpoint(
     "deploy-ctl.svc.internal", "10.0.4.23", 8443, EndpointClass.INTERNAL_API, writes=True
 )
 
 # Datastores.
 ORDERS_DB = Endpoint(
-    "orders.cluster-ro.rds.amazonaws.com", "10.0.9.44", 5432, EndpointClass.DATASTORE
+    "orders.cluster-ro.rds.amazonaws.com", "10.0.9.44", 5432, EndpointClass.DATASTORE,
+    eni_name="rds", eni_kind="rds",
 )
 BILLING_DB = Endpoint(
-    "billing.cluster.rds.amazonaws.com", "10.0.9.45", 5432, EndpointClass.DATASTORE, writes=True
+    "billing.cluster.rds.amazonaws.com", "10.0.9.45", 5432,
+    EndpointClass.DATASTORE, writes=True, eni_name="rds", eni_kind="rds",
 )
 VECTOR_DB = Endpoint("vectors.svc.internal", "10.0.6.30", 6333, EndpointClass.DATASTORE)
 ARTIFACTS_S3 = Endpoint(
@@ -87,3 +105,16 @@ ARTIFACTS_S3 = Endpoint(
 ALB = Endpoint("alb-prod.elb.amazonaws.com", "10.0.1.5", 443, EndpointClass.INGRESS)
 
 MODEL_ENDPOINTS: frozenset[str] = frozenset({ANTHROPIC.ip, OPENAI.ip, BEDROCK.ip})
+
+ALL: tuple[Endpoint, ...] = (
+    ANTHROPIC, OPENAI, BEDROCK,
+    MCP_GITHUB, MCP_FILES,
+    BILLING_API, TICKET_API, DEPLOY_API,
+    ORDERS_DB, BILLING_DB, VECTOR_DB, ARTIFACTS_S3,
+    ALB,
+)
+"""Every endpoint the corpus can generate traffic to.
+
+Explicit rather than derived by walking the module, so adding an endpoint and
+forgetting to include it is a visible omission rather than an invisible one.
+"""

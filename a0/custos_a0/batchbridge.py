@@ -13,12 +13,14 @@ from custos.batch import (
     Attachment,
     Batch,
     Collection,
+    Destination,
     FlowRecord,
     InboundRequest,
     PrincipalFacts,
 )
 
 from . import corpus as corpus_mod
+from . import endpoints
 from .scanbridge import CAPABILITIES, FACTS, _short
 from .trace import Corpus
 from .wire import AggregationConfig, aggregate
@@ -79,6 +81,16 @@ def build_batch(
                 actions=sorted(CAPABILITIES.get(short, set())),
             ))
 
+    # What the collector's ENI lookup would have found. Only the endpoints a
+    # real account would have named: the ones behind a load balancer, the ones
+    # someone tagged, and RDS, which AWS describes itself. The rest arrive as
+    # addresses, which is what the register then shows.
+    destinations = [
+        Destination(address=ep.ip, name=ep.eni_name, kind=ep.eni_kind)
+        for ep in endpoints.ALL
+        if ep.eni_name
+    ]
+
     return Batch(
         account_id=capture.config.account_id,
         region="us-east-1",
@@ -97,4 +109,5 @@ def build_batch(
         requests=requests,
         principals=principals,
         attachments=attachments,
+        destinations=destinations,
     )

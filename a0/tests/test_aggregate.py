@@ -132,3 +132,22 @@ def test_only_the_end_that_is_the_service_is_annotated():
             assert r.dst_aws_service and not r.src_aws_service
         else:
             assert r.src_aws_service and not r.dst_aws_service
+
+
+def test_the_corpus_leaves_some_destinations_unnamed():
+    """A corpus where every ENI lookup succeeds is a corpus that hides the case
+    the product has to handle.
+
+    Real accounts have ENIs nobody tagged and services AWS does not describe.
+    If every destination here were nameable, the register would never be
+    exercised on the path that shows a bare address — which is the path a
+    customer will hit on their first scan.
+    """
+    from custos_a0 import endpoints
+
+    private = [e for e in endpoints.ALL if e.ip.startswith(("10.", "192.168.", "172.16."))]
+    named = [e for e in private if e.eni_name]
+    unnamed = [e for e in private if not e.eni_name]
+
+    assert named, "nothing is nameable; the collector's ENI lookup is not exercised"
+    assert unnamed, "everything is nameable; the bare-address path is not exercised"
