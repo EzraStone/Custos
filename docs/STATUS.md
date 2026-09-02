@@ -34,6 +34,7 @@ custos diff                 →  what changed since last week
 | Onboarding and preflight | Works. `custos onboard`, `custos-collector --check` |
 | Enforcement checkpoint | **Not started.** §12: not before a paying customer |
 | Operator console | Works. Read the register, read the evidence, sanction. Served by the control plane |
+| Destination naming | Works where an ENI, an AWS description, or a port says what something is |
 
 ## The one number that matters
 
@@ -75,14 +76,15 @@ signal exists and which features carry it — not that these weights generalise.
 One real scan answers it, and the thresholds sit in measured empty space so
 there is room to move them.
 
-**Destination naming is partial.** The scope an operator approves now reads
-`s3`, `postgres 10.0.9.44`, `mcp 10.0.5.11` rather than bare addresses — but
-only where AWS annotates the service or the port is unambiguous. An internal
-HTTPS API is still `10.0.4.23`, because nothing in a flow log says what it is.
-Closing that needs a source the collector does not read yet: Route 53 Resolver
-query logs, VPC endpoint names, or the tags on the destination's own ENI. Until
-then a real account will show a mix, and the unnamed half is the half an
-operator can say least about.
+**Destination naming is partial, and how partial is unmeasured.** The scope
+reads `billing-api 10.0.4.21`, `rds 10.0.9.45`, `s3` — from the ENI behind an
+address, from AWS's own description, and from the flow log's service
+annotation. What none of those cover stays a bare address. In the corpus that
+is one endpoint out of seven; in a real account the ratio depends entirely on
+whether the customer tags ENIs, and nobody has measured it. A scan whose scope
+is mostly addresses is a scan whose approvals are mostly guesses, so the
+collector reports the count and it belongs next to coverage in the first
+design-partner conversation.
 
 **The console was built ahead of the schedule the specification set.** §12
 puts it after a paying customer, and that ordering was right: a UI built before

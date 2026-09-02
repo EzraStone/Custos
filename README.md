@@ -98,12 +98,14 @@ These are the real console against a real scanned database, but the traffic is
 the A0 synthetic corpus rather than a customer account — nobody has run this
 against an account we did not build. Regenerate them with `make screenshots`.
 
-The scope names what it can: `s3` for a service whose addresses rotate,
-`postgres 10.0.9.44` for a host that does not, `mcp 10.0.5.11` for a tool
-server. What it cannot name it leaves as an address — an internal HTTPS API is
-still `10.0.4.23`, because nothing in a flow log says what that is. An honest
-address beats an invented name, and the gap is tracked in
-[docs/STATUS.md](docs/STATUS.md).
+The scope names what it can. `billing-api 10.0.4.21` comes from the ENI behind
+that address, `rds 10.0.9.45` from the description AWS writes itself, `s3` from
+the flow log's own service annotation — and `s3` has no address because service
+addresses rotate, so an approval recorded against one is stale within days.
+
+What it cannot name it leaves as an address. `10.0.4.23` is an ENI nobody
+tagged, and an honest address beats an invented name. Every real account has
+some, which is why the corpus has one too.
 
 ## Layout
 
