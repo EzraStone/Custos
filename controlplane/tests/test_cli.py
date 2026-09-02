@@ -278,3 +278,57 @@ def test_history_shows_a_dash_when_nothing_internal_was_reached(tmp_path, capsys
     assert main(["--db", str(db), "history", "--account", "1"]) == 0
     out = capsys.readouterr().out
     assert "0%" not in out.split("coverage")[-1].replace("100%", "")
+
+
+def test_grant_prints_the_scope_before_granting_it(tmp_path, capsys):
+    """The scope is what is being approved. A command that reports it only
+    afterwards gives the operator no moment at which they could have declined,
+    which is the same reason the console shows it in a dialog."""
+    from custos.cli import main
+    from custos.register.model import (
+        Agent,
+        Identity,
+        ModelUse,
+        Provenance,
+        Reach,
+        Source,
+        Status,
+    )
+    from custos.register.store import agent_id
+    from custos.store.agents import AgentStore
+
+    db = tmp_path / "g.db"
+    conn = open_database(db)
+    at = datetime(2026, 8, 10, tzinfo=UTC)
+    ident = "arn:aws:iam::1:role/finance-close"
+    AgentStore(conn).upsert(Agent(
+        id=agent_id("1", ident), first_seen=at, last_seen=at,
+        status=Status.DISCOVERED,
+        provenance=Provenance(source=Source.DISCOVERED, confidence=0.95,
+                              observed_principal=ident, evidence=[]),
+        identity=Identity(principal=ident, account_id="1"),
+        model=ModelUse(),
+        reach=Reach(tools={"billing-api 10.0.4.21"}, data_stores={"rds 10.0.9.45"}),
+    ))
+    conn.commit()
+    conn.close()
+
+    assert main([
+        "--db", str(db), "grant", agent_id("1", ident), "--operator", "ezra@custos.dev",
+    ]) == 0
+    out = capsys.readouterr().out
+
+    scope_line = next(line for line in out.splitlines() if "approving" in line)
+    assert "billing-api 10.0.4.21" in scope_line
+    assert "rds 10.0.9.45" in scope_line
+    # Before, not after.
+    assert out.index("approving") < out.index("sanctioned")
+
+
+def test_grant_on_a_missing_agent_says_so_rather_than_raising(tmp_path, capsys):
+    from custos.cli import main
+
+    db = tmp_path / "g2.db"
+    open_database(db).close()
+    assert main(["--db", str(db), "grant", "agt_nope", "--operator", "ezra"]) == 2
+    assert "no agent" in capsys.readouterr().err

@@ -215,6 +215,20 @@ def cmd_grant(args: argparse.Namespace) -> int:
 
     conn = open_database(args.db)
     agents = AgentStore(conn)
+
+    # Print the scope before granting it, as the console does. The scope is
+    # what is being approved, and a command that reports it only afterwards
+    # gives the operator no moment at which they could have declined.
+    existing = agents.get(args.agent_id)
+    if existing is None:
+        print(f"error: no agent {args.agent_id}", file=sys.stderr)
+        return 2
+
+    scope = sorted(existing.reach.tools | existing.reach.data_stores)
+    print(f"{existing.identity.principal}")
+    print(f"  blast radius  {existing.reach.blast_radius}")
+    print(f"  approving     {', '.join(scope) if scope else 'nothing observed'}")
+
     try:
         agent = agents.grant_imprimatur(args.agent_id, operator=args.operator, at=now())
     except (KeyError, TransitionError) as exc:
