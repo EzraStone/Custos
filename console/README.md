@@ -81,6 +81,11 @@ in a real browser: sign in, read five real findings, open the evidence, load an
 agent's history, grant imprimatur, and confirm the sanction is recorded against
 the operator's name.
 
+It drives both mutations — granting and retiring — because a status
+transition the server refuses looks identical to one it accepted until the
+register reloads, and that is the kind of disagreement only a real browser
+against a real control plane surfaces.
+
 It is the only test that touches the built bundle. Everything under `src/`
 mocks `fetch`, which cannot catch a request shape the server rejects or a
 static mount that shadows an API route. It is not in CI — it needs a browser —

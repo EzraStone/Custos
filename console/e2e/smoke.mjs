@@ -131,9 +131,52 @@ await step("the grant sanctions the agent", async () => {
   if (n !== 4) throw new Error(`expected 4 unsanctioned after granting, saw ${n}`);
 });
 
-await step("the sanction is recorded against the operator", async () => {
+// Retiring is the other mutation, and the newer one. It is exercised here
+// rather than only in jsdom because it is the path where a real browser and a
+// real control plane disagree most cheaply: a status transition the server
+// refuses looks identical to one it accepted until the register reloads.
+await step("retiring asks why, and will not proceed without an answer", async () => {
+  const card = page.locator("article.finding").first();
+  await card.getByRole("button", { name: /^retire$/i }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.waitFor({ timeout: 5000 });
+
+  const confirm = dialog.getByRole("button", { name: /^retire$/i });
+  await until("retire was available with no reason given", async () => confirm.isDisabled());
+
+  await dialog.getByLabel(/why/i).fill("decommissioned in DEP-812");
+  await until("retire stayed disabled after a reason", async () => !(await confirm.isDisabled()));
+});
+
+await step("the retired agent leaves the unsanctioned list", async () => {
+  const before = await page.locator("article.finding").count();
+  await page.getByRole("dialog").getByRole("button", { name: /^retire$/i }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 8000 });
+  await until(
+    "the register did not reload after retiring",
+    async () => (await page.locator("article.finding").count()) === before - 1,
+    8000,
+  );
+});
+
+await step("the retired agent says it is retired, not sanctioned", async () => {
+  // Retiring clears the imprimatur and takes the agent out of the unsanctioned
+  // set, which once put it in the sanctioned branch with nobody to name.
   await page.getByRole("button", { name: /show all/i }).click();
   await page.getByRole("heading", { name: /the register/i }).waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: /^retired$/i }).click();
+
+  const retired = page.locator("article.finding").first();
+  await retired.waitFor({ timeout: 5000 });
+  const text = await retired.innerText();
+  if (!/retired\./i.test(text)) throw new Error(`retired card reads: ${text.slice(0, 200)}`);
+  if (/sanctioned by/i.test(text)) throw new Error("a retired agent claims it was sanctioned");
+});
+
+await step("the sanction is recorded against the operator", async () => {
+  // Already in the "all" view from the previous step; clear the status filter
+  // so the sanctioned agent is visible again.
+  await page.getByRole("button", { name: /any status/i }).click();
   const body = await page.locator("main").innerText();
   if (!body.includes("ezra@custos.dev")) throw new Error("operator not shown on the sanctioned agent");
 });
