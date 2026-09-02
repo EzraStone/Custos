@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from ..catalog import DestinationClass, classify, is_tool_destination
+from ..naming import describe
 from ..telemetry import SYN, Direction, FlowRecord, InboundRequest
 
 
@@ -35,6 +36,16 @@ class Window:
     tool_classes: set[DestinationClass] = field(default_factory=set)
     tool_addresses: set[str] = field(default_factory=set)
     model_addresses: set[str] = field(default_factory=set)
+    tool_labels: set[str] = field(default_factory=set)
+    """The same destinations, named for a human.
+
+    Parallel to `tool_addresses` rather than replacing it, deliberately. The
+    classifier's features count distinct addresses — "calls to 3 internal
+    destinations" — and naming collapses rotating service addresses into one
+    entry. Substituting labels here would change a feature the weights were
+    fitted on, silently, to make a display nicer. The addresses stay exactly
+    as they were; the labels are additional.
+    """
 
     @property
     def has_model(self) -> bool:
@@ -141,6 +152,7 @@ def build_windows(
         elif is_tool_destination(cls):
             w.tool_classes.add(cls)
             w.tool_addresses.add(peer)
+            w.tool_labels.add(describe(peer, port, r.dst_aws_service if egress else ""))
             if egress:
                 w.tool_egress += r.bytes
             else:
