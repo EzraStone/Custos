@@ -90,15 +90,21 @@ def check_preconditions() -> str:
 # Run inside the venv's interpreter, where both packages are importable.
 _BUILD_BATCH = """
 import json, sys
+from custos_a0 import corpus
 from custos_a0.batchbridge import build_batch
-body = build_batch().model_dump(mode="json")
+
+# The stress corpus when asked for it: it is the only one containing a
+# workload behind an undeclared gateway, which is the case worth showing.
+hard = len(sys.argv) > 2 and sys.argv[2] == "hard"
+c = corpus.build(corpus.CorpusSpec(hard=True)) if hard else None
+body = build_batch(c).model_dump(mode="json")
 open(sys.argv[1], "w").write(json.dumps(body))
 print(f"{len(body['flows']):,} flow records across {len(body['principals'])} principals")
 """
 
 
 @contextmanager
-def serving(quiet: bool = False) -> Iterator[Stack]:
+def serving(quiet: bool = False, hard: bool = False) -> Iterator[Stack]:
     """Yield a running control plane with the console mounted and data in it."""
     def say(message: str) -> None:
         if not quiet:
@@ -111,7 +117,8 @@ def serving(quiet: bool = False) -> Iterator[Stack]:
         say("stack: building a batch from the A0 corpus")
         batch = work / "batch.json"
         built = subprocess.run(
-            [str(VENV / "bin" / "python"), "-c", _BUILD_BATCH, str(batch)],
+            [str(VENV / "bin" / "python"), "-c", _BUILD_BATCH, str(batch),
+             *(["hard"] if hard else [])],
             cwd=ROOT, capture_output=True, text=True, check=False,
         )
         if built.returncode != 0:

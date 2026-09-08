@@ -26,16 +26,29 @@ OUT = ROOT / "docs" / "images"
 
 def main() -> int:
     try:
+        OUT.mkdir(parents=True, exist_ok=True)
+        print(f"shots: writing to {OUT.relative_to(ROOT)}\n")
+
         with serving() as stack:
-            OUT.mkdir(parents=True, exist_ok=True)
-            print(f"shots: writing to {OUT.relative_to(ROOT)}\n")
             code = run_node(
                 ROOT / "console" / "e2e" / "screenshots.mjs", stack, {"OUT": str(OUT)}
             )
-            if code == 0:
-                for image in sorted(OUT.glob("*.png")):
-                    print(f"       {image.name}  {image.stat().st_size // 1024} kB")
+        if code != 0:
             return code
+
+        # The gateway question needs an account that has one. Only the stress
+        # corpus does — the base corpus deliberately has none, and inventing
+        # one for a screenshot would be showing a feature working on data
+        # chosen to make it work.
+        print("\nshots: the gateway question, from the corpus that has a gateway")
+        with serving(quiet=True, hard=True) as stack:
+            code = run_node(
+                ROOT / "console" / "e2e" / "gateway-shot.mjs", stack, {"OUT": str(OUT)}
+            )
+        if code == 0:
+            for image in sorted(OUT.glob("*.png")):
+                print(f"       {image.name}  {image.stat().st_size // 1024} kB")
+        return code
     except Missing as absent:
         print(f"shots: skipped — {absent}")
         return 0

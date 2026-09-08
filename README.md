@@ -99,6 +99,19 @@ is a separate, deliberate act.
 
 ![The grant confirmation, showing scope and operator](docs/images/grant.png)
 
+An agent whose model calls go through a self-hosted gateway is invisible: it has
+no model traffic we can see, so it is not a low-confidence finding, it is
+absent. Custos looks for the addresses that behave like one and asks, with the
+numbers a person can check.
+
+![The console asking whether an internal address is a model gateway](docs/images/gateway.png)
+
+That image comes from the stress corpus, which contains a workload behind an
+undeclared gateway. The others come from the base corpus, which does not — and
+on that account this section does not appear at all, which is the result that
+matters more. A detector that fires on a healthy account is one that gets
+ignored on the account where it counts.
+
 These are the real console against a real scanned database, but the traffic is
 the A0 synthetic corpus rather than a customer account — nobody has run this
 against an account we did not build. Regenerate them with `make screenshots`.
