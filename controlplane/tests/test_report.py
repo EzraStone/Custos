@@ -310,3 +310,27 @@ def test_a_report_with_no_declarations_says_what_that_costs():
     html = render(result(), "447120043318", datetime(2026, 8, 20, tzinfo=UTC))
     assert "declared no additional model endpoints" in html
     assert "self-hosted gateway" in html
+
+
+def test_placeholder_pricing_is_declared_and_says_how_to_fix_it():
+    html = render(result(), "447120043318", datetime(2026, 8, 20, tzinfo=UTC))
+    assert "unverified placeholder pricing" in html
+    assert "custos set-rate" in html
+
+
+def test_customer_rates_are_credited_and_still_called_estimates():
+    """An account that supplied its rates should not read a caveat saying the
+    figures came from a placeholder — and should still be told the numbers are
+    derived from wire bytes rather than token counts."""
+    from custos.scan import ScanResult
+
+    priced = ScanResult(
+        register=result().register, verdicts=[], telemetry=[],
+        prices_revision="customer-supplied 2026-09-08",
+    )
+    html = render(priced, "447120043318", datetime(2026, 8, 20, tzinfo=UTC))
+
+    assert "rates this account supplied" in html
+    assert "customer-supplied 2026-09-08" in html
+    assert "unverified placeholder pricing" not in html
+    assert "remain estimates" in html

@@ -32,6 +32,7 @@ export function App() {
   const [agents, setAgents] = useState<Agent[] | null>(null);
   const [scans, setScans] = useState<Scan[]>([]);
   const [diff, setDiff] = useState<DiffResponse | null>(null);
+  const [registerRevision, setRegisterRevision] = useState<string | undefined>();
   const [candidates, setCandidates] = useState<GatewayCandidate[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [declaring, setDeclaring] = useState<string | null>(null);
@@ -110,6 +111,7 @@ export function App() {
       ]);
       if (mine !== ticket.current) return;
       setAgents([...registry.agents].sort(byConsequence));
+      setRegisterRevision(registry.prices_revision);
       setScans("scans" in history ? history.scans : []);
       setDiff(changes);
       setCandidates("candidates" in gateways ? gateways.candidates : []);
@@ -267,8 +269,12 @@ export function App() {
     );
   }
 
-  const spendIsEstimate = health?.prices_revision !== undefined
-    && health.prices_revision.startsWith("unverified");
+  // The account's revision when the control plane sends one, the process
+  // default otherwise. An account that supplied its own rates should not read
+  // "(estimate)" against every figure on the strength of a global default.
+  const pricesRevision = registerRevision ?? health?.prices_revision;
+  const spendIsEstimate =
+    pricesRevision === undefined || pricesRevision.startsWith("unverified");
 
   const shown = agents === null ? null : agents.filter((a) => matches(a, filters));
 

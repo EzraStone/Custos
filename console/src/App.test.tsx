@@ -41,6 +41,7 @@ interface Backend {
   diff?: unknown;
   candidates?: unknown[];
   reviews?: unknown[];
+  registerPrices?: string;
   declareStatus?: number;
   declareDetail?: string;
   reportStatus?: number;
@@ -87,6 +88,9 @@ function backend(config: Backend = {}) {
       return json(200, {
         account_id: "447120043318",
         catalogue_revision: "2026-08-18",
+        ...(config.registerPrices === undefined
+          ? {}
+          : { prices_revision: config.registerPrices }),
         agents: config.agents ?? [agent()],
       });
     }
@@ -941,5 +945,40 @@ describe("the review band, in the page", () => {
     await screen.findByText("finance-close");
 
     expect(screen.queryByText(/the classifier was unsure about/i)).toBeNull();
+  });
+});
+
+describe("whose rates priced the spend column", () => {
+  async function loaded(config: Backend = {}) {
+    install(config);
+    session.save({ token: "tok-abc", operator: "ezra@custos.dev" });
+    render(<App />);
+    await screen.findByText("finance-close");
+  }
+
+  it("marks figures as estimates on placeholder pricing", async () => {
+    await loaded({ registerPrices: "unverified-placeholder" });
+    expect(screen.getByText(/\(estimate\)/)).toBeInTheDocument();
+  });
+
+  it("drops the label once the account supplies its own rates", async () => {
+    // An account that told us what it pays should not read "(estimate)"
+    // against every figure on the strength of a process default.
+    await loaded({ registerPrices: "customer-supplied 2026-09-08" });
+    expect(screen.queryByText(/\(estimate\)/)).toBeNull();
+  });
+
+  it("prefers the account's answer over the process default", async () => {
+    // /healthz can only report what the process was built with.
+    await loaded({
+      registerPrices: "customer-supplied 2026-09-08",
+      pricesRevision: "unverified-placeholder",
+    });
+    expect(screen.queryByText(/\(estimate\)/)).toBeNull();
+  });
+
+  it("falls back to /healthz against an older control plane", async () => {
+    await loaded({ pricesRevision: "unverified-placeholder" });
+    expect(screen.getByText(/\(estimate\)/)).toBeInTheDocument();
   });
 });

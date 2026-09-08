@@ -249,9 +249,14 @@ def create_app(
             if unsanctioned_only
             else agents.list_for_account(account_id)
         )
+        # The revision that priced these figures, alongside the catalogue that
+        # produced the findings. A client labelling a spend column needs the
+        # account's answer, and /healthz can only give it the process default.
+        rates = RateStore(app.state.db).rates_for(account_id)
         return {
             "account_id": account_id,
             "catalogue_revision": RANGES_REVISION,
+            "prices_revision": rates.revision,
             "agents": [_render(a) for a in records],
         }
 
@@ -697,6 +702,9 @@ def create_app(
         result = ScanResult(
             register=register, verdicts=[], telemetry=[],
             principals_seen=latest.principals_seen if latest else 0,
+            # Whose rates the figures below were computed at. The register
+            # rows already hold the numbers; this is what labels them.
+            prices_revision=RateStore(app.state.db).rates_for(account_id).revision,
         )
         coverage = Coverage(
             parsed_fraction=latest.coverage if latest else 1.0,

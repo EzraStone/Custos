@@ -140,11 +140,22 @@ def _limitations(
             "can see."
         )
 
-    if PRICES_REVISION == "unverified-placeholder":
+    # The account's own revision, not the module default. An account that
+    # supplied its rates should not read a caveat saying its figures came from
+    # a placeholder, and one that has not must read exactly that.
+    if result.prices_revision == PRICES_REVISION:
         items.append(
             "Spend figures use unverified placeholder pricing and are valid "
             "only for ranking agents against each other. Do not reconcile them "
-            "against an invoice."
+            "against an invoice. Supply your own rates with `custos set-rate` "
+            "and these become your numbers."
+        )
+    else:
+        items.append(
+            f"Spend figures use rates this account supplied "
+            f"({_e(result.prices_revision)}). They are still derived from wire "
+            "bytes rather than from token counts, so they remain estimates — "
+            "but they are estimates at your prices rather than ours."
         )
     if degraded:
         items.append(

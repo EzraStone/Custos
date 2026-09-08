@@ -196,6 +196,15 @@ export interface RegisterResponse {
   account_id: string;
   catalogue_revision: string;
   agents: Agent[];
+  /**
+   * Whose rates priced the spend figures below.
+   *
+   * Optional: a control plane older than the field omits it, and the console
+   * falls back to what /healthz says — which is the process default rather
+   * than this account's answer, and therefore the safer of the two to be
+   * wrong about.
+   */
+  prices_revision?: string;
 }
 
 export interface Scan {
