@@ -838,6 +838,74 @@ def test_reviews_report_how_often_a_workload_recurs(client, realistic_payload):
     assert first[0]["seen_in_scans"] == 1
 
 
+@pytest.fixture(scope="module")
+def stress_payload():
+    """The harder corpus: it contains an agent behind a self-hosted gateway.
+
+    The base corpus deliberately does not, which is why the join below cannot
+    be exercised with it — and why the base corpus is the right thing to check
+    the join stays silent against.
+    """
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+
+    hard = corpus.build(corpus.CorpusSpec(days=1, hard=True))
+    payload = build_batch(hard).model_dump(mode="json")
+    payload["account_id"] = ACCOUNT
+    return payload
+
+
+# Two screens were showing the same workload twice without saying so: "is
+# 10.0.7.40 a gateway?" and "deploy-remediation might be an agent". They are
+# one question, and it is the case the declaration mechanism exists for.
+def test_a_maybe_that_reaches_an_undeclared_address_says_so(client, stress_payload):
+    client.post("/v1/batches", json=stress_payload, headers=AUTH)
+    reviews = client.get("/v1/reviews", headers=AUTH).json()["reviews"]
+
+    correlated = [r for r in reviews if r["sends_to"]]
+    assert correlated, "the stress corpus has an agent behind a gateway"
+    assert "10.0.7.40" in correlated[0]["sends_to"]
+    assert "deploy-remediation" in correlated[0]["principal"]
+
+
+def test_a_correlated_maybe_is_listed_first(client, stress_payload):
+    """It is the one a person should look at, and a list read top-down is the
+    only ordering anyone actually uses."""
+    client.post("/v1/batches", json=stress_payload, headers=AUTH)
+    reviews = client.get("/v1/reviews", headers=AUTH).json()["reviews"]
+    if len(reviews) < 2:
+        pytest.skip("needs more than one maybe to have an order")
+
+    correlated = [bool(r["sends_to"]) for r in reviews]
+    assert correlated == sorted(correlated, reverse=True)
+
+
+def test_answering_the_question_removes_it_from_the_maybe(client, stress_payload):
+    """Declared is answered. Continuing to cite a declared address as an open
+    question would make the declaration look ignored."""
+    client.post("/v1/batches", json=stress_payload, headers=AUTH)
+    before = client.get("/v1/reviews", headers=AUTH).json()["reviews"]
+    assert any("10.0.7.40" in r["sends_to"] for r in before), "nothing to answer"
+
+    client.post(
+        "/v1/endpoints",
+        json={"value": "10.0.7.40/32", "kind": "range", "note": "llm-gateway",
+              "operator": "ezra@custos.dev"},
+        headers=AUTH,
+    )
+
+    after = client.get("/v1/reviews", headers=AUTH).json()["reviews"]
+    assert all("10.0.7.40" not in r["sends_to"] for r in after)
+
+
+def test_the_join_is_silent_when_nothing_is_behind_a_gateway(client, realistic_payload):
+    """The half that matters. A signal that fires on the base corpus, which
+    has no hidden gateway, would be teaching a customer to ignore it."""
+    _ingest_real_batch(client, realistic_payload)
+    reviews = client.get("/v1/reviews", headers=AUTH).json()["reviews"]
+    assert all(not r["sends_to"] for r in reviews)
+
+
 def test_reviews_offer_no_way_into_the_register(client):
     """A route that promoted a maybe by hand would make every guarantee about
     how an agent got into the register conditional on nobody using it."""

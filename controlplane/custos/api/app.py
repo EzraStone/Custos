@@ -25,6 +25,7 @@ from ..catalog import RANGES_REVISION
 from ..deliver import Channel, notify
 from ..deliver import config as deliver_config
 from ..diff import ScanDiff, compare
+from ..gateway import Candidate, blind_reach
 from ..logging import event, get
 from ..pipeline import ingest
 from ..register.model import Status
@@ -365,8 +366,6 @@ def create_app(
         agents = AgentStore(app.state.db)
         scans = ScanStore(app.state.db)
         reviews = ReviewStore(app.state.db)
-        candidates = CandidateStore(app.state.db)
-        declarations = DeclarationStore(app.state.db)
         rates = RateStore(app.state.db)
 
         out = []
@@ -374,11 +373,7 @@ def create_app(
             registry = agents.list_for_account(account_id)
             unsanctioned = [a for a in registry if a.unsanctioned]
             latest = scans.latest_scan(account_id)
-            declared = declarations.declared_for(account_id)
-            open_questions = [
-                c for c in candidates.latest_for(account_id)
-                if not declared.covers(c["address"])
-            ]
+            open_questions = _open_questions(account_id)
             out.append({
                 "account_id": account_id,
                 "agents": len(registry),
@@ -472,14 +467,38 @@ def create_app(
         """
         account_id = scope(principal, account)
         reviews = ReviewStore(app.state.db)
-        found = reviews.latest_for(account_id)
-        return {
-            "account_id": account_id,
-            "reviews": [
-                {**r, "seen_in_scans": reviews.recurrence(account_id, r["principal"])}
-                for r in found
-            ],
-        }
+        reach = blind_reach([
+            Candidate.from_row(c) for c in _open_questions(account_id)
+        ])
+
+        rows = [
+            {
+                **r,
+                "seen_in_scans": reviews.recurrence(account_id, r["principal"]),
+                # The join. A maybe that also sends a transcript-shaped stream
+                # at an address nobody has declared is not two weak signals; it
+                # is the shape of an agent behind a gateway.
+                "sends_to": list(reach.get(r["principal"], ())),
+            }
+            for r in reviews.latest_for(account_id)
+        ]
+        # Correlated maybes first. Everything else keeps the store's order,
+        # which is confidence descending.
+        rows.sort(key=lambda r: (not r["sends_to"],))
+        return {"account_id": account_id, "reviews": rows}
+
+    def _open_questions(account_id: str) -> list[dict]:
+        """Gateway questions this account has not answered.
+
+        Already-answered ones are dropped rather than shown as resolved. A
+        customer who declared a gateway last week should not be asked about it
+        again on every scan.
+        """
+        declared = DeclarationStore(app.state.db).declared_for(account_id)
+        return [
+            c for c in CandidateStore(app.state.db).latest_for(account_id)
+            if not declared.covers(c["address"])
+        ]
 
     @app.get("/v1/gateway-candidates")
     def get_gateway_candidates(principal: Auth, account: str | None = None) -> dict:
@@ -496,14 +515,9 @@ def create_app(
         /v1/endpoints is where their answer goes.
         """
         account_id = scope(principal, account)
-        found = CandidateStore(app.state.db).latest_for(account_id)
-        declared = DeclarationStore(app.state.db).declared_for(account_id)
         return {
             "account_id": account_id,
-            # Already-answered questions are dropped rather than shown as
-            # resolved. A customer who declared a gateway last week should not
-            # be asked about it again on every scan.
-            "candidates": [c for c in found if not declared.covers(c["address"])],
+            "candidates": _open_questions(account_id),
         }
 
     @app.get("/v1/endpoints")
