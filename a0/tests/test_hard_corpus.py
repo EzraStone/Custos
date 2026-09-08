@@ -118,3 +118,55 @@ def test_hiding_the_gateway_reproduces_the_miss_on_demand(capsys):
     out = capsys.readouterr().out
     assert "missed: deploy-remediation-agent" in out
     assert "gateway" in out
+
+
+def test_the_hidden_gateway_is_offered_as_a_candidate():
+    """The remedy for the corpus's hardest case, found rather than guessed.
+
+    `agent_via_gateway` is invisible to the classifier by construction: its
+    model calls go to an internal address, so it has no model traffic and is
+    not a finding of any kind. Declaring the gateway fixes it — but only if
+    somebody knows to. This asserts the detector puts the real gateway at the
+    top of the list of things to ask about.
+    """
+    from custos.classify import sessionize
+    from custos.gateway import candidates
+    from custos.pipeline import to_scan_input
+
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+    from custos_a0.scenarios.hard import GATEWAY
+
+    batch = build_batch(corpus.build(corpus.CorpusSpec(hard=True)))
+    inp = to_scan_input(batch)
+    telemetry = sessionize(
+        inp.records, inp.principal_by_eni, inp.address_by_eni, inp.requests,
+        origin=inp.start, interval=inp.interval,
+    )
+
+    found = candidates(telemetry)
+    assert found, "the hidden gateway was not offered as a candidate at all"
+    assert found[0].address == GATEWAY.ip, (
+        f"the real gateway did not rank first: {[c.address for c in found]}"
+    )
+
+
+def test_a_healthy_corpus_produces_no_gateway_questions():
+    """Every agent in the base corpus reaches a provider we recognise, so
+    there is nothing hidden and nothing to ask about.
+
+    A detector that asked anyway would be noise on a working account, which is
+    how a prompt gets ignored on the account where it matters.
+    """
+    from custos.classify import sessionize
+    from custos.gateway import candidates
+    from custos.pipeline import to_scan_input
+
+    from custos_a0.batchbridge import build_batch
+
+    inp = to_scan_input(build_batch())
+    telemetry = sessionize(
+        inp.records, inp.principal_by_eni, inp.address_by_eni, inp.requests,
+        origin=inp.start, interval=inp.interval,
+    )
+    assert candidates(telemetry) == []
