@@ -40,6 +40,13 @@ verdict is still correct and there are still no false positives, but the margin
 falls to **0.14**. That is the number to quote wherever the first one would be
 doing work.
 
+That corpus also contains an agent whose model calls go through a self-hosted
+gateway. It is missed, and it is meant to be: a model endpoint we do not
+recognise is an agent we cannot see, and no classifier tuning fixes it. It is
+not scored at all rather than scored badly — the signals that would score it
+have nothing to measure — and it surfaces as a question about an undeclared
+address instead. Declaring the gateway recovers it completely.
+
 The result and its limitations are in [docs/A0-FINDINGS.md](docs/A0-FINDINGS.md).
 Two signals the original specification expected to carry the classifier were
 measured and rejected; the finding that matters most is that the specification's

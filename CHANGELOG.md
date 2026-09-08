@@ -4,6 +4,39 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### A signal with nothing to measure
+
+**Four of the five classifier signals were being evaluated over an empty set.**
+They are ratios and fractions over the intervals containing model traffic, and
+on a workload with none of those they did not come out neutral — they came out
+maximally incriminating. `1 - inbound_coupling` evaluates to 1.0, so the
+heaviest signal in the system fired at full weight and described itself in the
+report as "100% of the intervals containing model traffic had no request
+arriving at the load balancer", about a workload with no such intervals.
+
+Those signals are now unavailable rather than zero. That distinction was
+already the rule for load balancer logs — reported, never silently treated as
+zero — and this was the same failure one level down.
+
+Nothing in the gates moved: G0 still passes at 0.26 with full recall and no
+false positives, and the stress corpus still separates by 0.14 with the gateway
+declared. No workload in the base corpus has zero model traffic, which is why.
+What moved is the stress corpus's agent behind an undeclared gateway: it scored
+0.77 and sat in the review band, and 2.8 of its 4.4 points came from signals
+measuring nothing. It now scores 0.17 and is not scored in any meaningful
+sense, which is the correct answer — the entire evidence base is model traffic.
+
+**So the report grew a Questions section.** A workload we cannot see making
+model calls is an unanswered question rather than a low-confidence finding, and
+it needs somewhere to appear. The open gateway candidates, the numbers behind
+each, and the workloads reaching them now sit between the findings and the
+review band — because an account with an undeclared gateway has agents that
+produce no evidence at all, and a short findings list above an open question
+means much less than a short findings list alone.
+
+`custos gateways` was also not filtering declared addresses, so it kept asking
+about answered questions on every scan.
+
 ### Forty accounts, one screen
 
 **A fleet view.** The account picker listed twelve-digit numbers with nothing

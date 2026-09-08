@@ -36,6 +36,7 @@ custos diff                 →  what changed since last week
 | Operator console | Works. Read, filter, sanction, retire, and see what changed. Served by the control plane |
 | Destination naming | Works where an ENI, an AWS description, or a port says what something is |
 | Customer-supplied pricing | Works. Per account, dated, superseded rather than overwritten |
+| Gateway questions in the report | Works. Their own section, with the workloads reaching each address |
 | Review band, kept and readable | Works. In the console, the CLI, and both reports, with evidence and recurrence |
 | Model gateway declaration | Works. Detected as questions, declared per account, effective next scan |
 | Fleet view across accounts | Works. One line per account, unscanned and destructive first |
@@ -140,6 +141,28 @@ though it were theirs, and make supplying the real number a two-minute job.
 Still true whichever rates are used: the figures come from wire bytes, not
 token counts. Good for ranking agents against each other, not for reconciling
 against an invoice, and labelled that way everywhere.
+
+**A signal computed over an empty set is not zero, and it took a screenshot to
+notice.** Four of the five classifier signals are ratios and fractions over the
+intervals containing model traffic. On a workload with none, they evaluated
+over an empty set and came out maximally incriminating rather than neutral: the
+heaviest signal in the system fired at full weight and printed "100% of the
+intervals containing model traffic had no request arriving at the load
+balancer" about a workload with no such intervals. That sentence was reaching
+reports.
+
+It is fixed — those signals are now unavailable rather than zero, which was
+already the rule for load balancer logs — and the gates did not move, because
+no workload in the base corpus has zero model traffic. What moved is the stress
+corpus's agent-behind-a-gateway: 0.77 in the review band, now 0.17 and not
+scored at all. That is the honest answer, and it is why the report grew a
+Questions section: a workload we cannot see making model calls is an unanswered
+question, not a low-confidence finding.
+
+Worth recording how it was found. It was not found by a test. It was found by
+looking at a screenshot of the review band and reading a row that said "Sent
+0.0B to model endpoints and received 0.0B back, a ratio of 0.0:1" as though
+that were evidence of something.
 
 **A corpus that was more informative than production.** The A0 corpus
 annotated both ends of every AWS conversation with the peer's service. Real

@@ -155,7 +155,7 @@ Four workloads test that assumption directly:
 | Agent that pauses for human approval | agent | agent | 0.83 |
 | Agent running on a batch schedule | agent | agent | 0.96 |
 | Chatbot with function calling | not agent | not agent | 0.34 |
-| Agent behind a self-hosted gateway | agent | **review — missed** | 0.77 |
+| Agent behind a self-hosted gateway | agent | **not scored — missed** | 0.17 |
 
 **Every verdict is correct once the gateway is declared, and there are no false
 positives. The separation margin falls from 0.26 to 0.14.**
@@ -174,11 +174,34 @@ classifier separates them on what they do rather than when they do it.
 
 **An unrecognised model endpoint is an invisible agent, and no amount of
 classifier tuning fixes it.** The gateway agent is missed because its traffic
-goes to a private address the catalogue does not know. `catalog.extend` recovers
-it completely. This is the strongest argument for asking a customer directly
-whether they front their providers behind a gateway, because we cannot infer it.
+goes to a private address the catalogue does not know. Declaring the endpoint
+recovers it completely. This is the strongest argument for asking a customer
+directly whether they front their providers behind a gateway, because we cannot
+infer it.
 
-**The margin number is the one to carry into diligence.** 0.14 is below the 0.15
+**That workload scored 0.77 until it was looked at closely, and the 0.77 was
+made of nothing.** Four of the five signals are ratios and fractions over the
+intervals containing model traffic. This workload has none, and over an empty
+set they do not read as neutral: `1 - inbound_coupling` evaluates to 1.0, so
+the heaviest signal in the system fired at full weight and printed "100% of the
+intervals containing model traffic had no request arriving at the load
+balancer" about a workload with no such intervals.
+
+Signals with nothing to measure are now unavailable rather than zero, which was
+already the rule for load balancer logs. The workload scores 0.17 and is not
+scored in any meaningful sense. That is the correct answer: the entire evidence
+base is model traffic, and a workload we cannot see making model calls is an
+unanswered question rather than a low-confidence finding. It surfaces as a
+question instead, in the report's Questions section, which names the undeclared
+address and the workloads reaching it.
+
+This is the third time a measurement here has been wrong in the flattering
+direction. It will not be the last.
+
+**The margin number is the one to carry into diligence.** It is measured with
+the gateway declared, because in the undeclared case that agent is not scored
+at all rather than mis-scored, and a margin computed across an invisible
+workload measures nothing. 0.14 is below the 0.15
 durability bar this experiment set for itself. G0 is not retroactively failed —
 it was defined and measured against the base corpus — but the honest reading is
 that headroom on realistic traffic is roughly half what the clean corpus
