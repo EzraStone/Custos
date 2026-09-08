@@ -42,6 +42,7 @@ interface Backend {
   candidates?: unknown[];
   reviews?: unknown[];
   registerPrices?: string;
+  fleet?: unknown[];
   declareStatus?: number;
   declareDetail?: string;
   reportStatus?: number;
@@ -77,6 +78,9 @@ function backend(config: Backend = {}) {
         catalogue_revision: "2026-08-18",
         prices_revision: config.pricesRevision ?? "unverified-placeholder",
       });
+    }
+    if (url.startsWith("/v1/fleet")) {
+      return json(200, { accounts: config.fleet ?? [] });
     }
     if (url.startsWith("/v1/accounts")) {
       return json(200, { accounts: config.accounts ?? ["447120043318"] });
@@ -980,5 +984,47 @@ describe("whose rates priced the spend column", () => {
   it("falls back to /healthz against an older control plane", async () => {
     await loaded({ pricesRevision: "unverified-placeholder" });
     expect(screen.getByText(/\(estimate\)/)).toBeInTheDocument();
+  });
+});
+
+describe("picking an account out of a fleet", () => {
+  it("shows what each account holds rather than a bare number", async () => {
+    install({
+      accounts: ["111111111111", "222222222222"],
+      fleet: [
+        { account_id: "111111111111", agents: 12, unsanctioned: 5, destructive: 2,
+          last_scan: "2026-09-08T09:00:00+00:00", coverage: 1, scope_readable: 0.8,
+          reviews: 1, gateway_questions: 0, rates_verified: true },
+        { account_id: "222222222222", agents: 0, unsanctioned: 0, destructive: 0,
+          last_scan: null, coverage: null, scope_readable: null,
+          reviews: 0, gateway_questions: 0, rates_verified: false },
+      ],
+    });
+    session.save({ token: "tok-fleet", operator: "ezra@custos.dev" });
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /choose an account/i });
+    expect(screen.getByText(/never scanned/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 that can destroy/)).toBeInTheDocument();
+  });
+
+  it("still lets somebody choose when the fleet summary fails", async () => {
+    // A control plane too old to answer /v1/fleet should not make the account
+    // picker unusable.
+    install({ accounts: ["111111111111", "222222222222"], fleet: [] });
+    session.save({ token: "tok-fleet", operator: "ezra@custos.dev" });
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /choose an account/i });
+    expect(screen.getByRole("button", { name: "111111111111" })).toBeInTheDocument();
+  });
+
+  it("does not ask for a fleet summary on a single-account token", async () => {
+    const stub = install({ accounts: ["447120043318"] });
+    session.save({ token: "tok-abc", operator: "ezra@custos.dev" });
+    render(<App />);
+    await screen.findByText("finance-close");
+
+    expect(stub.calls.some((c) => c.url.startsWith("/v1/fleet"))).toBe(false);
   });
 });

@@ -22,6 +22,7 @@ import type {
   CandidatesResponse,
   DeclaredEndpoint,
   EndpointsResponse,
+  FleetResponse,
   ReviewsResponse,
   DiffResponse,
   DriftResponse,
@@ -93,6 +94,11 @@ export class Client {
 
   health(): Promise<Health> {
     return this.request<Health>("/healthz");
+  }
+
+  /** One line per account this credential covers, for choosing between them. */
+  fleet(): Promise<FleetResponse> {
+    return this.request<FleetResponse>("/v1/fleet");
   }
 
   /** The accounts this credential covers. One for most tokens, many for a fleet. */

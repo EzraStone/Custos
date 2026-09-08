@@ -188,6 +188,40 @@ export interface EndpointsResponse {
   endpoints: DeclaredEndpoint[];
 }
 
+export interface FleetRow {
+  account_id: string;
+  agents: number;
+  unsanctioned: number;
+  /** The number to triage by. Read-only agents are a different afternoon. */
+  destructive: number;
+  last_scan: string | null;
+  coverage: number | null;
+  scope_readable: number | null;
+  reviews: number;
+  gateway_questions: number;
+  rates_verified: boolean;
+}
+
+export interface FleetResponse {
+  accounts: FleetRow[];
+}
+
+/**
+ * Worst first, by what somebody would act on.
+ *
+ * An account nobody has scanned sorts above every account that has been,
+ * whatever it holds. "We have never looked" outranks any finding, because a
+ * finding is a thing somebody knows and an unscanned account is a thing
+ * nobody does.
+ */
+export function byUrgency(a: FleetRow, b: FleetRow): number {
+  const unscanned = Number(b.last_scan === null) - Number(a.last_scan === null);
+  if (unscanned !== 0) return unscanned;
+  if (b.destructive !== a.destructive) return b.destructive - a.destructive;
+  if (b.unsanctioned !== a.unsanctioned) return b.unsanctioned - a.unsanctioned;
+  return a.account_id.localeCompare(b.account_id);
+}
+
 export interface AccountsResponse {
   accounts: string[];
 }

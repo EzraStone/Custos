@@ -6,6 +6,7 @@ import {
   type Agent,
   type Health,
   type DiffResponse,
+  type FleetRow,
   type GatewayCandidate,
   type Review,
   type Scan,
@@ -38,6 +39,7 @@ export function App() {
   const [declaring, setDeclaring] = useState<string | null>(null);
   const [declareError, setDeclareError] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<string[] | null>(null);
+  const [fleet, setFleet] = useState<FleetRow[]>([]);
   const [view, setView] = useState<View>("unsanctioned");
   const [filters, setFilters] = useState<FilterState>(NO_FILTERS);
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +76,7 @@ export function App() {
     setCandidates([]);
     setReviews([]);
     setAccounts(null);
+    setFleet([]);
     setHealth(null);
   }, []);
 
@@ -89,6 +92,15 @@ export function App() {
       const covered = (await client.accounts()).accounts;
       if (mine !== ticket.current) return;
       setAccounts(covered);
+
+      // Only worth asking for when there is a choice to make, and swallowed
+      // on failure: a control plane too old to answer it should still let
+      // somebody pick an account from a plain list.
+      if (covered.length > 1) {
+        const summary = await client.fleet().catch(() => ({ accounts: [] }));
+        if (mine !== ticket.current) return;
+        setFleet(summary.accounts);
+      }
 
       // One account needs no choosing. Several, with none chosen, means the
       // picker renders instead of a register — there is nothing to show yet.
@@ -278,7 +290,7 @@ export function App() {
 
   const shown = agents === null ? null : agents.filter((a) => matches(a, filters));
 
-  const fleet = (accounts?.length ?? 0) > 1;
+  const hasFleet = (accounts?.length ?? 0) > 1;
   const chooseAccount = (account: string) => {
     session.save({ account });
     setAuth((current) => ({ ...current, account }));
@@ -287,7 +299,7 @@ export function App() {
   // A fleet credential with no account chosen has nothing to show: every route
   // below is scoped to one account. The picker is the page, not a banner on
   // top of an empty register.
-  if (fleet && !auth.account) {
+  if (hasFleet && !auth.account) {
     return (
       <main className="sheet">
         <Masthead>
@@ -302,6 +314,7 @@ export function App() {
           </div>
         ) : null}
         <AccountPicker
+          fleet={fleet}
           accounts={accounts ?? []}
           current={auth.account}
           onChoose={chooseAccount}
@@ -320,7 +333,7 @@ export function App() {
 
       <div className="meta-row">
         <span>{auth.operator || "no name set — reading only"}</span>
-        {fleet ? (
+        {hasFleet ? (
           <span>
             account {auth.account}{" "}
             <button className="link" onClick={() => chooseAccount("")}>

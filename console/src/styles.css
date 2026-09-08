@@ -370,3 +370,9 @@ h2 { font-family: var(--display); font-size: 1.5rem; margin: 2.5rem 0 .5rem; }
 }
 .review-list .degraded { margin: .3rem 0 0; font-size: .82rem; color: var(--amber); }
 .review-list .evidence { margin: .4rem 0 0; }
+
+.accounts .account .id { display: block; }
+.accounts .account .summary {
+  display: block; margin-top: .25rem;
+  font-family: var(--body); font-size: .8rem; color: var(--ink-faint);
+}
