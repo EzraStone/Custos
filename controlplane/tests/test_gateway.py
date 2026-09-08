@@ -117,14 +117,20 @@ def test_blind_reach_inverts_the_candidate_list():
     }
 
 
-def test_a_workload_reaching_two_candidates_carries_both():
+def test_a_workload_reaching_two_candidates_carries_both_strongest_first():
+    """Candidate order, not alphabetical. The first address is the one a
+    caller offers as the thing to declare, so it has to be the better
+    question — here the one carrying more volume."""
     records = _flows("eni-1", "10.0.7.9", 40, 140_000, 9_000)
     records += _flows("eni-1", "10.0.8.9", 40, 140_000, 9_000)
-    records += _flows("eni-2", "10.0.7.9", 40, 140_000, 9_000)
+    # A second workload reaches only 10.0.8.9, which makes it the better
+    # question: the "this one workload has an unusual internal API"
+    # explanation gets weaker with every workload that shares a destination.
     records += _flows("eni-2", "10.0.8.9", 40, 140_000, 9_000)
     found = candidates(_telemetry(records, {"eni-1": "role/a", "eni-2": "role/b"}))
 
-    assert blind_reach(found)["role/a"] == ("10.0.7.9", "10.0.8.9")
+    assert [c.address for c in found] == ["10.0.8.9", "10.0.7.9"]
+    assert blind_reach(found)["role/a"] == ("10.0.8.9", "10.0.7.9")
 
 
 def test_a_workload_with_recognised_model_traffic_is_not_in_the_reach():

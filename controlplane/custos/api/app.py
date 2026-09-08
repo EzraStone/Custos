@@ -792,12 +792,16 @@ def create_app(
         # account whose console has three of them, and the report is the
         # artefact that gets forwarded.
         reviews = ReviewStore(app.state.db)
+        reach = blind_reach([
+            Candidate.from_row(c) for c in _open_questions(account_id)
+        ])
         candidates = [
             Review(
                 principal=r["principal"],
                 confidence=r["confidence"],
                 evidence=tuple(r["evidence"]),
                 seen_in_scans=reviews.recurrence(account_id, r["principal"]),
+                sends_to=reach.get(r["principal"], ()),
             )
             for r in reviews.latest_for(account_id)
         ]

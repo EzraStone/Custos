@@ -109,14 +109,29 @@ class Review:
     confidence: float
     evidence: tuple[str, ...] = ()
     seen_in_scans: int = 1
+    sends_to: tuple[str, ...] = ()
+    """Undeclared internal addresses this workload sends a transcript-shaped
+    stream at while reaching no model provider we recognise.
+
+    Not decoration. A maybe with one of these is the specific shape of an
+    agent behind a self-hosted gateway, and the person reading the report is
+    the one who can say in a minute whether that address is a gateway."""
 
     @classmethod
-    def from_verdict(cls, verdict: Verdict) -> Review:
+    def from_verdict(
+        cls, verdict: Verdict, sends_to: tuple[str, ...] = ()
+    ) -> Review:
         return cls(
             principal=verdict.principal,
             confidence=verdict.confidence,
             evidence=tuple(verdict.evidence),
+            sends_to=sends_to,
         )
+
+    @property
+    def sort_key(self) -> tuple:
+        """Correlated maybes first, then by confidence."""
+        return (not self.sends_to, -self.confidence, self.principal)
 
 
 def _recurrence(seen: int) -> str:
@@ -133,6 +148,23 @@ def _recurrence(seen: int) -> str:
     )
 
 
+def _gateway_note(review: Review) -> str:
+    """The sentence that turns two weak signals into one answerable question.
+
+    Deliberately phrased as something the reader can check rather than as a
+    verdict. Whether 10.0.7.40 is a model gateway is a fact the workload's
+    owner knows and we do not.
+    """
+    if not review.sends_to:
+        return ""
+    addresses = ", ".join(_e(a) for a in review.sends_to)
+    return f"""
+      <p class="note">This workload reaches no model provider we recognise, and
+      sends far more than it receives back to {addresses} — an address nobody
+      has declared as a model endpoint. If that is a self-hosted model gateway,
+      this is an agent rather than a maybe.</p>"""
+
+
 def _review_row(review: Review) -> str:
     evidence = "".join(f"<li>{_e(line)}</li>" for line in review.evidence)
     return f"""
@@ -146,6 +178,7 @@ def _review_row(review: Review) -> str:
         <div><dt>Confidence</dt><dd>{review.confidence:.2f}</dd></div>
         {_recurrence(review.seen_in_scans)}
       </dl>
+      {_gateway_note(review)}
       <details><summary>What was observed</summary>
         <ul class="evidence">{evidence}</ul></details>
     </article>"""
@@ -461,13 +494,19 @@ def _unattributed_section(agents: list[Agent]) -> str:
 def _review_section(reviews: list[Review]) -> str:
     if not reviews:
         return ""
+    first_note = (
+        "Read the ones naming an undeclared address first."
+        if any(r.sends_to for r in reviews)
+        else ""
+    )
     return f"""
 <section>
   <h2>For review</h2>
   <p class="lede">Workloads that resemble agents without meeting the bar. Most
   are batch jobs or build pipelines. They appear here rather than in the
-  register because discovery is not permitted to decide this on its own.</p>
-  {"".join(_review_row(r) for r in reviews)}
+  register because discovery is not permitted to decide this on its own.
+  {first_note}</p>
+  {"".join(_review_row(r) for r in sorted(reviews, key=lambda r: r.sort_key))}
 </section>"""
 
 
@@ -537,6 +576,9 @@ h2{font-family:var(--display);font-size:1.9rem;margin:0 0 .75rem;font-weight:600
   text-transform:uppercase;color:var(--ink-faint);margin-right:.5rem}
 details summary{cursor:pointer;font-family:var(--mono);font-size:.7rem;
   letter-spacing:.1em;text-transform:uppercase;color:var(--seal)}
+.note{margin:.85rem 0 0;padding:.7rem .9rem;font-size:.88rem;
+  color:var(--ink);background:var(--paper);border-left:2px solid var(--amber);
+  max-width:44rem}
 .evidence{margin:.85rem 0 0;padding-left:1.1rem;font-size:.86rem;
   color:var(--ink-soft);max-width:44rem}
 .evidence li{margin-bottom:.5rem}

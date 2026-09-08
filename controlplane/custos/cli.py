@@ -109,16 +109,19 @@ def _reviews_with_history(conn, outcome, account_id: str) -> list:
     keeps `render` ignorant of the database, which is what lets the report be
     rendered in a test from a scan result and nothing else.
     """
+    from .gateway import blind_reach
     from .report import Review
     from .store.scans import ReviewStore
 
     reviews = ReviewStore(conn)
+    reach = blind_reach(_open_questions(conn, account_id))
     return [
         Review(
             principal=v.principal,
             confidence=v.confidence,
             evidence=tuple(v.evidence),
             seen_in_scans=reviews.recurrence(account_id, v.principal),
+            sends_to=reach.get(v.principal, ()),
         )
         for v in outcome.result.review_candidates
     ]
@@ -139,6 +142,25 @@ def _write_report(
         declared=declared,
         reviews=reviews,
     ))
+
+
+def _open_questions(conn, account_id: str) -> list:
+    """Gateway questions this account has not answered yet.
+
+    Declared addresses are dropped. A customer who declared a gateway last week
+    being asked about it again on every scan learns that the questions are not
+    worth reading, which is the failure mode this whole mechanism cannot
+    afford.
+    """
+    from .gateway import Candidate
+    from .store.declarations import CandidateStore, DeclarationStore
+
+    declared = DeclarationStore(conn).declared_for(account_id)
+    return [
+        Candidate.from_row(c)
+        for c in CandidateStore(conn).latest_for(account_id)
+        if not declared.covers(c["address"])
+    ]
 
 
 def _declared_labels(conn, account_id: str) -> list[str]:
@@ -320,6 +342,7 @@ def cmd_reviews(args: argparse.Namespace) -> int:
     is a scan, and a command that moved a maybe by hand would make every
     guarantee about how an agent got there conditional on nobody having used it.
     """
+    from .gateway import blind_reach
     from .store.scans import ReviewStore
 
     conn = open_database(args.db)
@@ -328,6 +351,12 @@ def cmd_reviews(args: argparse.Namespace) -> int:
     if not found:
         print("The last scan was sure about everything it saw.")
         return 0
+
+    reach = blind_reach(_open_questions(conn, args.account))
+    # Correlated maybes first: a maybe that also sends a transcript-shaped
+    # stream at an undeclared address is the shape of an agent behind a
+    # gateway, and it is the one worth reading.
+    found.sort(key=lambda r: (not reach.get(r["principal"]), -r["confidence"]))
 
     print(f"{len(found)} workload{'s' if len(found) != 1 else ''} in the review band.")
     print("Not confident enough to register as agents, not clearly ordinary either.")
@@ -338,6 +367,12 @@ def cmd_reviews(args: argparse.Namespace) -> int:
         # workload uncertain in eleven scans is a standing question.
         recurring = f"  (in {seen} scans)" if seen > 1 else ""
         print(f"  {r['principal'].rsplit('/', 1)[-1]}  {r['confidence']:.2f}{recurring}")
+        sends_to = reach.get(r["principal"], ())
+        if sends_to:
+            print(f"      reaches no model provider we recognise, and sends "
+                  f"{', '.join(sends_to)} far more than it gets back")
+            print("      if that is a model gateway, this is an agent — "
+                  f"custos declare {sends_to[0]} --account {args.account}")
         if r["unavailable"]:
             print(f"      could not evaluate: {', '.join(r['unavailable'])}"
                   " — low confidence may be for want of input")
@@ -398,9 +433,7 @@ def cmd_gateways(args: argparse.Namespace) -> int:
     which is why this reads as a list of things to ask about rather than a list
     of things we concluded.
     """
-    from .store.declarations import CandidateStore
-
-    found = CandidateStore(open_database(args.db)).latest_for(args.account)
+    found = _open_questions(open_database(args.db), args.account)
     if not found:
         print("Nothing looks like an undeclared model gateway in the last scan.")
         return 0
@@ -409,8 +442,8 @@ def cmd_gateways(args: argparse.Namespace) -> int:
     print(f"  custos declare <address> --account {args.account} --operator you@example.com")
     print()
     for c in found:
-        print(f"  {c['question']}")
-        who = ", ".join(p.split("/")[-1] for p in c["blind_principals"])
+        print(f"  {c.question}")
+        who = ", ".join(p.split("/")[-1] for p in c.blind_principals)
         print(f"      reached by: {who}")
     return 0
 

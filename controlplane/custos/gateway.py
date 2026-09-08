@@ -174,8 +174,13 @@ def blind_reach(found: list[Candidate]) -> dict[str, tuple[str, ...]]:
     agent that the classifier can only reach the review band on. It is the one
     workload in that corpus a customer most needs to be asked about.
     """
-    reach: dict[str, set[str]] = {}
+    reach: dict[str, list[str]] = {}
     for candidate in found:
         for principal in candidate.blind_principals:
-            reach.setdefault(principal, set()).add(candidate.address)
-    return {p: tuple(sorted(a)) for p, a in sorted(reach.items())}
+            addresses = reach.setdefault(principal, [])
+            if candidate.address not in addresses:
+                addresses.append(candidate.address)
+    # Candidate order, not alphabetical: `candidates` already ranks by how
+    # many blind workloads share a destination and then by volume, and the
+    # first address is the one a caller offers as the thing to declare.
+    return {p: tuple(a) for p, a in sorted(reach.items())}

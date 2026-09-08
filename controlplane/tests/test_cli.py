@@ -444,6 +444,74 @@ def test_reviews_lists_the_maybes_with_their_evidence(tmp_path, capsys, realisti
     assert "ratio of" in out, "the evidence sentences are missing"
 
 
+@pytest.fixture(scope="module")
+def stress_batch_path(tmp_path_factory):
+    """The harder corpus, which contains an agent behind a self-hosted
+    gateway. The base corpus deliberately does not."""
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+
+    body = build_batch(
+        corpus.build(corpus.CorpusSpec(days=1, hard=True))
+    ).model_dump(mode="json")
+    body["account_id"] = ACCOUNT
+    path = tmp_path_factory.mktemp("stress") / "batch.json"
+    path.write_text(json.dumps(body))
+    return path
+
+
+def test_reviews_names_the_undeclared_address_a_maybe_reaches(
+    tmp_path, capsys, stress_batch_path
+):
+    """The join. "Is 10.0.7.40 a gateway?" and "deploy-remediation might be an
+    agent" were being printed by two different commands."""
+    db = tmp_path / "join.db"
+    main(["--db", str(db), "scan", str(stress_batch_path)])
+    capsys.readouterr()
+
+    assert main(["--db", str(db), "reviews", "--account", ACCOUNT]) == 0
+    out = capsys.readouterr().out
+
+    assert "10.0.7.40" in out
+    assert "custos declare 10.0.7.40" in out, "say what to do about it"
+    # The correlated maybe is printed before the uncorrelated ones.
+    assert out.index("deploy-remediation") < out.index("10.0.7.40") + len(out)
+    first = [ln for ln in out.splitlines() if ln.startswith("  ") and not ln.startswith("      ")]
+    assert "deploy-remediation" in first[0]
+
+
+def test_reviews_on_the_base_corpus_names_no_address(tmp_path, capsys, batch_file):
+    """The half that matters: the base corpus hides nothing behind a gateway,
+    so a note here would be teaching an operator to skip the section."""
+    db = tmp_path / "quiet.db"
+    main(["--db", str(db), "scan", str(batch_file)])
+    capsys.readouterr()
+
+    main(["--db", str(db), "reviews", "--account", ACCOUNT])
+    out = capsys.readouterr().out
+    assert "if that is a model gateway" not in out
+
+
+def test_gateways_stops_asking_once_the_address_is_declared(
+    tmp_path, capsys, stress_batch_path
+):
+    """Being asked again every scan about something already answered is how a
+    customer learns the questions are not worth reading."""
+    db = tmp_path / "answered.db"
+    main(["--db", str(db), "scan", str(stress_batch_path)])
+    capsys.readouterr()
+
+    main(["--db", str(db), "gateways", "--account", ACCOUNT])
+    assert "10.0.7.40" in capsys.readouterr().out
+
+    main(["--db", str(db), "declare", "10.0.7.40/32", "--account", ACCOUNT,
+          "--operator", "ezra@custos.dev", "--note", "llm-gateway"])
+    capsys.readouterr()
+
+    main(["--db", str(db), "gateways", "--account", ACCOUNT])
+    assert "10.0.7.40" not in capsys.readouterr().out
+
+
 def test_reviews_says_so_when_there_is_nothing_to_review(tmp_path, capsys):
     db = tmp_path / "r2.db"
     open_database(db).close()
