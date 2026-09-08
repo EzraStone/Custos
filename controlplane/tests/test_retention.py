@@ -52,6 +52,132 @@ def count(conn, table):
     return conn.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()["n"]
 
 
+def _seed_scan(conn, days_ago: int) -> int:
+    """A batch and a scan dated `days_ago`, with no agent. Returns the scan id."""
+    at = now() - timedelta(days=days_ago)
+    scans = ScanStore(conn)
+    batch = scans.record_batch(
+        account_id=ACCOUNT, region="us-east-1",
+        window_start=at, window_end=at + timedelta(hours=1),
+        collector="v1", received_at=at, flow_records=10, requests=0,
+        have_alb_logs=False,
+    )
+    return scans.record_scan(
+        batch_id=batch.id, account_id=ACCOUNT, started_at=at, principals_seen=1,
+        agents_found=0, review_candidates=1, coverage=1.0, truncated=False,
+        catalogue_revision="r",
+    )
+
+
+def seed_per_scan_rows(conn, scan_id: int) -> None:
+    """Attach a review candidate and a gateway question to one scan.
+
+    Both are questions derived from a window of telemetry that retention
+    deletes. A question that outlives the traffic behind it cannot be
+    answered — nobody can go back and check — and the report would keep
+    asking it.
+    """
+    from types import SimpleNamespace
+
+    from custos.gateway import Candidate
+    from custos.store.declarations import CandidateStore
+    from custos.store.scans import ReviewStore
+
+    ReviewStore(conn).record(scan_id, ACCOUNT, [
+        SimpleNamespace(principal="role/maybe", confidence=0.5,
+                        evidence=["odd bursts"], unavailable=[]),
+    ])
+    CandidateStore(conn).record(scan_id, ACCOUNT, [
+        Candidate(address="10.0.7.40", egress=9_000_000, ingress=200_000,
+                  principals=("role/x",), blind_principals=("role/x",)),
+    ])
+    conn.commit()
+
+
+# Both tables below were added after retention was written, and neither had a
+# test proving prune reaches them. They cascade from scans, which is only true
+# while PRAGMA foreign_keys is on and the declaration stays in the schema.
+def test_pruning_a_scan_takes_its_questions_with_it():
+    """A question derived from traffic that no longer exists cannot be
+    answered. Leaving it behind means a report that keeps asking."""
+    conn = open_database()
+    old_id = _seed_scan(conn, days_ago=400)
+    recent_id = _seed_scan(conn, days_ago=2)
+    seed_per_scan_rows(conn, old_id)
+    seed_per_scan_rows(conn, recent_id)
+
+    assert count(conn, "review_candidates") == 2
+    assert count(conn, "gateway_candidates") == 2
+
+    prune(conn, observation_days=90, scan_days=365)
+
+    assert count(conn, "review_candidates") == 1
+    assert count(conn, "gateway_candidates") == 1
+    surviving = conn.execute(
+        "SELECT scan_id FROM review_candidates"
+    ).fetchone()["scan_id"]
+    assert surviving == recent_id
+
+
+def _scan_referencing_tables(conn) -> list[str]:
+    return [
+        r["name"] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' "
+            "AND sql LIKE '%REFERENCES scans%'"
+        )
+    ]
+
+
+def test_every_table_hanging_off_a_scan_has_a_way_of_being_pruned():
+    """A meta-test, because the next per-scan table will be added by someone
+    who has no reason to know retention exists.
+
+    Two mechanisms are legitimate. `observations` predates the others and is
+    deleted explicitly by date, which is why it has no cascade — rebuilding
+    that table to add one would be a migration for no behavioural gain. Newer
+    tables cascade. What is not legitimate is neither: those rows outlive the
+    scan, or the foreign key refuses the delete and prune starts failing.
+    """
+    import inspect
+
+    from custos.store import retention
+
+    conn = open_database()
+    tables = _scan_referencing_tables(conn)
+    assert {"observations", "review_candidates", "gateway_candidates"} <= set(tables)
+
+    source = inspect.getsource(retention)
+    for table in tables:
+        sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE name = ?", (table,)
+        ).fetchone()["sql"]
+        cascades = "ON DELETE CASCADE" in sql
+        deleted_by_hand = f"DELETE FROM {table}" in source
+        assert cascades or deleted_by_hand, (
+            f"{table} references scans with neither a cascade nor an explicit "
+            "delete in retention: pruning a scan would either leave its rows "
+            "behind or fail on the foreign key"
+        )
+
+
+def test_pruning_leaves_no_row_pointing_at_a_scan_that_is_gone():
+    """The property the mechanisms above exist to produce, checked directly."""
+    conn = open_database()
+    seed(conn, days_ago=400)
+    old_id = _seed_scan(conn, days_ago=400)
+    seed_per_scan_rows(conn, old_id)
+    seed_per_scan_rows(conn, _seed_scan(conn, days_ago=1))
+
+    prune(conn, observation_days=90, scan_days=365)
+
+    for table in _scan_referencing_tables(conn):
+        orphans = conn.execute(
+            f"SELECT COUNT(*) AS n FROM {table} "
+            "WHERE scan_id NOT IN (SELECT id FROM scans)"
+        ).fetchone()["n"]
+        assert orphans == 0, f"{table} kept {orphans} rows past their scan"
+
+
 def test_old_observations_are_dropped():
     conn = open_database()
     seed(conn, days_ago=200)
