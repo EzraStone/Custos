@@ -1,19 +1,16 @@
 """Model endpoints a customer told us about, scoped to their account.
 
-`catalog.extend()` has existed since the catalogue did, with a careful
-docstring explaining the three cases it handles, and nothing has ever called
-it. There was no configuration path: a customer running every model call
-through a self-hosted gateway had no way to say so, and their agents were
-invisible. `docs/STATUS.md` names that as the single most likely reason a real
-scan comes back emptier than it should.
+A customer running every model call through a self-hosted gateway had no way
+to say so, and their agents were invisible. `docs/STATUS.md` names that as the
+single most likely reason a real scan comes back emptier than it should.
 
-**Per account, not per process.** `extend()` mutates module globals, which is
-the wrong shape for a control plane holding several customers. Declaring one
-account's gateway would make that address a model endpoint for every other
-account in the same process — so a coincidental address collision in another
-customer's VPC would manufacture agents out of unrelated traffic. That is the
-fastest way to lose trust in a whole report, and it is not a hypothetical:
-10.0.0.0/8 is where everyone's internal services live.
+**Per account, not per process.** The catalogue once carried an `extend()`
+that mutated module globals, and building this on top of it was the obvious
+move — which would have made one account's gateway a model endpoint for every
+other account in the same process. A coincidental address collision in another
+customer's VPC would then manufacture agents out of unrelated traffic, which is
+the fastest way to lose trust in a whole report. Not a hypothetical: 10.0.0.0/8
+is where everyone's internal services live.
 
 So a declaration is a value carried alongside the account's telemetry, and the
 built-in catalogue stays a module-level constant that nothing writes to.

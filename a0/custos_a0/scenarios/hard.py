@@ -23,7 +23,7 @@ Four workloads, each aimed at a specific assumption:
     agent_via_gateway     an agent whose model traffic goes to a self-hosted
                           gateway on a private address. Invisible to the
                           built-in catalogue, which is the case
-                          `catalog.extend` exists for.
+                          declaring a model endpoint exists for.
 """
 
 from __future__ import annotations
@@ -179,7 +179,7 @@ def agent_via_gateway(rng: Random, start: datetime, end: datetime) -> Workload:
         note=(
             "CATALOGUE STRESS. Every model call goes to a self-hosted gateway "
             "on a private address, which the built-in catalogue reads as an "
-            "internal API. Invisible until someone runs catalog.extend, and "
+            "internal API. Invisible until someone declares the gateway, and "
             "this workload is why that function exists."
         ),
     )

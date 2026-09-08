@@ -71,7 +71,7 @@ def test_an_agent_behind_an_unknown_gateway_is_missed(built_in):
 
 def test_declaring_the_gateway_recovers_it(extended):
     row = _row(extended, "deploy-remediation-agent")
-    assert row.correct, "catalog.extend is the remedy and must work"
+    assert row.correct, "declaring the gateway is the remedy and must work"
 
 
 def test_no_false_positives_on_the_stress_corpus(built_in, extended):
