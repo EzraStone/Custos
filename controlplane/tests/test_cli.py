@@ -231,8 +231,13 @@ def test_accounts_counts_sanctioned_separately(db, batch_file, capsys):
 
     main(["--db", db, "accounts"])
     row = [ln for ln in capsys.readouterr().out.splitlines() if ACCOUNT in ln][0]
-    # account, agents, sanctioned, unsanctioned, destructive, last scan
-    assert row.split()[:5] == [ACCOUNT, "5", "1", "4", "1"]
+    # account, agents, sanctioned, unsanctioned, destructive, last scan.
+    #
+    # Destructive reads 0 because the agent just granted was the destructive
+    # one — the register is ordered worst-first, so that is the id this test
+    # picked. The column counts what is still awaiting a decision, which is
+    # the question somebody choosing between accounts is asking.
+    assert row.split()[:5] == [ACCOUNT, "5", "1", "4", "0"]
 
 
 def test_accounts_on_an_empty_database_says_so(db, capsys):
