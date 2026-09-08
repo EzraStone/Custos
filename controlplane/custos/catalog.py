@@ -80,84 +80,21 @@ _MODEL_NETS: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = tuple(
 )
 
 
-def extend(ranges: list[str], aws_services: list[str] | None = None) -> None:
-    """Add model endpoints the built-in catalogue does not know about.
-
-    Three cases this exists for, all of which produce an invisible agent
-    otherwise:
-
-      A self-hosted gateway. Many teams front every provider behind one
-      internal endpoint, which classifies as an internal API and takes all its
-      model traffic with it.
-
-      A provider we have not added. The catalogue goes stale between releases
-      and a customer may be the first to use something.
-
-      A private endpoint. Bedrock over a VPC endpoint appears on a private
-      address, and pkt-dst-aws-service does not always carry through.
-
-    Deliberately additive and never subtractive. Removing a range would let a
-    customer hide an agent from their own report, and a security tool that can
-    be configured blind is worse than one that cannot be configured at all.
-
-    Caches are cleared, because a classification made before the extension
-    would otherwise outlive it.
-    """
-    global _MODEL_NETS, _EXTRA_AWS_SERVICES
-
-    parsed = []
-    for entry in ranges:
-        try:
-            parsed.append(ipaddress.ip_network(entry, strict=False))
-        except ValueError as exc:
-            raise ValueError(f"not a valid network: {entry!r}") from exc
-
-    _MODEL_NETS = _MODEL_NETS + tuple(parsed)
-    if aws_services:
-        _EXTRA_AWS_SERVICES = _EXTRA_AWS_SERVICES | frozenset(aws_services)
-    clear_caches()
-
-
-def reset() -> None:
-    """Restore the built-in catalogue, discarding every extension.
-
-    Exists for tests and for a control plane that reloads configuration
-    without restarting. Deliberately not implemented by reloading the module:
-    other modules import these functions by reference at import time, so a
-    reload leaves them pointing at pre-reload objects whose caches still hold
-    the extended answers — which silently corrupts classification for
-    everything that imported the catalogue before the reload.
-    """
-    global _MODEL_NETS, _EXTRA_AWS_SERVICES
-
-    _MODEL_NETS = tuple(ipaddress.ip_network(c) for c in MODEL_RANGES)
-    _EXTRA_AWS_SERVICES = frozenset()
-    clear_caches()
-
-
 def clear_caches() -> None:
     """Drop memoised destination lookups.
 
-    Both caches, always. A classification memoised before an extension would
-    otherwise outlive it, and a stale 'not a model endpoint' is an agent that
-    stays invisible after the customer told us where to look.
+    Both caches, always. Nothing in the running system mutates this catalogue —
+    a customer's declarations live in `declared.py` and are carried with their
+    account rather than written here — so this exists for tests and for a
+    process that reloads a new built-in catalogue at startup.
     """
     is_model_endpoint.cache_clear()
     is_private.cache_clear()
 
 
-def configured_ranges() -> tuple[str, ...]:
-    """Every model range currently in effect, for the report's provenance.
-
-    A finding is only as good as the catalogue that produced it, and a customer
-    who extended the catalogue should see that reflected rather than reading
-    the built-in revision and assuming it was all we used.
-    """
-    return tuple(str(net) for net in _MODEL_NETS)
-
-
 _EXTRA_AWS_SERVICES: frozenset[str] = frozenset()
-"""AWS services declared as model endpoints by a customer's configuration."""
+"""Reserved for a future built-in addition. A customer's declared services live
+in `declared.py`, scoped to their account."""
 
 
 @lru_cache(maxsize=8192)
