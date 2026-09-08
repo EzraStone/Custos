@@ -61,6 +61,33 @@ def test_scan_writes_a_self_contained_report(db, batch_file, tmp_path):
     assert "http://" not in page and "https://" not in page
 
 
+def test_the_written_report_says_how_often_a_maybe_recurred(db, batch_file, tmp_path):
+    """One uncertain window is a question about a window. The same workload
+    uncertain in every scan is a question about the account, and the report is
+    what the workload owner actually reads."""
+    from custos.batch import Batch
+
+    once = tmp_path / "once.html"
+    main(["--db", db, "scan", str(batch_file), "--out", str(once)])
+    assert "<h2>For review</h2>" in once.read_text(), "this corpus has maybes"
+    assert "Seen in" not in once.read_text(), "one scan is the default"
+
+    first = Batch.model_validate_json(batch_file.read_text())
+    span = first.window_end - first.window_start
+    second_path = tmp_path / "second.json"
+    second_path.write_text(first.model_copy(update={
+        "window_start": first.window_end,
+        "window_end": first.window_end + span,
+    }).model_dump_json())
+
+    twice = tmp_path / "twice.html"
+    main(["--db", db, "scan", str(second_path), "--out", str(twice)])
+
+    page = twice.read_text()
+    assert "Seen in" in page
+    assert "2 scans" in page
+
+
 def test_rescanning_the_same_window_says_so(db, batch_file, capsys):
     main(["--db", db, "scan", str(batch_file)])
     main(["--db", db, "scan", str(batch_file)])

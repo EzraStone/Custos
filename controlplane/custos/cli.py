@@ -67,7 +67,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
 
     if args.out:
         _write_report(args.out, outcome, batch.account_id,
-                      declared=_declared_labels(conn, batch.account_id))
+                      declared=_declared_labels(conn, batch.account_id),
+                      reviews=_reviews_with_history(conn, outcome, batch.account_id))
         print()
         print(f"report        {args.out}")
 
@@ -101,9 +102,32 @@ def _deliver(conn, outcome, account_id: str) -> None:
               f"suppressed {delivery.suppressed} — {status}")
 
 
+def _reviews_with_history(conn, outcome, account_id: str) -> list:
+    """This scan's maybes, each carrying how many scans have said the same.
+
+    The live verdict cannot know this and the store can. Passing it explicitly
+    keeps `render` ignorant of the database, which is what lets the report be
+    rendered in a test from a scan result and nothing else.
+    """
+    from .report import Review
+    from .store.scans import ReviewStore
+
+    reviews = ReviewStore(conn)
+    return [
+        Review(
+            principal=v.principal,
+            confidence=v.confidence,
+            evidence=tuple(v.evidence),
+            seen_in_scans=reviews.recurrence(account_id, v.principal),
+        )
+        for v in outcome.result.review_candidates
+    ]
+
+
 def _write_report(
     path: str, outcome, account_label: str, diff: ScanDiff | None = None,
     drift: list[Drift] | None = None, declared: list[str] | None = None,
+    reviews: list | None = None,
 ) -> None:
     Path(path).write_text(render(
         outcome.result,
@@ -113,6 +137,7 @@ def _write_report(
         drift=drift if drift is not None else outcome.drift,
         coverage=outcome.coverage,
         declared=declared,
+        reviews=reviews,
     ))
 
 
