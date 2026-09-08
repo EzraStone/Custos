@@ -106,7 +106,9 @@ def _review_row(verdict: Verdict) -> str:
     </article>"""
 
 
-def _limitations(result: ScanResult, degraded: list[str]) -> str:
+def _limitations(
+    result: ScanResult, degraded: list[str], declared: list[str] | None = None
+) -> str:
     items = [
         "Payload contents were never collected. Identities, endpoints, byte "
         "counts, timings, and protocol fingerprints are the entire input to "
@@ -119,6 +121,25 @@ def _limitations(result: ScanResult, degraded: list[str]) -> str:
         "Blast radius is read from IAM policy, not from observed traffic. It "
         "states what the credential permits, not what the agent has done.",
     ]
+    # What this account added to the catalogue, and what it therefore did not.
+    # A finding is only as good as the catalogue that produced it, and a reader
+    # who does not know whether a gateway was declared cannot tell an account
+    # with no agents from an account whose agents are behind one.
+    if declared:
+        items.append(
+            "This account declared "
+            + _e(", ".join(declared))
+            + " as model endpoints. Agents reaching them are visible because "
+            "somebody said so; the catalogue would not have recognised them."
+        )
+    else:
+        items.append(
+            "This account has declared no additional model endpoints. If model "
+            "calls here go through a self-hosted gateway, the agents making "
+            "them do not appear above at all — they have no model traffic we "
+            "can see."
+        )
+
     if PRICES_REVISION == "unverified-placeholder":
         items.append(
             "Spend figures use unverified placeholder pricing and are valid "
@@ -294,6 +315,7 @@ def render(
     diff: ScanDiff | None = None,
     drift: list[Drift] | None = None,
     coverage: Coverage | None = None,
+    declared: list[str] | None = None,
 ) -> str:
     """Render the scan report as a single self-contained HTML document."""
     findings = result.register.attributed_findings
@@ -346,7 +368,7 @@ def render(
 
 <section>
   <h2>What this report does not claim</h2>
-  <ul class="limits">{_limitations(result, degraded)}</ul>
+  <ul class="limits">{_limitations(result, degraded, declared)}</ul>
 </section>
 
 <footer>

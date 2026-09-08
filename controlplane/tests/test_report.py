@@ -290,3 +290,23 @@ def test_no_internal_destinations_is_not_an_unreadable_scope():
         coverage=Coverage(scope_named=0, scope_total=0),
     )
     assert "Scope is mostly addresses" not in html
+
+
+def test_a_report_says_whether_any_endpoint_was_declared():
+    """A finding is only as good as the catalogue that produced it. A reader
+    who does not know whether a gateway was declared cannot tell an account
+    with no agents from an account whose agents are all behind one."""
+    html = render(
+        result(), "447120043318", datetime(2026, 8, 20, tzinfo=UTC),
+        declared=["10.0.7.0/24 (llm-gateway)"],
+    )
+    assert "10.0.7.0/24 (llm-gateway)" in html
+    assert "somebody said so" in html
+
+
+def test_a_report_with_no_declarations_says_what_that_costs():
+    # The more important half. Silence here reads as "there is nothing to
+    # declare", which is a claim nobody has checked.
+    html = render(result(), "447120043318", datetime(2026, 8, 20, tzinfo=UTC))
+    assert "declared no additional model endpoints" in html
+    assert "self-hosted gateway" in html

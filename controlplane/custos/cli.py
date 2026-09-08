@@ -66,7 +66,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
         _deliver(conn, outcome, batch.account_id)
 
     if args.out:
-        _write_report(args.out, outcome, batch.account_id)
+        _write_report(args.out, outcome, batch.account_id,
+                      declared=_declared_labels(conn, batch.account_id))
         print()
         print(f"report        {args.out}")
 
@@ -102,7 +103,7 @@ def _deliver(conn, outcome, account_id: str) -> None:
 
 def _write_report(
     path: str, outcome, account_label: str, diff: ScanDiff | None = None,
-    drift: list[Drift] | None = None,
+    drift: list[Drift] | None = None, declared: list[str] | None = None,
 ) -> None:
     Path(path).write_text(render(
         outcome.result,
@@ -111,7 +112,18 @@ def _write_report(
         diff=diff if diff is not None else outcome.diff,
         drift=drift if drift is not None else outcome.drift,
         coverage=outcome.coverage,
+        declared=declared,
     ))
+
+
+def _declared_labels(conn, account_id: str) -> list[str]:
+    """What this account declared, for the report provenance section."""
+    from .store.declarations import DeclarationStore
+
+    return [
+        f"{r.value} ({r.note})" if r.note else r.value
+        for r in DeclarationStore(conn).records_for(account_id)
+    ]
 
 
 def cmd_register(args: argparse.Namespace) -> int:

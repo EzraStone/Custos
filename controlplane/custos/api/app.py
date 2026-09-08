@@ -634,6 +634,10 @@ def create_app(
         return HTMLResponse(render(
             result, account_label=account_id,
             generated_at=now(), diff=diff, coverage=coverage,
+            declared=[
+                f"{r.value} ({r.note})" if r.note else r.value
+                for r in DeclarationStore(app.state.db).records_for(account_id)
+            ],
         ))
 
     @app.get("/v1/agents/{agent_id}/audit")
