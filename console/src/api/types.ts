@@ -148,6 +148,15 @@ export interface Review {
   scan_id: number;
   /** How many of this account's scans put this workload in the review band. */
   seen_in_scans: number;
+  /**
+   * Undeclared internal addresses this workload sends far more to than it
+   * gets back, while reaching no model provider we recognise.
+   *
+   * A non-empty one changes what the row means. It is not two weak signals —
+   * it is the shape of an agent behind a self-hosted gateway, and the person
+   * reading this can usually say in a minute whether that address is one.
+   */
+  sends_to: string[];
 }
 
 export interface ReviewsResponse {

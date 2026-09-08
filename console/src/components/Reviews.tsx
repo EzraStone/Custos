@@ -17,6 +17,13 @@ import type { Review } from "../api/types";
  * That is what `seen_in_scans` is for. One uncertain window is noise; the same
  * workload uncertain in eleven scans is a question the classifier has been
  * asking for a fortnight.
+ *
+ * `sends_to` is the stronger one, and it is the reason this list is rendered
+ * in the order it arrives rather than sorted by confidence. A maybe that
+ * reaches no model provider we recognise and sends a transcript-shaped stream
+ * at an address nobody has declared is the shape of an agent behind a gateway
+ * — the exact case the declaration mechanism exists for. The API lists those
+ * first and this preserves that order.
  */
 export function Reviews({ reviews }: { reviews: Review[] }) {
   if (reviews.length === 0) return null;
@@ -44,6 +51,14 @@ export function Reviews({ reviews }: { reviews: Review[] }) {
                 </span>
               ) : null}
             </div>
+            {review.sends_to.length > 0 ? (
+              <p className="gateway-note">
+                Reaches no model provider we recognise, and sends far more than
+                it gets back to{" "}
+                <code>{review.sends_to.join(", ")}</code> — undeclared. If that
+                is a model gateway, this is an agent rather than a maybe.
+              </p>
+            ) : null}
             {review.unavailable.length > 0 ? (
               <p className="degraded">
                 {/*

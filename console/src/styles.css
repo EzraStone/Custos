@@ -369,6 +369,13 @@ h2 { font-family: var(--display); font-size: 1.5rem; margin: 2.5rem 0 .5rem; }
   color: var(--seal);
 }
 .review-list .degraded { margin: .3rem 0 0; font-size: .82rem; color: var(--amber); }
+/* The strongest thing this list can say, so it is the only part of a review
+   row that is not grey. */
+.review-list .gateway-note {
+  margin: .45rem 0 0; padding: .5rem .7rem; font-size: .84rem;
+  border-left: 2px solid var(--seal); background: var(--raised);
+}
+.review-list .gateway-note code { font-family: var(--mono); font-size: .82rem; }
 .review-list .evidence { margin: .4rem 0 0; }
 
 .accounts .account .id { display: block; }
