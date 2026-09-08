@@ -128,6 +128,29 @@ def test_stress_command_prints_both_margins(capsys):
     assert "Quote this number instead" in out
 
 
+def test_no_margin_is_quoted_when_a_workload_cannot_be_scored(built_in):
+    """A margin measured across a workload nothing could score describes the
+    absence of evidence, not the separation of classes. -0.523 reads as "the
+    classes overlap", which is not what happened."""
+    assert built_in.unscorable, "the undeclared-gateway agent has no model traffic"
+    assert not built_in.margin_is_meaningful
+
+
+def test_the_margin_is_meaningful_once_the_gateway_is_declared(extended):
+    assert extended.unscorable == []
+    assert extended.margin_is_meaningful
+
+
+def test_the_stress_command_refuses_to_print_a_margin_it_cannot_defend(capsys):
+    from custos_a0.cli import main
+
+    assert main(["stress", "--hide-gateway"]) == 0
+    out = capsys.readouterr().out
+    assert "separation margin  n/a" in out
+    assert "-0.5" not in out, "the number that reads as overlapping classes"
+    assert "no model traffic to score" in out
+
+
 def test_hiding_the_gateway_reproduces_the_miss_on_demand(capsys):
     """Being able to demonstrate the one real failure is more useful than
     describing it."""

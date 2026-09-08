@@ -118,10 +118,22 @@ def cmd_stress(args: argparse.Namespace) -> int:
     print("Custos stress corpus — partially-coupled workloads included\n")
     print(_detail_table(result))
     print()
-    print(
-        f"recall {result.recall:.2f}   precision {result.precision:.2f}   "
+    margin = (
         f"separation margin {result.separation_margin:+.3f}"
+        if result.margin_is_meaningful
+        else "separation margin  n/a"
     )
+    print(f"recall {result.recall:.2f}   precision {result.precision:.2f}   {margin}")
+    if not result.margin_is_meaningful:
+        names = ", ".join(r.workload for r in result.unscorable)
+        print()
+        print(
+            f"No margin is quoted because {names} has no model traffic to "
+            "score — every signal but the MCP fingerprint is a ratio over the "
+            "intervals containing it. A margin measured across a workload "
+            "nothing could score describes the absence of evidence, not the "
+            "separation of classes."
+        )
     if result.missed_agents:
         print()
         for row in result.missed_agents:

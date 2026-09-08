@@ -152,6 +152,28 @@ class Result:
         )
 
     @property
+    def unscorable(self) -> list[Row]:
+        """Workloads with no recognised model traffic at all.
+
+        Nothing scores these. Every signal but the MCP fingerprint is a ratio
+        over the intervals containing model traffic, and with none of those
+        the signals are unavailable rather than zero. A workload here is not a
+        low-confidence verdict — it is an absent one, and the separation margin
+        is not a statistic that survives including it.
+        """
+        return [r for r in self.rows if r.verdict.features.model_windows == 0]
+
+    @property
+    def margin_is_meaningful(self) -> bool:
+        """Whether the separation margin describes anything.
+
+        A margin across a workload nothing could score measures the absence of
+        evidence, not the separation of classes, and printing it invites
+        exactly the misquoting the rest of this module works to prevent.
+        """
+        return not self.unscorable
+
+    @property
     def missed_agents(self) -> list[Row]:
         return [r for r in self.agents if r.verdict.disposition is not Disposition.AGENT]
 
