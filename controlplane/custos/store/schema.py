@@ -22,7 +22,7 @@ agent's apparent spend and reach.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # Columns added after a table was first written, applied by ALTER on databases
 # that already exist. The schema below is applied with CREATE TABLE IF NOT
@@ -82,6 +82,31 @@ CREATE TABLE IF NOT EXISTS scans (
     scope_total         INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS scans_by_account ON scans (account_id, started_at DESC);
+
+-- Model endpoints a customer declared, per account.
+--
+-- Per account and not global: 10.0.0.0/8 is where every customer's internal
+-- services live, and a declaration that leaked between accounts would
+-- manufacture agents out of unrelated traffic on a coincidental collision.
+--
+-- Declarations are never deleted, only withdrawn. A finding produced while a
+-- declaration was in effect is explained by it, and a row that vanished would
+-- leave that finding unexplainable — which matters most in exactly the case
+-- someone withdraws one to make a finding go away.
+CREATE TABLE IF NOT EXISTS declared_endpoints (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id    TEXT    NOT NULL,
+    value         TEXT    NOT NULL,
+    kind          TEXT    NOT NULL,
+    note          TEXT    NOT NULL DEFAULT '',
+    declared_by   TEXT    NOT NULL,
+    declared_at   TEXT    NOT NULL,
+    withdrawn_by  TEXT,
+    withdrawn_at  TEXT,
+    UNIQUE (account_id, value, kind, declared_at)
+);
+CREATE INDEX IF NOT EXISTS declared_by_account
+    ON declared_endpoints (account_id, withdrawn_at);
 
 -- The register. status and imprimatur columns are written only by the state
 -- machine; every other column is refreshed by ingestion (SEC-17).
