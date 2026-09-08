@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 
 from custos.catalog import DestinationClass
@@ -84,3 +86,62 @@ def test_a_host_bit_in_a_range_is_accepted_rather_than_refused():
     # loses the declaration; strict=False takes the network they meant.
     d = build([Declaration("10.0.7.5/24", "range", "gateway")])
     assert classify_with(d, "10.0.7.200", 443) is DestinationClass.MODEL
+
+
+def _gateway_traffic(gateway_addr: str):
+    """An agent whose every model call goes through an internal gateway.
+
+    The shape the classifier looks for, aimed at a private address on 443:
+    heavy egress, light return, no inbound request, a tool call alongside.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from custos.telemetry import Direction, FlowRecord
+
+    start = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+    out = []
+    for minute in range(40):
+        at = start + timedelta(minutes=minute)
+        out.append(FlowRecord(
+            account_id="1", interface_id="eni-1", srcaddr="10.0.1.5",
+            dstaddr=gateway_addr, srcport=41000 + minute, dstport=443,
+            protocol=6, packets=40, bytes=140_000,
+            start=at, end=at + timedelta(seconds=30),
+            direction=Direction.EGRESS, tcp_flags=2,
+        ))
+        out.append(FlowRecord(
+            account_id="1", interface_id="eni-1", srcaddr=gateway_addr,
+            dstaddr="10.0.1.5", srcport=443, dstport=41000 + minute,
+            protocol=6, packets=8, bytes=9_000,
+            start=at, end=at + timedelta(seconds=30),
+            direction=Direction.INGRESS, tcp_flags=16,
+        ))
+    return start, out
+
+
+def test_an_agent_behind_a_gateway_is_invisible_until_it_is_declared():
+    """The finding STATUS names as the most likely reason a real scan comes
+    back empty, and the reason this module exists.
+
+    Undeclared, every model call looks like traffic to an internal API and the
+    workload has no model traffic at all — so it is not an agent, not a review
+    candidate, not anything.
+    """
+    from custos.classify import Disposition
+    from custos.scan import ScanInput, run
+
+    start, records = _gateway_traffic("10.0.7.9")
+    common = dict(
+        account_id="1", start=start, end=start + timedelta(hours=1),
+        records=records, principal_by_eni={"eni-1": "arn:aws:iam::1:role/agent"},
+    )
+
+    blind = run(ScanInput(**common))
+    assert not [v for v in blind.verdicts if v.disposition is Disposition.AGENT]
+
+    told = run(ScanInput(
+        **common,
+        declared=build([Declaration("10.0.7.0/24", "range", "llm-gateway")]),
+    ))
+    found = [v for v in told.verdicts if v.disposition is Disposition.AGENT]
+    assert found, "declaring the gateway did not make the agent visible"

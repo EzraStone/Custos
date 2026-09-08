@@ -17,6 +17,7 @@ from .attribute import Attribution, PrincipalFacts, resolve
 from .catalog import RANGES_REVISION
 from .classify import Disposition, Verdict, classify_all, sessionize
 from .classify.episodes import PrincipalTelemetry
+from .declared import Declared
 from .reach import IamCapability
 from .register.model import (
     Agent,
@@ -50,6 +51,13 @@ class ScanInput:
 
     The only source that can name an ordinary internal service. Nothing in a
     flow log distinguishes the billing API from any other host on port 443.
+    """
+    declared: Declared = field(default_factory=Declared)
+    """Model endpoints this account declared.
+
+    Carried with the input rather than set on the catalogue, because it
+    belongs to one account and the catalogue is shared by every account in the
+    process.
     """
     interval: timedelta = timedelta(seconds=60)
     inbound_logs_available: bool = True
@@ -137,6 +145,7 @@ def run(inp: ScanInput, register: Register | None = None) -> ScanResult:
         origin=inp.start,
         interval=inp.interval,
         inbound_logs_available=inp.inbound_logs_available,
+        declared=inp.declared,
     )
     verdicts = classify_all(telemetry)
     by_principal = {t.principal: t for t in telemetry}

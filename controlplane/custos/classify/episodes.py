@@ -17,7 +17,8 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from ..catalog import DestinationClass, classify, is_tool_destination
+from ..catalog import DestinationClass, is_tool_destination
+from ..declared import Declared, classify_with
 from ..telemetry import SYN, Direction, FlowRecord, InboundRequest
 
 
@@ -152,9 +153,19 @@ def _floor(t: datetime, origin: datetime, interval: timedelta) -> datetime:
 
 
 def build_windows(
-    records: list[FlowRecord], origin: datetime, interval: timedelta
+    records: list[FlowRecord],
+    origin: datetime,
+    interval: timedelta,
+    declared: Declared | None = None,
 ) -> list[Window]:
-    """Fold flow records into per-interval windows for a single principal."""
+    """Fold flow records into per-interval windows for a single principal.
+
+    `declared` is what this account said its model endpoints are, and it is
+    honoured here rather than in the catalogue because it belongs to one
+    account. Defaulting to none keeps every existing caller — and every test
+    that does not care — reading the built-in catalogue alone.
+    """
+    seen_declared = declared if declared is not None else Declared()
     windows: dict[datetime, Window] = {}
     seen_syn: set[tuple[datetime, int, str]] = set()
 
@@ -173,7 +184,7 @@ def build_windows(
         # both ways attributes the reply to whichever service we happen to be
         # sitting behind, which is us.
         peer_service = r.dst_aws_service if egress else r.src_aws_service
-        cls = classify(peer, port, peer_service)
+        cls = classify_with(seen_declared, peer, port, peer_service)
 
         if cls is DestinationClass.MODEL:
             w.model_addresses.add(peer)
@@ -239,6 +250,7 @@ def sessionize(
     interval: timedelta,
     gap_tolerance: int = 1,
     inbound_logs_available: bool = True,
+    declared: Declared | None = None,
 ) -> list[PrincipalTelemetry]:
     """Group a whole capture by principal and sessionise each one.
 
@@ -261,7 +273,7 @@ def sessionize(
     out: list[PrincipalTelemetry] = []
     for principal, recs in by_principal.items():
         addresses = {address_by_eni[e] for e in enis[principal] if e in address_by_eni}
-        windows = build_windows(recs, origin, interval)
+        windows = build_windows(recs, origin, interval, declared)
         inbound: list[InboundRequest] = []
         for addr in addresses:
             inbound.extend(requests.get(addr, []))
