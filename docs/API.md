@@ -134,6 +134,37 @@ approval decision on each one is a guess.
 A scan that reached nothing internal reports `1.0`, not `0.0`. There is no
 unreadable scope on a scan with no destinations.
 
+## `GET /v1/fleet`
+
+One line per account this credential covers.
+
+```json
+{
+  "accounts": [
+    { "account_id": "447120043318", "agents": 12, "unsanctioned": 5,
+      "destructive": 1, "last_scan": "2026-09-08T09:00:00+00:00",
+      "coverage": 1.0, "scope_readable": 0.75, "reviews": 2,
+      "gateway_questions": 0, "rates_verified": true },
+    { "account_id": "209384756102", "agents": 0, "unsanctioned": 0,
+      "destructive": 0, "last_scan": null, "coverage": null,
+      "scope_readable": null, "reviews": 0, "gateway_questions": 0,
+      "rates_verified": false }
+  ]
+}
+```
+
+A customer in the target profile runs five to fifty accounts. Somebody deciding
+where to spend an afternoon needs to know which account has unsanctioned agents
+that can destroy things and which has not been scanned in three weeks.
+
+`destructive` is the number to triage by: twelve unsanctioned agents that can
+only read is a different afternoon from one that can delete.
+
+**Every account the credential covers appears, including unscanned ones.** A
+`null` `last_scan` is the most important row in the response — an account
+nobody has looked at is not the same as an account with nothing in it, and
+omitting it would make the two identical.
+
 ## `GET /v1/rates`
 
 What this account pays per provider, and when they last said so.

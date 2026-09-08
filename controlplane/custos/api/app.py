@@ -348,6 +348,56 @@ def create_app(
             },
         }
 
+    @app.get("/v1/fleet")
+    def get_fleet(principal: Auth) -> dict:
+        """One line per account this credential covers.
+
+        A customer in the target profile runs five to fifty accounts, and the
+        account picker listed twelve-digit numbers with nothing to choose by.
+        Somebody deciding where to spend an afternoon needs to know which
+        account has unsanctioned agents that can destroy things, and which one
+        has not been scanned in three weeks.
+
+        Every account the credential covers appears, including ones with no
+        scans. An account missing from this list would be one nobody thinks to
+        onboard, and an unscanned account is the most important row here.
+        """
+        agents = AgentStore(app.state.db)
+        scans = ScanStore(app.state.db)
+        reviews = ReviewStore(app.state.db)
+        candidates = CandidateStore(app.state.db)
+        declarations = DeclarationStore(app.state.db)
+        rates = RateStore(app.state.db)
+
+        out = []
+        for account_id in sorted(principal.accounts):
+            registry = agents.list_for_account(account_id)
+            unsanctioned = [a for a in registry if a.unsanctioned]
+            latest = scans.latest_scan(account_id)
+            declared = declarations.declared_for(account_id)
+            open_questions = [
+                c for c in candidates.latest_for(account_id)
+                if not declared.covers(c["address"])
+            ]
+            out.append({
+                "account_id": account_id,
+                "agents": len(registry),
+                "unsanctioned": len(unsanctioned),
+                # The number somebody triages by. Twelve unsanctioned agents
+                # that can only read is a different afternoon from one that
+                # can delete.
+                "destructive": sum(
+                    1 for a in unsanctioned if str(a.reach.blast_radius) == "destructive"
+                ),
+                "last_scan": _iso(latest.started_at) if latest else None,
+                "coverage": latest.coverage if latest else None,
+                "scope_readable": latest.scope_readable if latest else None,
+                "reviews": len(reviews.latest_for(account_id)),
+                "gateway_questions": len(open_questions),
+                "rates_verified": rates.rates_for(account_id).verified,
+            })
+        return {"accounts": out}
+
     @app.get("/v1/rates")
     def get_rates(principal: Auth, account: str | None = None) -> dict:
         """What this account pays, and when they last said so."""

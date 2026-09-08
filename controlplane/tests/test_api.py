@@ -857,3 +857,42 @@ def test_rates_keep_every_value_ever_supplied(client):
 def test_rates_need_a_credential(client):
     assert client.get("/v1/rates").status_code == 401
     assert client.post("/v1/rates", json={}).status_code == 401
+
+
+def _fleet_client(tokens: dict):
+    return TestClient(create_app(conn=open_database(), tokens=TokenStore(tokens)))
+
+
+def test_fleet_lists_every_account_the_credential_covers():
+    """Including ones nobody has scanned. An account nobody has looked at is
+    not the same as an account with nothing in it, and omitting it would make
+    the two identical."""
+    client = _fleet_client({"fleet": ["111111111111", "222222222222"]})
+    body = client.get("/v1/fleet", headers={"Authorization": "Bearer fleet"}).json()
+
+    assert [a["account_id"] for a in body["accounts"]] == ["111111111111", "222222222222"]
+    assert all(a["last_scan"] is None for a in body["accounts"])
+    assert all(a["agents"] == 0 for a in body["accounts"])
+
+
+def test_fleet_counts_what_somebody_would_triage_by(client, realistic_payload):
+    _ingest_real_batch(client, realistic_payload)
+    row = client.get("/v1/fleet", headers=AUTH).json()["accounts"][0]
+
+    assert row["account_id"] == ACCOUNT
+    assert row["unsanctioned"] >= 1
+    # Twelve unsanctioned agents that can only read is a different afternoon
+    # from one that can delete.
+    assert row["destructive"] >= 1
+    assert row["last_scan"] is not None
+    assert row["coverage"] is not None
+
+
+def test_fleet_does_not_show_accounts_the_credential_does_not_cover():
+    client = _fleet_client({"a": ["111111111111"], "b": ["222222222222"]})
+    body = client.get("/v1/fleet", headers={"Authorization": "Bearer a"}).json()
+    assert [a["account_id"] for a in body["accounts"]] == ["111111111111"]
+
+
+def test_fleet_needs_a_credential(client):
+    assert client.get("/v1/fleet").status_code == 401
