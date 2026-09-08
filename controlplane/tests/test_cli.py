@@ -332,3 +332,52 @@ def test_grant_on_a_missing_agent_says_so_rather_than_raising(tmp_path, capsys):
     open_database(db).close()
     assert main(["--db", str(db), "grant", "agt_nope", "--operator", "ezra"]) == 2
     assert "no agent" in capsys.readouterr().err
+
+
+def test_declare_says_it_takes_effect_next_scan(tmp_path, capsys):
+    """Reclassifying stored telemetry would rewrite the history of what was
+    found when, so the command says so rather than leaving someone to wonder
+    why the register did not move."""
+    db = tmp_path / "d.db"
+    assert main([
+        "--db", str(db), "declare", "10.0.7.0/24",
+        "--account", "1", "--operator", "ezra@custos.dev", "--note", "llm-gateway",
+    ]) == 0
+    out = capsys.readouterr().out
+    assert "takes effect on the next scan" in out
+    assert "not reclassified" in out
+
+
+def test_declare_refuses_an_unparseable_range(tmp_path, capsys):
+    db = tmp_path / "d2.db"
+    assert main([
+        "--db", str(db), "declare", "10.0.7.0/99",
+        "--account", "1", "--operator", "ezra@custos.dev",
+    ]) == 2
+    assert "not a valid network" in capsys.readouterr().err
+
+
+def test_endpoints_lists_what_was_declared(tmp_path, capsys):
+    db = tmp_path / "d3.db"
+    main(["--db", str(db), "declare", "10.0.7.0/24", "--account", "1",
+          "--operator", "ezra@custos.dev", "--note", "llm-gateway"])
+    capsys.readouterr()
+
+    assert main(["--db", str(db), "endpoints", "--account", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "10.0.7.0/24" in out and "llm-gateway" in out and "ezra@custos.dev" in out
+
+
+def test_endpoints_points_at_the_gateways_command_when_there_are_none(tmp_path, capsys):
+    # Somebody who has nothing declared usually does not know what to declare.
+    db = tmp_path / "d4.db"
+    open_database(db).close()
+    assert main(["--db", str(db), "endpoints", "--account", "1"]) == 0
+    assert "custos gateways" in capsys.readouterr().out
+
+
+def test_gateways_says_nothing_is_hidden_rather_than_printing_an_empty_table(tmp_path, capsys):
+    db = tmp_path / "d5.db"
+    open_database(db).close()
+    assert main(["--db", str(db), "gateways", "--account", "1"]) == 0
+    assert "Nothing looks like an undeclared model gateway" in capsys.readouterr().out

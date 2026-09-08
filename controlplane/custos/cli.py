@@ -204,6 +204,75 @@ def cmd_history(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_endpoints(args: argparse.Namespace) -> int:
+    """List what this account declared its model endpoints to be."""
+    from .store.declarations import DeclarationStore
+
+    records = DeclarationStore(open_database(args.db)).records_for(
+        args.account, include_withdrawn=args.all
+    )
+    if not records:
+        print("No declared endpoints. Run `custos gateways` to see what to ask about.")
+        return 0
+
+    print(f"{'value':<24}{'kind':<14}{'declared by':<24}{'note'}")
+    print("-" * 78)
+    for r in records:
+        mark = "" if r.active else "  (withdrawn)"
+        print(f"{r.value:<24}{r.kind:<14}{r.declared_by:<24}{r.note}{mark}")
+    return 0
+
+
+def cmd_declare(args: argparse.Namespace) -> int:
+    """Declare a model endpoint.
+
+    Takes effect on the next scan. Reclassifying stored telemetry would rewrite
+    the history of what was found when, so the command says so rather than
+    leaving someone to wonder why the register did not move.
+    """
+    from .store.declarations import DeclarationStore
+
+    conn = open_database(args.db)
+    try:
+        record = DeclarationStore(conn).declare(
+            args.account, args.value, args.kind, args.operator, args.note
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    conn.commit()
+
+    print(f"declared {record.value} as a model endpoint for {args.account}")
+    print(f"recorded against {record.declared_by}")
+    print("takes effect on the next scan; existing findings are not reclassified")
+    return 0
+
+
+def cmd_gateways(args: argparse.Namespace) -> int:
+    """Internal addresses that behave like model endpoints.
+
+    Questions, not findings. A workload whose model calls go through one of
+    these has no model traffic we can see, so it is not a finding of any kind —
+    which is why this reads as a list of things to ask about rather than a list
+    of things we concluded.
+    """
+    from .store.declarations import CandidateStore
+
+    found = CandidateStore(open_database(args.db)).latest_for(args.account)
+    if not found:
+        print("Nothing looks like an undeclared model gateway in the last scan.")
+        return 0
+
+    print("These addresses behave like model endpoints. If one is yours:")
+    print(f"  custos declare <address> --account {args.account} --operator you@example.com")
+    print()
+    for c in found:
+        print(f"  {c['question']}")
+        who = ", ".join(p.split("/")[-1] for p in c["blind_principals"])
+        print(f"      reached by: {who}")
+    return 0
+
+
 def cmd_grant(args: argparse.Namespace) -> int:
     """Sanction an agent from the command line.
 
@@ -380,6 +449,23 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--no-vacuum", action="store_true",
                    help="skip reclaiming disk space, which locks the database briefly")
     p.set_defaults(func=cmd_prune)
+
+    p = sub.add_parser("endpoints", help="model endpoints this account declared")
+    p.add_argument("--account", required=True)
+    p.add_argument("--all", action="store_true", help="include withdrawn declarations")
+    p.set_defaults(func=cmd_endpoints)
+
+    p = sub.add_parser("declare", help="declare a model endpoint")
+    p.add_argument("value", help="a CIDR, an address, or an AWS service name")
+    p.add_argument("--account", required=True)
+    p.add_argument("--operator", required=True, help="the human making the declaration")
+    p.add_argument("--note", default="", help="what you call this endpoint")
+    p.add_argument("--kind", default="range", choices=["range", "aws_service"])
+    p.set_defaults(func=cmd_declare)
+
+    p = sub.add_parser("gateways", help="internal addresses that look like model endpoints")
+    p.add_argument("--account", required=True)
+    p.set_defaults(func=cmd_gateways)
 
     p = sub.add_parser("grant", help="sanction an agent")
     p.add_argument("agent_id")
