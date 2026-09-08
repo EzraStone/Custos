@@ -114,10 +114,24 @@ numbers a person can check.
 ![The console asking whether an internal address is a model gateway](docs/images/gateway.png)
 
 That image comes from the stress corpus, which contains a workload behind an
-undeclared gateway. The others come from the base corpus, which does not — and
-on that account this section does not appear at all, which is the result that
-matters more. A detector that fires on a healthy account is one that gets
-ignored on the account where it counts.
+undeclared gateway. Most of the others come from the base corpus, which does
+not — and on that account this section does not appear at all, which is the
+result that matters more. A detector that fires on a healthy account is one
+that gets ignored on the account where it counts.
+
+Workloads that resemble agents without meeting the bar are shown rather than
+counted, with the evidence and how many scans each has recurred in. Nothing
+here is clickable: there is no promote and no dismiss, because the register has
+one way in and it is a scan.
+
+![The review band, with evidence and no controls](docs/images/reviews.png)
+
+What is absent from that list is the point. It is the same stress-corpus
+account as the gateway question above, and the agent behind that gateway is not
+in it. It used to be, at 0.77 — on four signals that had no model traffic to
+measure and returned their most incriminating values over an empty set. A
+workload we cannot see making model calls is an unanswered question, not a
+low-confidence finding, so it appears as the question instead.
 
 These are the real console against a real scanned database, but the traffic is
 the A0 synthetic corpus rather than a customer account — nobody has run this

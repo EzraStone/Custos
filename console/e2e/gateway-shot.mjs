@@ -45,15 +45,19 @@ await page.screenshot({
 });
 console.log("       gateway.png");
 
-// The review band, on the same account. This is the pair worth showing: the
-// question at the top of the page and, below the register, the workload that
-// makes it worth answering. Neither image means much on its own.
+// The review band, on the same account. Deliberately from the stress corpus
+// too: it is the account with the hardest workloads, so the maybes here are
+// the interesting ones rather than the tidy ones.
+//
+// What is NOT in this picture is the point. The agent behind the undeclared
+// gateway used to sit at the top of this list at 0.77, on signals that had
+// nothing to measure. It is not here any more; it is in the question above.
 const reviews = page.locator("details.reviews");
 await reviews.scrollIntoViewIfNeeded();
 if (!(await reviews.getAttribute("open"))) {
   await reviews.locator("summary").click();
 }
-await page.getByText(/if that is a model gateway/i).first().waitFor({ timeout: 10000 });
+await reviews.getByText(/unsure about/i).first().waitFor({ timeout: 10000 });
 await reviews.screenshot({ path: `${OUT}/reviews.png` });
 console.log("       reviews.png");
 
