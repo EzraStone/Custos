@@ -790,3 +790,70 @@ def test_reviews_offer_no_way_into_the_register(client):
 
 def test_reviews_need_a_credential(client):
     assert client.get("/v1/reviews").status_code == 401
+
+
+def test_rates_start_unverified(client):
+    body = client.get("/v1/rates", headers=AUTH).json()
+    assert body["verified"] is False
+    assert body["revision"] == "unverified-placeholder"
+
+
+def test_supplying_a_rate_makes_it_verified_and_dated(client):
+    r = client.post(
+        "/v1/rates",
+        json={"provider": "anthropic", "input_per_mtok": 1.5,
+              "output_per_mtok": 7.5, "operator": "ezra@custos.dev"},
+        headers=AUTH,
+    )
+    assert r.status_code == 200
+    assert r.json()["verified"] is True
+    assert r.json()["effective"] == "next scan"
+    assert client.get("/v1/rates", headers=AUTH).json()["verified"] is True
+
+
+def test_a_zero_rate_is_refused(client):
+    """A zero would make every agent on that provider look free — the one
+    direction this figure must never be wrong in."""
+    r = client.post(
+        "/v1/rates",
+        json={"provider": "anthropic", "input_per_mtok": 0,
+              "output_per_mtok": 7.5, "operator": "ezra@custos.dev"},
+        headers=AUTH,
+    )
+    assert r.status_code == 422
+    assert client.get("/v1/rates", headers=AUTH).json()["verified"] is False
+
+
+def test_a_supplied_rate_changes_the_next_scan_and_not_the_last(client, realistic_payload):
+    """A report already sent to somebody with a budget should still say what
+    it said."""
+    agents = _ingest_real_batch(client, realistic_payload)
+    if not agents:
+        pytest.skip("this corpus produced no agents")
+    before = {a["id"]: a["est_monthly_spend_usd"] for a in agents}
+
+    client.post(
+        "/v1/rates",
+        json={"provider": "anthropic", "input_per_mtok": 30.0,
+              "output_per_mtok": 150.0, "operator": "ezra@custos.dev"},
+        headers=AUTH,
+    )
+    unchanged = client.get("/v1/register?unsanctioned_only=true", headers=AUTH).json()["agents"]
+    assert {a["id"]: a["est_monthly_spend_usd"] for a in unchanged} == before
+
+
+def test_rates_keep_every_value_ever_supplied(client):
+    for rate in (3.0, 1.5):
+        client.post(
+            "/v1/rates",
+            json={"provider": "anthropic", "input_per_mtok": rate,
+                  "output_per_mtok": rate * 5, "operator": "ezra@custos.dev"},
+            headers=AUTH,
+        )
+    history = client.get("/v1/rates", headers=AUTH).json()["history"]
+    assert {h["input_per_mtok"] for h in history} == {3.0, 1.5}
+
+
+def test_rates_need_a_credential(client):
+    assert client.get("/v1/rates").status_code == 401
+    assert client.post("/v1/rates", json={}).status_code == 401

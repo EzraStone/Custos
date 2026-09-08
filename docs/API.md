@@ -134,6 +134,51 @@ approval decision on each one is a guess.
 A scan that reached nothing internal reports `1.0`, not `0.0`. There is no
 unreadable scope on a scan with no destinations.
 
+## `GET /v1/rates`
+
+What this account pays per provider, and when they last said so.
+
+```json
+{
+  "account_id": "447120043318",
+  "revision": "customer-supplied 2026-09-08",
+  "verified": true,
+  "current": { "anthropic": { "input_per_mtok": 1.5, "output_per_mtok": 7.5 } },
+  "history": [ { "provider": "anthropic", "input_per_mtok": 1.5,
+                 "output_per_mtok": 7.5, "supplied_by": "ezra@custos.dev",
+                 "supplied_at": "2026-09-08T12:00:00+00:00" } ]
+}
+```
+
+`verified` answers the question a reader with a budget asks first — is this our
+rate — without making them interpret a revision string. An account that has
+supplied nothing gets the built-in table and `"revision":
+"unverified-placeholder"`.
+
+`history` keeps every rate ever supplied. A figure in last month's report was
+computed from the rate in effect then, and without the old row that report
+cannot be explained.
+
+## `POST /v1/rates`
+
+```json
+{ "provider": "anthropic", "input_per_mtok": 1.5, "output_per_mtok": 7.5,
+  "operator": "ezra@custos.dev" }
+```
+
+Applies to the next scan. Existing figures are not recomputed: a report already
+sent to somebody with a budget should still say what it said, and silently
+restating last month's numbers at this month's rate would be worse than leaving
+them alone.
+
+A rate of zero is refused with `400`. It is far more likely an empty form field
+than a free provider, and a zero would make every agent on that provider look
+free — the one direction this figure must never be wrong in.
+
+A provider with no supplied rate falls back to the built-in placeholder rather
+than failing, so an account can price the provider it cares about and ignore
+the rest.
+
 ## `GET /v1/reviews`
 
 Workloads the classifier was unsure about in the last scan.

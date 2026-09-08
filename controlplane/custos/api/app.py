@@ -35,6 +35,7 @@ from ..spend import PRICES_REVISION
 from ..store.agents import AgentStore
 from ..store.db import now, open_database
 from ..store.declarations import CandidateStore, DeclarationStore
+from ..store.rates import RateStore
 from ..store.scans import ReviewStore, ScanStore
 from .auth import Principal, TokenStore, parse_bearer
 
@@ -340,6 +341,61 @@ def create_app(
                 # showing noise with a confident label on it.
                 "established": baseline.established,
             },
+        }
+
+    @app.get("/v1/rates")
+    def get_rates(principal: Auth, account: str | None = None) -> dict:
+        """What this account pays, and when they last said so."""
+        account_id = scope(principal, account)
+        store = RateStore(app.state.db)
+        rates = store.rates_for(account_id)
+        return {
+            "account_id": account_id,
+            "revision": rates.revision,
+            # The question a reader with a budget asks first, answered without
+            # them having to interpret a revision string.
+            "verified": rates.verified,
+            "current": {
+                provider: {
+                    "input_per_mtok": price.input_per_mtok,
+                    "output_per_mtok": price.output_per_mtok,
+                }
+                for provider, price in sorted(rates.prices.items())
+            },
+            "history": store.history_for(account_id),
+        }
+
+    @app.post("/v1/rates")
+    def supply_rate(body: RateRequest, principal: Auth, account: str | None = None) -> dict:
+        """Record what this account pays for one provider.
+
+        Applies to the next scan. Existing figures are not recomputed: a
+        report already sent to somebody with a budget should still say what it
+        said, and silently restating last month's numbers at this month's rate
+        would be worse than leaving them alone.
+        """
+        account_id = scope(principal, account)
+        store = RateStore(app.state.db)
+        try:
+            store.supply(
+                account_id, body.provider, body.input_per_mtok,
+                body.output_per_mtok, body.operator, at=now(),
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+            ) from exc
+
+        event(
+            log, "rate.supplied", account_id=account_id,
+            provider=body.provider, operator=body.operator,
+        )
+        rates = store.rates_for(account_id)
+        return {
+            "provider": body.provider,
+            "revision": rates.revision,
+            "verified": rates.verified,
+            "effective": "next scan",
         }
 
     @app.get("/v1/reviews")
@@ -702,6 +758,13 @@ def _mount_console(app: FastAPI) -> None:
     # console needs — it has one route and no client-side router to fall back
     # for.
     app.mount("/", StaticFiles(directory=str(root), html=True), name="console")
+
+
+class RateRequest(BaseModel):
+    provider: str = Field(min_length=1, description="anthropic, openai, bedrock, ...")
+    input_per_mtok: float = Field(gt=0, description="USD per million input tokens")
+    output_per_mtok: float = Field(gt=0, description="USD per million output tokens")
+    operator: str = Field(min_length=1, description="Human identity supplying the rate")
 
 
 class DeclareRequest(BaseModel):

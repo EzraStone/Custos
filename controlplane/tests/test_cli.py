@@ -431,3 +431,34 @@ def test_there_is_no_command_that_promotes_a_maybe(capsys):
     helptext = capsys.readouterr().out
     for forbidden in ("promote", "confirm-agent", "register-agent"):
         assert forbidden not in helptext
+
+
+def test_rates_says_the_defaults_are_placeholders(tmp_path, capsys):
+    """Every dollar figure this account has been shown came from a
+    placeholder, and nobody reading a report knows that unless it is said."""
+    db = tmp_path / "rt.db"
+    open_database(db).close()
+    assert main(["--db", str(db), "rates", "--account", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "unverified-placeholder" in out
+    assert "order-of-magnitude" in out
+    assert "custos set-rate" in out, "it should say how to fix it"
+
+
+def test_setting_a_rate_stops_the_placeholder_warning(tmp_path, capsys):
+    db = tmp_path / "rt2.db"
+    main(["--db", str(db), "set-rate", "anthropic", "--account", "1",
+          "--operator", "ezra@custos.dev", "--input", "1.5", "--output", "7.5"])
+    capsys.readouterr()
+
+    assert main(["--db", str(db), "rates", "--account", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "customer-supplied" in out
+    assert "order-of-magnitude" not in out
+
+
+def test_setting_a_zero_rate_is_refused(tmp_path, capsys):
+    db = tmp_path / "rt3.db"
+    assert main(["--db", str(db), "set-rate", "anthropic", "--account", "1",
+                 "--operator", "ezra@custos.dev", "--input", "0", "--output", "7.5"]) == 2
+    assert "greater than zero" in capsys.readouterr().err

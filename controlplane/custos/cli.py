@@ -216,6 +216,52 @@ def cmd_history(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_rates(args: argparse.Namespace) -> int:
+    """What this account pays, and whether anyone confirmed it."""
+    from .store.rates import RateStore
+
+    rates = RateStore(open_database(args.db)).rates_for(args.account)
+    print(f"revision  {rates.revision}")
+    if not rates.verified:
+        # The sentence that matters. Every dollar figure this account has been
+        # shown came from a placeholder, and nobody reading a report knows
+        # that unless somebody says it.
+        print()
+        print("These are order-of-magnitude placeholders, good for ranking agents")
+        print("against each other and nothing else. Set your own with:")
+        print(f"  custos set-rate anthropic --account {args.account} \\")
+        print("    --input 3.00 --output 15.00 --operator you@example.com")
+        print()
+
+    print(f"{'provider':<14}{'input $/Mtok':>14}{'output $/Mtok':>15}")
+    print("-" * 43)
+    for provider, price in sorted(rates.prices.items()):
+        print(f"{provider:<14}{price.input_per_mtok:>14.2f}{price.output_per_mtok:>15.2f}")
+    return 0
+
+
+def cmd_set_rate(args: argparse.Namespace) -> int:
+    """Record what this account pays for one provider."""
+    from .store.rates import RateStore
+
+    conn = open_database(args.db)
+    try:
+        RateStore(conn).supply(
+            args.account, args.provider, args.input_per_mtok,
+            args.output_per_mtok, args.operator,
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    conn.commit()
+
+    print(f"{args.provider}: ${args.input_per_mtok:.2f} in, "
+          f"${args.output_per_mtok:.2f} out per million tokens")
+    print(f"recorded against {args.operator}")
+    print("applies to the next scan; existing figures are not recomputed")
+    return 0
+
+
 def cmd_reviews(args: argparse.Namespace) -> int:
     """Workloads the classifier was unsure about in the last scan.
 
@@ -494,6 +540,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--no-vacuum", action="store_true",
                    help="skip reclaiming disk space, which locks the database briefly")
     p.set_defaults(func=cmd_prune)
+
+    p = sub.add_parser("rates", help="what this account pays per provider")
+    p.add_argument("--account", required=True)
+    p.set_defaults(func=cmd_rates)
+
+    p = sub.add_parser("set-rate", help="record what this account pays for a provider")
+    p.add_argument("provider", help="anthropic, openai, bedrock, ...")
+    p.add_argument("--account", required=True)
+    p.add_argument("--operator", required=True)
+    p.add_argument("--input", type=float, required=True, dest="input_per_mtok",
+                   help="USD per million input tokens")
+    p.add_argument("--output", type=float, required=True, dest="output_per_mtok",
+                   help="USD per million output tokens")
+    p.set_defaults(func=cmd_set_rate)
 
     p = sub.add_parser("reviews", help="workloads the classifier was unsure about")
     p.add_argument("--account", required=True)
