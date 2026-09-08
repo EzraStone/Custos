@@ -36,8 +36,9 @@ custos diff                 →  what changed since last week
 | Operator console | Works. Read, filter, sanction, retire, and see what changed. Served by the control plane |
 | Destination naming | Works where an ENI, an AWS description, or a port says what something is |
 | Customer-supplied pricing | Works. Per account, dated, superseded rather than overwritten |
-| Review band, kept and readable | Works. Shown with evidence and how often each recurs |
+| Review band, kept and readable | Works. In the console, the CLI, and both reports, with evidence and recurrence |
 | Model gateway declaration | Works. Detected as questions, declared per account, effective next scan |
+| Fleet view across accounts | Works. One line per account, unscanned and destructive first |
 | Scope readability, measured | Works. Reported by `--check`, the report, the console, and `custos history` |
 
 ## The one number that matters

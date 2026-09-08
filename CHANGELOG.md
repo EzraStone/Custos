@@ -4,6 +4,33 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### Forty accounts, one screen
+
+**A fleet view.** The account picker listed twelve-digit numbers with nothing
+to choose by. A customer in the target profile runs five to fifty accounts, and
+"which one do I open first" was answerable only by opening all of them.
+
+Each row now carries what somebody triages by: unsanctioned agents, how many of
+those hold credentials that can destroy things, when the account was last
+scanned, coverage, open questions. Unscanned accounts sort first — an account
+nobody has ever scanned is the one most likely to be hiding something, and it
+was previously indistinguishable from a clean one.
+
+The route's cost is now pinned by a test that counts queries. It is a loop over
+accounts, and the failure it invites is a lookup per agent inside that loop —
+instant on a demo database, slow on the customer with the most to find.
+
+**The served report shows the review band.** It was built with an empty verdict
+list, so an account whose console listed three maybes got a report saying "For
+review: 0" — and the report is the artefact that gets forwarded to the workload
+owner. Both the served and the written report now carry the maybes, each with
+how many scans it has recurred in.
+
+**A prune says what questions it took.** Review candidates and gateway
+questions leave with their scan by cascade, and a cascade reports nothing. An
+operator reading "pruned 40 scans" had no way to know that eleven questions
+they meant to answer went at the same time.
+
 ### The numbers are yours
 
 **A customer can supply the rates they actually pay.** Every dollar figure came
