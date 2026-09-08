@@ -39,6 +39,9 @@ interface Backend {
   truncated?: boolean;
   accounts?: string[];
   diff?: unknown;
+  candidates?: unknown[];
+  declareStatus?: number;
+  declareDetail?: string;
   reportStatus?: number;
   registerStatus?: number;
   registerDetail?: string;
@@ -95,6 +98,17 @@ function backend(config: Backend = {}) {
           status: 200, headers: { "Content-Type": "text/html" },
         }),
       );
+    }
+    if (url.startsWith("/v1/gateway-candidates")) {
+      return json(200, { account_id: "447120043318", candidates: config.candidates ?? [] });
+    }
+    if (url.startsWith("/v1/endpoints")) {
+      if (config.declareStatus && config.declareStatus !== 200) {
+        return json(config.declareStatus, { detail: config.declareDetail ?? "refused" });
+      }
+      return json(200, { id: 1, value: "10.0.7.40", kind: "range", note: "",
+                         declared_by: "ezra@custos.dev",
+                         declared_at: "2026-09-02T10:00:00+00:00", active: true });
     }
     if (url.startsWith("/v1/diff")) {
       return json(200, config.diff ?? {
@@ -368,6 +382,9 @@ describe("overlapping loads", () => {
           });
         }
         if (url.startsWith("/v1/accounts")) return json({ accounts: ["1"] });
+        if (url.startsWith("/v1/gateway-candidates")) {
+          return json({ account_id: "1", candidates: [] });
+        }
         if (url.startsWith("/v1/diff")) {
           return json({ account_id: "1", previous_scan_id: null,
                         current_scan_id: null, headline: "", changes: [] });
@@ -842,5 +859,73 @@ describe("the review band", () => {
   it("gets the singular right", async () => {
     await loaded({ reviewCandidates: 1 });
     expect(screen.getByText(/1 workload in the review band/i)).toBeInTheDocument();
+  });
+});
+
+describe("answering a gateway question", () => {
+  const candidate = {
+    address: "10.0.7.40",
+    egress: 54_400_000,
+    ingress: 12_800_000,
+    principals: ["arn:aws:iam::1:role/agent-via-gateway"],
+    blind_principals: ["arn:aws:iam::1:role/agent-via-gateway"],
+    question: "10.0.7.40 received 54.4MB. Is it a model gateway?",
+    scan_id: 12,
+  };
+
+  async function loaded(config: Backend = {}) {
+    const stub = install({ candidates: [candidate], ...config });
+    session.save({ token: "tok-abc", operator: "ezra@custos.dev" });
+    render(<App />);
+    await screen.findByText("finance-close");
+    return stub;
+  }
+
+  it("asks above the register, not inside it", async () => {
+    // It is a claim about our own blindness, not a finding, and the honest
+    // place for that is in front of the list it might be missing from.
+    await loaded();
+    expect(
+      await screen.findByRole("heading", { name: /is one of these a model gateway/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("declares the address and stops asking", async () => {
+    const stub = await loaded();
+    await userEvent.type(
+      await screen.findByLabelText(/what this endpoint is called/i), "vllm",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /yes, it is ours/i }));
+
+    await waitFor(() => {
+      const call = stub.calls.find((c) => c.url.startsWith("/v1/endpoints") && c.init?.method);
+      expect(JSON.parse(String(call?.init?.body))).toEqual({
+        value: "10.0.7.40", kind: "range", operator: "ezra@custos.dev", note: "vllm",
+      });
+    });
+    // Leaving the question on screen after answering reads as though it had
+    // not been taken.
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("heading", { name: /is one of these a model gateway/i }),
+      ).toBeNull(),
+    );
+  });
+
+  it("keeps asking when the server refuses", async () => {
+    await loaded({ declareStatus: 400, declareDetail: "not a valid network" });
+    await userEvent.click(await screen.findByRole("button", { name: /yes, it is ours/i }));
+
+    expect(await screen.findByText(/not a valid network/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /is one of these a model gateway/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing on an account with no candidates", async () => {
+    await loaded({ candidates: [] });
+    expect(
+      screen.queryByRole("heading", { name: /is one of these a model gateway/i }),
+    ).toBeNull();
   });
 });

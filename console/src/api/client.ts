@@ -19,6 +19,9 @@ import type {
   AccountsResponse,
   Agent,
   AuditResponse,
+  CandidatesResponse,
+  DeclaredEndpoint,
+  EndpointsResponse,
   DiffResponse,
   DriftResponse,
   Health,
@@ -120,6 +123,38 @@ export class Client {
       throw new ApiError(response.status, await detail(response));
     }
     return response.text();
+  }
+
+  /** Internal destinations that behave like model endpoints. Questions. */
+  gatewayCandidates(account?: string): Promise<CandidatesResponse> {
+    const query = account ? `?account=${encodeURIComponent(account)}` : "";
+    return this.request<CandidatesResponse>(`/v1/gateway-candidates${query}`);
+  }
+
+  /** Model endpoints this account has declared. */
+  endpoints(account?: string): Promise<EndpointsResponse> {
+    const query = account ? `?account=${encodeURIComponent(account)}` : "";
+    return this.request<EndpointsResponse>(`/v1/endpoints${query}`);
+  }
+
+  /**
+   * Declare a model endpoint.
+   *
+   * The second call in this client that changes what the classifier considers
+   * an agent, and like the first it requires a person's name.
+   */
+  declareEndpoint(
+    value: string,
+    operator: string,
+    note: string,
+    account?: string,
+    kind: "range" | "aws_service" = "range",
+  ): Promise<DeclaredEndpoint> {
+    const query = account ? `?account=${encodeURIComponent(account)}` : "";
+    return this.request<DeclaredEndpoint>(`/v1/endpoints${query}`, {
+      method: "POST",
+      body: JSON.stringify({ value, kind, operator, note }),
+    });
   }
 
   /** What changed between the two most recent scans. */

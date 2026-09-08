@@ -6,6 +6,7 @@ import {
   type Agent,
   type Health,
   type DiffResponse,
+  type GatewayCandidate,
   type Scan,
   type TransitionableStatus,
 } from "./api/types";
@@ -13,6 +14,7 @@ import { AccountPicker } from "./components/AccountPicker";
 import { Changes } from "./components/Changes";
 import { Filters } from "./components/Filters";
 import { Finding } from "./components/Finding";
+import { Gateways } from "./components/Gateways";
 import { GrantDialog } from "./components/GrantDialog";
 import { Scans } from "./components/Scans";
 import { SignIn } from "./components/SignIn";
@@ -28,6 +30,9 @@ export function App() {
   const [agents, setAgents] = useState<Agent[] | null>(null);
   const [scans, setScans] = useState<Scan[]>([]);
   const [diff, setDiff] = useState<DiffResponse | null>(null);
+  const [candidates, setCandidates] = useState<GatewayCandidate[]>([]);
+  const [declaring, setDeclaring] = useState<string | null>(null);
+  const [declareError, setDeclareError] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<string[] | null>(null);
   const [view, setView] = useState<View>("unsanctioned");
   const [filters, setFilters] = useState<FilterState>(NO_FILTERS);
@@ -62,6 +67,7 @@ export function App() {
     setAgents(null);
     setScans([]);
     setDiff(null);
+    setCandidates([]);
     setAccounts(null);
     setHealth(null);
   }, []);
@@ -87,19 +93,21 @@ export function App() {
         return;
       }
 
-      const [registry, history, status, changes] = await Promise.all([
+      const [registry, history, status, changes, gateways] = await Promise.all([
         client.register(account, view === "unsanctioned"),
         client.scans(account).catch(() => ({ scans: [] })),
         client.health().catch(() => null),
-        // The register is the point; the diff is context. A control plane too
-        // old to have /v1/diff should still show findings rather than an
-        // error, so this one failure is swallowed.
+        // The register is the point; these are context. A control plane too
+        // old to have either route should still show findings rather than an
+        // error, so both failures are swallowed.
         client.diff(account).catch(() => null),
+        client.gatewayCandidates(account).catch(() => ({ candidates: [] })),
       ]);
       if (mine !== ticket.current) return;
       setAgents([...registry.agents].sort(byConsequence));
       setScans("scans" in history ? history.scans : []);
       setDiff(changes);
+      setCandidates("candidates" in gateways ? gateways.candidates : []);
       if (status) setHealth(status);
     } catch (caught) {
       if (mine !== ticket.current) return;
@@ -175,6 +183,30 @@ export function App() {
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (caught) {
       setError((caught as ApiError).message);
+    }
+  }
+
+  /**
+   * Answer a gateway question.
+   *
+   * Optimistically removes the candidate, because the answer is recorded
+   * immediately even though it only changes classification on the next scan.
+   * Leaving the question on screen after answering it would read as though it
+   * had not been taken.
+   */
+  async function declareGateway(candidate: GatewayCandidate, note: string) {
+    if (!client) return;
+    setDeclaring(candidate.address);
+    setDeclareError(null);
+    try {
+      await client.declareEndpoint(
+        candidate.address, auth.operator, note, auth.account || undefined,
+      );
+      setCandidates((current) => current.filter((c) => c.address !== candidate.address));
+    } catch (caught) {
+      setDeclareError((caught as ApiError).message);
+    } finally {
+      setDeclaring(null);
     }
   }
 
@@ -389,6 +421,14 @@ export function App() {
           </p>
         </div>
       ) : null}
+
+      <Gateways
+        candidates={candidates}
+        operator={session.canSanction(auth) ? auth.operator : null}
+        busy={declaring}
+        error={declareError}
+        onDeclare={(candidate, note) => void declareGateway(candidate, note)}
+      />
 
       <Scans scans={scans} />
 

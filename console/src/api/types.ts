@@ -139,6 +139,39 @@ export interface DriftResponse {
   };
 }
 
+export interface GatewayCandidate {
+  address: string;
+  egress: number;
+  ingress: number;
+  principals: string[];
+  blind_principals: string[];
+  /** The phrasing to show. It carries the numbers somebody would check. */
+  question: string;
+  scan_id: number;
+}
+
+export interface CandidatesResponse {
+  account_id: string;
+  candidates: GatewayCandidate[];
+}
+
+export interface DeclaredEndpoint {
+  id: number;
+  value: string;
+  kind: string;
+  note: string;
+  declared_by: string;
+  declared_at: string;
+  active: boolean;
+  withdrawn_by?: string;
+  withdrawn_at?: string | null;
+}
+
+export interface EndpointsResponse {
+  account_id: string;
+  endpoints: DeclaredEndpoint[];
+}
+
 export interface AccountsResponse {
   accounts: string[];
 }
