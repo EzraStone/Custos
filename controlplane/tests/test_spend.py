@@ -1,3 +1,5 @@
+import pytest
+
 from custos.spend import (
     PRICES_REVISION,
     estimate_monthly_usd,
@@ -45,4 +47,52 @@ def test_prices_are_flagged_as_unverified_until_someone_verifies_them():
     When the prices are verified, set PRICES_REVISION to the date and update
     this test to assert the new value.
     """
+    assert PRICES_REVISION == "unverified-placeholder"
+
+
+def test_an_account_rate_beats_the_built_in_table():
+    """A customer knows what they pay — enterprise agreements, committed use,
+    provisioned throughput — and their own rate is better than any list we
+    could verify."""
+    from custos.spend import Price, Rates, estimate_monthly_usd
+
+    ours = estimate_monthly_usd(10_000_000, 1_000_000, 30, "anthropic")
+    theirs = estimate_monthly_usd(
+        10_000_000, 1_000_000, 30, "anthropic",
+        rates=Rates(
+            prices={"anthropic": Price(input_per_mtok=1.50, output_per_mtok=7.50)},
+            revision="customer-supplied 2026-09-08",
+        ),
+    )
+    assert theirs == pytest.approx(ours / 2, rel=1e-6)
+
+
+def test_a_partial_rate_falls_back_per_provider():
+    """An account that priced Anthropic and not Bedrock gets its own rate for
+    one and the placeholder for the other, rather than a KeyError or a zero."""
+    from custos.spend import PRICES, Price, Rates
+
+    rates = Rates(
+        prices={"anthropic": Price(input_per_mtok=1.50, output_per_mtok=7.50)},
+        revision="customer-supplied 2026-09-08",
+    )
+    assert rates.for_provider("anthropic").input_per_mtok == 1.50
+    assert rates.for_provider("bedrock") == PRICES["bedrock"]
+
+
+def test_rates_say_whether_anyone_verified_them():
+    """Every surface renders this figure differently depending on the answer,
+    so it has to be askable rather than inferred from the numbers."""
+    from custos.spend import Rates
+
+    assert Rates().verified is False
+    assert Rates(revision="customer-supplied 2026-09-08").verified is True
+
+
+def test_the_built_in_table_is_still_unverified():
+    """Pinned. If this ever reads like a date, somebody has claimed these were
+    checked against a provider's pricing page, and that claim needs to be
+    deliberate."""
+    from custos.spend import PRICES_REVISION
+
     assert PRICES_REVISION == "unverified-placeholder"

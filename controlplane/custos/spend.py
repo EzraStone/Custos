@@ -10,23 +10,25 @@ input is billed differently. What the estimate is good for is ranking agents
 against each other and separating a $50-a-month experiment from a $5,000-a-month
 one. It is not an invoice and must never be presented as reconciling to one.
 
-PRICES must be verified against current provider pricing before any figure
-derived from it goes in front of a customer. `PRICES_REVISION` is stamped into
-every report for exactly that reason.
+The right fix for that is not for us to guess better. A customer knows what
+they pay — enterprise agreements, committed-use discounts, provisioned
+throughput — and their own rate is better than any list we could verify. So
+`Rates` carries an account's own pricing when they have supplied it, and the
+built-in table is what gets used until they do, labelled as unverified
+wherever it appears.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 PRICES_REVISION = "unverified-placeholder"
-"""Deliberately not a date.
+"""The provenance of the built-in table. Deliberately not a date.
 
 These figures are order-of-magnitude placeholders carried so the pipeline is
-complete and testable. Replace them with verified per-provider pricing and set
-this to the date of verification before a customer sees a dollar figure. A
-report rendered while this reads `unverified-placeholder` labels its spend
-column as an estimate of unverified provenance."""
+complete and testable, and every surface that renders a figure derived from
+them labels it. An account that supplies its own rates gets its own revision
+instead — see `Rates.revision`."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,8 +63,39 @@ def estimate_tokens(egress_bytes: int, ingress_bytes: int) -> tuple[float, float
     return payload_out / BYTES_PER_TOKEN, payload_in / BYTES_PER_TOKEN
 
 
+@dataclass(frozen=True, slots=True)
+class Rates:
+    """What one account pays, or the built-in table when they have not said.
+
+    A customer's own rate beats anything we could verify: they have the
+    contract. This exists so the dollar figure in a report is theirs rather
+    than our approximation of theirs, and so the label above it can say which.
+    """
+
+    prices: dict[str, Price] = field(default_factory=lambda: dict(PRICES))
+    revision: str = PRICES_REVISION
+
+    @property
+    def verified(self) -> bool:
+        """Whether these came from someone who knows what they pay."""
+        return self.revision != PRICES_REVISION
+
+    def for_provider(self, provider: str) -> Price:
+        # An account that supplied rates for Anthropic and not for Bedrock
+        # gets its own Anthropic rate and the placeholder for Bedrock, rather
+        # than a KeyError or a silent zero.
+        return self.prices.get(provider) or PRICES.get(provider, PRICES["unknown"])
+
+
+DEFAULT_RATES = Rates()
+
+
 def estimate_monthly_usd(
-    egress_bytes: int, ingress_bytes: int, observed_days: float, provider: str = "unknown"
+    egress_bytes: int,
+    ingress_bytes: int,
+    observed_days: float,
+    provider: str = "unknown",
+    rates: Rates | None = None,
 ) -> float:
     """Extrapolate a monthly figure from an observation window.
 
@@ -72,7 +105,7 @@ def estimate_monthly_usd(
     """
     if observed_days <= 0:
         return 0.0
-    price = PRICES.get(provider, PRICES["unknown"])
+    price = (rates or DEFAULT_RATES).for_provider(provider)
     tokens_in, tokens_out = estimate_tokens(egress_bytes, ingress_bytes)
     window_cost = (
         tokens_in / 1_000_000 * price.input_per_mtok

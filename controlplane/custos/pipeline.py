@@ -25,9 +25,11 @@ from .reach import IamCapability
 from .report import Coverage
 from .scan import ScanInput, ScanResult
 from .scan import run as run_scan
+from .spend import Rates
 from .store.agents import AgentStore
 from .store.db import now, transaction
 from .store.declarations import CandidateStore, DeclarationStore
+from .store.rates import RateStore
 from .store.scans import BatchRecord, ReviewStore, ScanStore
 from .telemetry import Direction, FlowRecord, InboundRequest
 
@@ -113,6 +115,7 @@ def to_scan_input(
     batch: Batch,
     interval: timedelta = DEFAULT_INTERVAL,
     declared: Declared | None = None,
+    rates: Rates | None = None,
 ) -> ScanInput:
     """Convert a shipped batch into scanner input."""
     records, requests = _to_telemetry(batch)
@@ -136,6 +139,7 @@ def to_scan_input(
             d.address: d.name for d in batch.destinations if d.name
         },
         declared=declared if declared is not None else Declared(),
+        rates=rates if rates is not None else Rates(),
         facts={
             p.principal: PrincipalFacts(
                 principal=p.principal, account_id=p.account_id,
@@ -230,7 +234,8 @@ def ingest(
         # Loaded before classification, because a declaration that arrives
         # after it has already run explains nothing about this scan.
         declared = DeclarationStore(conn).declared_for(batch.account_id)
-        scan_input = to_scan_input(batch, interval, declared)
+        rates = RateStore(conn).rates_for(batch.account_id)
+        scan_input = to_scan_input(batch, interval, declared, rates)
         result = run_scan(scan_input)
         named, total = scope_readability(batch, scan_input)
 

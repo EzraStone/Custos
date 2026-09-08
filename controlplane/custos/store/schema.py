@@ -22,7 +22,7 @@ agent's apparent spend and reach.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # Columns added after a table was first written, applied by ALTER on databases
 # that already exist. The schema below is applied with CREATE TABLE IF NOT
@@ -82,6 +82,24 @@ CREATE TABLE IF NOT EXISTS scans (
     scope_total         INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS scans_by_account ON scans (account_id, started_at DESC);
+
+-- What an account actually pays per provider.
+--
+-- Superseded, not updated. A dollar figure in last month's report was computed
+-- from the rate in effect then, and overwriting the row would make that report
+-- unreproducible — which matters because the whole purpose of the figure is
+-- that somebody with a budget acts on it.
+CREATE TABLE IF NOT EXISTS account_rates (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id      TEXT    NOT NULL,
+    provider        TEXT    NOT NULL,
+    input_per_mtok  REAL    NOT NULL,
+    output_per_mtok REAL    NOT NULL,
+    supplied_by     TEXT    NOT NULL,
+    supplied_at     TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS account_rates_by_account
+    ON account_rates (account_id, provider, supplied_at DESC);
 
 -- Workloads the classifier was unsure about, per scan.
 --

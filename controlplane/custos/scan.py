@@ -28,7 +28,7 @@ from .register.model import (
     Status,
 )
 from .register.store import Register, agent_id
-from .spend import PRICES_REVISION
+from .spend import PRICES_REVISION, Rates
 from .telemetry import FlowRecord, InboundRequest
 
 
@@ -52,6 +52,8 @@ class ScanInput:
     The only source that can name an ordinary internal service. Nothing in a
     flow log distinguishes the billing API from any other host on port 443.
     """
+    rates: Rates = field(default_factory=Rates)
+    """What this account pays. Theirs when they have said, ours until then."""
     declared: Declared = field(default_factory=Declared)
     """Model endpoints this account declared.
 
@@ -113,7 +115,7 @@ def _model_use(t: PrincipalTelemetry, inp: ScanInput) -> ModelUse:
         providers=providers,
         endpoints=endpoints,
         est_monthly_spend_usd=spend.estimate_monthly_usd(
-            egress, ingress, inp.observed_days, provider
+            egress, ingress, inp.observed_days, provider, inp.rates
         ),
     )
 
@@ -186,4 +188,7 @@ def run(inp: ScanInput, register: Register | None = None) -> ScanResult:
         verdicts=verdicts,
         telemetry=telemetry,
         principals_seen=len(telemetry),
+        # The revision that priced this scan, not the module default. A report
+        # labelling its own figures has to name the rates it used.
+        prices_revision=inp.rates.revision,
     )
