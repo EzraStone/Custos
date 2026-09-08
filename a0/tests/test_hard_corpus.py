@@ -185,8 +185,13 @@ def test_declaring_the_gateway_uses_the_mechanism_that_ships():
 
     from custos_a0 import evaluate
 
+    # The docstring explains what it no longer does, so read the code only.
+    # A source-text assertion that its own explanation trips is a test that
+    # fails for the opposite of its reason.
     source = inspect.getsource(evaluate.run_hard)
-    assert "catalog.extend" not in source, (
+    code = source[source.index('"""', source.index('"""') + 3) + 3:]
+
+    assert "catalog.extend" not in code, (
         "run_hard is simulating the remedy through global state again"
     )
-    assert "Declaration" in source and "build(" in source
+    assert "Declaration" in code and "build(" in code
