@@ -35,6 +35,7 @@ custos diff                 →  what changed since last week
 | Enforcement checkpoint | **Not started.** §12: not before a paying customer |
 | Operator console | Works. Read, filter, sanction, retire, and see what changed. Served by the control plane |
 | Destination naming | Works where an ENI, an AWS description, or a port says what something is |
+| Customer-supplied pricing | Works. Per account, dated, superseded rather than overwritten |
 | Review band, kept and readable | Works. Shown with evidence and how often each recurs |
 | Model gateway declaration | Works. Detected as questions, declared per account, effective next scan |
 | Scope readability, measured | Works. Reported by `--check`, the report, the console, and `custos history` |
@@ -123,9 +124,21 @@ Nothing depends on it. The CLI and the HTML report still do everything it does.
 unanticipated workload shapes, and provider endpoints outside our catalogue are
 all real and all unmeasured.
 
-**Spend figures use placeholder pricing.** `PRICES_REVISION` reads
-`unverified-placeholder` and a test pins it there. Verify real provider pricing
-before a dollar figure reaches a customer.
+**Spend figures are placeholders until an account says otherwise.** The
+built-in table still reads `unverified-placeholder` and a test still pins it
+there. What changed is that verifying it is no longer our job: an account can
+supply the rates it actually pays — enterprise agreement, committed use,
+provisioned throughput — and every surface then says the figures are theirs and
+when they said so.
+
+That is the honest resolution rather than the one this entry originally
+anticipated. We were never going to be able to verify a customer's rate; they
+have the contract and we do not. What we can do is stop presenting our guess as
+though it were theirs, and make supplying the real number a two-minute job.
+
+Still true whichever rates are used: the figures come from wire bytes, not
+token counts. Good for ranking agents against each other, not for reconciling
+against an invoice, and labelled that way everywhere.
 
 **A corpus that was more informative than production.** The A0 corpus
 annotated both ends of every AWS conversation with the peer's service. Real

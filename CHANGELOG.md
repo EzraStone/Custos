@@ -4,6 +4,30 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### The numbers are yours
+
+**A customer can supply the rates they actually pay.** Every dollar figure came
+from a table stamped `unverified-placeholder`, which has been an open item
+since A0. The fix was never going to be us verifying harder — a customer has
+the contract and we do not. So the figure becomes theirs when they say, dated,
+and stays labelled as ours until then.
+
+Rates are superseded rather than overwritten. A figure in last month's report
+was computed from the rate in effect then, and losing that row would make the
+report unreproducible — which matters most for the one number people act on. A
+rate of zero is refused: far more likely an empty form field than a free
+provider, and it would make every agent on that provider look free.
+
+**The review band is kept, not just counted.** An operator could see that three
+workloads were uncertain and not which three. They are now shown with their
+evidence and with how many scans each has recurred in — one uncertain window is
+noise, the same workload uncertain in eleven scans is a standing question.
+
+There is no path from the review band into the register, in the API, the CLI,
+or the console. Promoting a maybe by hand is what the register is not for, and
+a route that allowed it would make every guarantee about how an agent got there
+conditional on nobody having used it.
+
 ### The gateway question
 
 **A customer can tell us where their model calls go.** An agent whose model

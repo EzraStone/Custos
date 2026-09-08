@@ -156,6 +156,20 @@ approve `10.0.4.23`. Names come from an ENI's `Name` tag or from AWS's own
 description for a managed service, so the remedy is tagging the ENIs behind
 those services. Nothing about the classifier changes either way.
 
+**The customer asks whether the dollar figures are their rate.**
+They are not, until they say. The built-in table is order-of-magnitude
+placeholder pricing, good for ranking agents against each other and nothing
+else, and every surface labels it. Ask them for their actual rate — they have
+the contract — and:
+
+```
+custos --db acme.db set-rate anthropic --account 447120043318 \
+  --input 3.00 --output 15.00 --operator you@example.com
+```
+
+It applies to the next scan and does not recompute existing figures. A report
+already sent to somebody with a budget should still say what it said.
+
 **The account runs a model gateway.**
 The most likely reason a scan comes back emptier than expected. An agent whose
 model calls go through an internal endpoint has no model traffic we can see, so
