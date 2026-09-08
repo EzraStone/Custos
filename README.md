@@ -18,6 +18,11 @@ Custos does three things, in this order:
 3. **Stop.** Gate consequential actions against deterministic policy, with a
    signed receipt for every decision.
 
+Discovery has one honest limit and it is stated everywhere it matters: an agent
+whose model calls go through a self-hosted gateway is invisible to us until
+somebody says the gateway is one. Custos looks for the candidates, asks about
+them with the numbers attached, and takes the answer.
+
 Only the first two are built. The third is deliberately not started until a
 paying customer asks for it.
 

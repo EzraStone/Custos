@@ -64,12 +64,29 @@ Full result and its limitations: `docs/A0-FINDINGS.md`.
 against a 0.15 durability bar. Every verdict is correct; there is simply less
 room before one is not.
 
-**A model endpoint we do not recognise is an agent we cannot see.** An agent
-behind a self-hosted gateway is invisible until someone tells us the address.
-`custos-a0 stress --hide-gateway` reproduces the miss on demand. This is a
-question to ask every design partner directly, because it cannot be inferred —
-and it is the single most likely reason a real scan comes back emptier than it
-should.
+**A model endpoint we do not recognise is an agent we cannot see** — but the
+account can now be asked, and told. An agent behind a self-hosted gateway has
+no model traffic we can observe, so it is not a low-confidence finding, it is
+nothing. That is still true and still the mechanism.
+
+What changed is that it is no longer silent. `custos-collector --check` names
+internal addresses that send far more than they receive before a byte is sent;
+every scan produces the same list as questions with the numbers behind them;
+the console asks them above the register; and a declaration takes effect on the
+next scan. The report says whether an account declared anything, because a
+report with no findings and no declarations is the exact artefact a hidden
+gateway produces.
+
+`custos-a0 stress --hide-gateway` still reproduces the miss — recall 0.88 — and
+now exercises the same per-account declaration the product ships rather than a
+global one nobody can use.
+
+**What is unmeasured is whether the questions are the right ones.** The
+detector finds the real gateway first on the stress corpus and asks nothing at
+all on the base corpus, which is the result that matters. Neither of those is
+a real account. The failure to watch for is a customer who gets three questions
+a week about ordinary internal APIs and stops reading them, which is how they
+miss the one that matters.
 
 **The byte ratios have only been measured against synthetic traffic.** The
 weights were fitted on the A0 corpus. What A0 establishes is that a separating

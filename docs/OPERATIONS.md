@@ -156,6 +156,27 @@ approve `10.0.4.23`. Names come from an ENI's `Name` tag or from AWS's own
 description for a managed service, so the remedy is tagging the ENIs behind
 those services. Nothing about the classifier changes either way.
 
+**The account runs a model gateway.**
+The most likely reason a scan comes back emptier than expected. An agent whose
+model calls go through an internal endpoint has no model traffic we can see, so
+it is not a low-confidence finding — it is absent. Three places will tell you:
+
+```
+./custos-collector --check                      # before the first scan
+custos --db acme.db gateways --account 447120043318   # after any scan
+```
+
+and the console asks above the register. When one is theirs:
+
+```
+custos --db acme.db declare 10.0.7.0/24 \
+  --account 447120043318 --operator you@example.com --note llm-gateway
+```
+
+It takes effect on the next scan. Existing findings are not reclassified,
+deliberately — a register whose past changes underneath an operator is one they
+cannot reason about.
+
 **A finding the customer disputes.**
 Good — that is what the evidence sentences are for. Every finding carries the
 byte ratios and coupling figures behind it. If they are right and we are wrong,

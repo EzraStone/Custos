@@ -4,6 +4,42 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### The gateway question
+
+**A customer can tell us where their model calls go.** An agent whose model
+traffic runs through a self-hosted gateway has no model traffic we can see —
+not a low-confidence finding, not a review candidate, nothing. `docs/STATUS.md`
+has called that the single most likely reason a real scan comes back emptier
+than it should since A0, and the mechanism to fix it existed as a function
+nobody could call.
+
+Declarations are per account, not per process. Building this on the module-level
+`catalog.extend()` was the obvious move and would have made one customer's
+gateway a model endpoint for every account in the same process — 10.0.0.0/8 is
+where everyone's internal services live, so a coincidental collision would have
+manufactured agents out of unrelated traffic.
+
+**And we can ask, rather than waiting to be told.** "Do you run a self-hosted
+model gateway?" gets a confident no from the platform lead whose predecessor
+stood one up. "Forty per cent of what this workload sends goes to 10.0.7.9, it
+gets almost nothing back, and it never talks to a provider we recognise — is
+that your gateway?" is checkable in a minute. That question is asked in the
+console, in `custos gateways`, and by `custos-collector --check` before a byte
+is sent.
+
+It never classifies anything on its own. A heuristic that promoted an internal
+address to a model endpoint would manufacture agents out of any busy internal
+service, and the first false positive of that kind costs more trust than every
+true one earns.
+
+There is no way to answer no. A stored dismissal would be configuration that
+suppresses a question. Being asked twice about something harmless costs a
+glance; being asked never about a real gateway costs the account.
+
+**The report says whether anything was declared** — including when nothing was,
+because a report with no findings and no declarations is precisely the artefact
+a hidden gateway produces.
+
 ### The approval is readable
 
 **The operator console.** The register in a browser, served by the control
