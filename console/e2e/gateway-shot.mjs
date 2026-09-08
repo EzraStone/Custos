@@ -1,5 +1,5 @@
 /**
- * The gateway question, from the stress corpus.
+ * The gateway question and the maybe it explains, from the stress corpus.
  *
  * Its own script and its own stack because the base corpus deliberately has no
  * hidden gateway — every agent there reaches a provider we recognise. Making
@@ -44,4 +44,17 @@ await page.screenshot({
   clip: { x: 0, y: 0, width: 1160, height: Math.ceil(box.y + box.height + 20) },
 });
 console.log("       gateway.png");
+
+// The review band, on the same account. This is the pair worth showing: the
+// question at the top of the page and, below the register, the workload that
+// makes it worth answering. Neither image means much on its own.
+const reviews = page.locator("details.reviews");
+await reviews.scrollIntoViewIfNeeded();
+if (!(await reviews.getAttribute("open"))) {
+  await reviews.locator("summary").click();
+}
+await page.getByText(/if that is a model gateway/i).first().waitFor({ timeout: 10000 });
+await reviews.screenshot({ path: `${OUT}/reviews.png` });
+console.log("       reviews.png");
+
 await browser.close();

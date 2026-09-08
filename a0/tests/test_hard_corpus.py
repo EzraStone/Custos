@@ -66,7 +66,26 @@ def test_an_agent_behind_an_unknown_gateway_is_missed(built_in):
     row = _row(built_in, "deploy-remediation-agent")
     assert row.label is Label.AGENT
     assert not row.correct
-    assert row.in_review, "it must still surface for review rather than vanish"
+
+
+def test_the_missed_agent_is_not_scored_on_signals_it_has_no_traffic_for(built_in):
+    """It used to land in the review band at 0.77, and that number was made of
+    nothing: four of the five signals are ratios over the intervals containing
+    model traffic, this workload has none, and over an empty set they do not
+    read as neutral — they read as maximally incriminating.
+
+    Those signals are now unavailable rather than zero, so the workload is not
+    scored at all. That is the honest answer: our whole evidence base is model
+    traffic. What surfaces it is `gateway.py` naming it as a workload reaching
+    an undeclared address, which is a question somebody can answer."""
+    verdict = _row(built_in, "deploy-remediation-agent").verdict
+
+    assert verdict.features.model_windows == 0
+    assert {"egress_asymmetry", "inbound_decoupling"} <= set(verdict.unavailable)
+    assert verdict.confidence < 0.3, "unmeasurable is not the same as suspicious"
+    assert not any(
+        "intervals containing model traffic" in line for line in verdict.evidence
+    ), "it must not claim a measurement over an empty set"
 
 
 def test_declaring_the_gateway_recovers_it(extended):

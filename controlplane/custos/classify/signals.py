@@ -46,6 +46,32 @@ class Firing:
         return self.activation * self.weight
 
 
+def saw_model_traffic(f: Features) -> bool:
+    """Whether there was any recognised model traffic to measure.
+
+    Four of the five signals below are ratios and fractions over the intervals
+    containing model traffic. With no such intervals every one of them
+    evaluates over an empty set, and the results are not neutral — they are
+    maximally incriminating. `1 - inbound_coupling` becomes 1.0 and the
+    strongest signal in the system fires at full weight on a workload with no
+    model traffic at all, describing itself as "100% of the intervals
+    containing model traffic had no request arriving at the load balancer".
+    There were no such intervals. The sentence is false, and it was reaching
+    customer reports.
+
+    So this is an availability predicate, not a zero. The distinction is
+    already the rule for load balancer logs — "reported, never silently
+    treated as zero" — and this is the same failure one level down.
+
+    What it means in practice: a workload whose model calls go somewhere we do
+    not recognise cannot be scored. That is the correct answer. Our entire
+    evidence base is model traffic, and a workload we cannot see making model
+    calls is not a low-confidence agent, it is an unanswered question — one
+    `gateway.py` asks by name.
+    """
+    return f.model_windows > 0
+
+
 EGRESS_RATIO_MIDPOINT = 7.0
 """Measured: every agent in the A0 corpus sits above 7.9, every non-agent below
 6.5. The midpoint is set between them, and the narrowness of that gap is why
@@ -66,6 +92,7 @@ SIGNALS: tuple[Signal, ...] = (
     Signal(
         id="egress_asymmetry",
         weight=2.4,
+        available=saw_model_traffic,
         activate=lambda f: logistic(f.egress_ratio, EGRESS_RATIO_MIDPOINT, EGRESS_RATIO_SCALE),
         describe=lambda f: (
             f"Sent {_fmt(f.total_model_egress)} to model endpoints and received "
@@ -77,7 +104,7 @@ SIGNALS: tuple[Signal, ...] = (
     Signal(
         id="inbound_decoupling",
         weight=2.6,
-        available=lambda f: f.have_inbound_logs,
+        available=lambda f: f.have_inbound_logs and saw_model_traffic(f),
         activate=lambda f: 1.0 - f.inbound_coupling,
         describe=lambda f: (
             f"{(1 - f.inbound_coupling) * 100:.0f}% of the intervals containing model "
@@ -88,6 +115,7 @@ SIGNALS: tuple[Signal, ...] = (
     Signal(
         id="tool_interleave",
         weight=2.0,
+        available=saw_model_traffic,
         activate=lambda f: f.tool_interleave,
         describe=lambda f: (
             f"Model traffic was interleaved with calls to {f.distinct_tool_addresses} "
@@ -108,6 +136,7 @@ SIGNALS: tuple[Signal, ...] = (
     Signal(
         id="offhours_activity",
         weight=0.3,
+        available=saw_model_traffic,
         activate=lambda f: f.offhours_egress_fraction,
         describe=lambda f: (
             f"{f.offhours_egress_fraction * 100:.0f}% of model traffic fell outside "
