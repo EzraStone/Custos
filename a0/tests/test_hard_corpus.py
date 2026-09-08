@@ -170,3 +170,23 @@ def test_a_healthy_corpus_produces_no_gateway_questions():
         origin=inp.start, interval=inp.interval,
     )
     assert candidates(telemetry) == []
+
+
+def test_declaring_the_gateway_uses_the_mechanism_that_ships():
+    """A0 measuring something other than the product is how a gate passes for
+    a reason that does not generalise.
+
+    The global `catalog.extend` this used to call has a property the shipping
+    mechanism deliberately does not: it applies to every account in the
+    process. Measuring the remedy through it would have been measuring a
+    remedy nobody can use.
+    """
+    import inspect
+
+    from custos_a0 import evaluate
+
+    source = inspect.getsource(evaluate.run_hard)
+    assert "catalog.extend" not in source, (
+        "run_hard is simulating the remedy through global state again"
+    )
+    assert "Declaration" in source and "build(" in source

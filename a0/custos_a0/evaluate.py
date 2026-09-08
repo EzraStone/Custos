@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 
 from custos.classify import Disposition, Verdict, classify_all, sessionize
+from custos.declared import Declared
 
 from . import corpus as corpus_mod
 from .trace import Corpus, Label
@@ -58,19 +59,24 @@ def run_hard(gateway_declared: bool = False) -> Result:
 
     `gateway_declared` simulates a customer who told us about their self-hosted
     LLM gateway, which is the intended remedy for `agent_via_gateway`.
+
+    It goes through the same per-account declaration the product uses, not
+    through `catalog.extend`. A0 measuring a mechanism that is not the one
+    shipping is how a gate passes for a reason that does not generalise, and
+    the global version has a property the real one deliberately does not: it
+    would apply to every account in the process.
     """
-    from custos import catalog
+    from custos.declared import Declaration, build
 
     from .scenarios.hard import GATEWAY
 
     corpus = corpus_mod.build(corpus_mod.CorpusSpec(hard=True))
-    if gateway_declared:
-        catalog.extend([f"{GATEWAY.ip}/32"])
-    try:
-        return run(SCENARIOS[0], corpus)
-    finally:
-        if gateway_declared:
-            catalog.reset()
+    declared = (
+        build([Declaration(f"{GATEWAY.ip}/32", "range", "llm-gateway")])
+        if gateway_declared
+        else None
+    )
+    return run(SCENARIOS[0], corpus, declared)
 
 
 @dataclass(slots=True)
@@ -154,7 +160,9 @@ class Result:
         return [r for r in self.rows if r.in_review]
 
 
-def run(scenario: Scenario, corpus: Corpus | None = None) -> Result:
+def run(
+    scenario: Scenario, corpus: Corpus | None = None, declared: Declared | None = None
+) -> Result:
     """Generate telemetry for one scenario and classify every principal."""
     c = corpus if corpus is not None else corpus_mod.build()
     meta = {w.principal: w for w in c.workloads}
@@ -168,6 +176,7 @@ def run(scenario: Scenario, corpus: Corpus | None = None) -> Result:
         origin=c.start,
         interval=scenario.config.interval,
         inbound_logs_available=scenario.have_alb_logs,
+        declared=declared,
     )
 
     result = Result(scenario=scenario, flow_records=len(capture.records))
