@@ -7,6 +7,7 @@ import {
   type Health,
   type DiffResponse,
   type GatewayCandidate,
+  type Review,
   type Scan,
   type TransitionableStatus,
 } from "./api/types";
@@ -16,6 +17,7 @@ import { Filters } from "./components/Filters";
 import { Finding } from "./components/Finding";
 import { Gateways } from "./components/Gateways";
 import { GrantDialog } from "./components/GrantDialog";
+import { Reviews } from "./components/Reviews";
 import { Scans } from "./components/Scans";
 import { SignIn } from "./components/SignIn";
 import { StatusDialog } from "./components/StatusDialog";
@@ -31,6 +33,7 @@ export function App() {
   const [scans, setScans] = useState<Scan[]>([]);
   const [diff, setDiff] = useState<DiffResponse | null>(null);
   const [candidates, setCandidates] = useState<GatewayCandidate[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [declaring, setDeclaring] = useState<string | null>(null);
   const [declareError, setDeclareError] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<string[] | null>(null);
@@ -68,6 +71,7 @@ export function App() {
     setScans([]);
     setDiff(null);
     setCandidates([]);
+    setReviews([]);
     setAccounts(null);
     setHealth(null);
   }, []);
@@ -93,7 +97,7 @@ export function App() {
         return;
       }
 
-      const [registry, history, status, changes, gateways] = await Promise.all([
+      const [registry, history, status, changes, gateways, maybes] = await Promise.all([
         client.register(account, view === "unsanctioned"),
         client.scans(account).catch(() => ({ scans: [] })),
         client.health().catch(() => null),
@@ -102,12 +106,14 @@ export function App() {
         // error, so both failures are swallowed.
         client.diff(account).catch(() => null),
         client.gatewayCandidates(account).catch(() => ({ candidates: [] })),
+        client.reviews(account).catch(() => ({ reviews: [] })),
       ]);
       if (mine !== ticket.current) return;
       setAgents([...registry.agents].sort(byConsequence));
       setScans("scans" in history ? history.scans : []);
       setDiff(changes);
       setCandidates("candidates" in gateways ? gateways.candidates : []);
+      setReviews("reviews" in maybes ? maybes.reviews : []);
       if (status) setHealth(status);
     } catch (caught) {
       if (mine !== ticket.current) return;
@@ -406,21 +412,7 @@ export function App() {
         than pretending to show them. Saying "there are five and they are not
         here" is worth more than saying nothing.
       */}
-      {scans[0] && scans[0].review_candidates > 0 ? (
-        <div className="notice">
-          <span className="tag">Not in this list</span>
-          <p>
-            The last scan put {scans[0].review_candidates} workload
-            {scans[0].review_candidates === 1 ? "" : "s"} in the review band:
-            not confident enough to register as an agent, not clearly ordinary
-            either. They are never written to the register, so they are not
-            below.{" "}
-            <button className="link" onClick={() => void openReport()}>
-              The report lists them.
-            </button>
-          </p>
-        </div>
-      ) : null}
+      <Reviews reviews={reviews} />
 
       <Gateways
         candidates={candidates}

@@ -35,6 +35,8 @@ custos diff                 →  what changed since last week
 | Enforcement checkpoint | **Not started.** §12: not before a paying customer |
 | Operator console | Works. Read, filter, sanction, retire, and see what changed. Served by the control plane |
 | Destination naming | Works where an ENI, an AWS description, or a port says what something is |
+| Review band, kept and readable | Works. Shown with evidence and how often each recurs |
+| Model gateway declaration | Works. Detected as questions, declared per account, effective next scan |
 | Scope readability, measured | Works. Reported by `--check`, the report, the console, and `custos history` |
 
 ## The one number that matters
@@ -116,14 +118,6 @@ filtered list that always shows the total, and `sanctioned` being absent from
 the status control. Everything else about it is a guess.
 
 Nothing depends on it. The CLI and the HTML report still do everything it does.
-
-**Review-band candidates are counted, not kept.** SEC-17 says a workload the
-classifier is unsure about is surfaced to an operator and never written as an
-agent, which is right — but only the count survives a scan. The report lists
-them at the time it is rendered and the console can only say how many there
-were and point at it. An operator who wants to look at last week's maybes
-cannot. Storing them properly means a table that is emphatically not the
-register, and that is a design decision nobody has made yet.
 
 **Nobody has run this against an account we did not build.** Tag hygiene,
 unanticipated workload shapes, and provider endpoints outside our catalogue are

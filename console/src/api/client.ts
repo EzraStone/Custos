@@ -22,6 +22,7 @@ import type {
   CandidatesResponse,
   DeclaredEndpoint,
   EndpointsResponse,
+  ReviewsResponse,
   DiffResponse,
   DriftResponse,
   Health,
@@ -123,6 +124,17 @@ export class Client {
       throw new ApiError(response.status, await detail(response));
     }
     return response.text();
+  }
+
+  /**
+   * Workloads the classifier was unsure about.
+   *
+   * Read only, and there is no companion method that promotes one. The
+   * register has one way in and it is a scan.
+   */
+  reviews(account?: string): Promise<ReviewsResponse> {
+    const query = account ? `?account=${encodeURIComponent(account)}` : "";
+    return this.request<ReviewsResponse>(`/v1/reviews${query}`);
   }
 
   /** Internal destinations that behave like model endpoints. Questions. */

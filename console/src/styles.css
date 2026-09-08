@@ -355,3 +355,18 @@ h2 { font-family: var(--display); font-size: 1.5rem; margin: 2.5rem 0 .5rem; }
 .candidate .who { margin: 0 0 .7rem; font-size: .82rem; color: var(--ink-faint); }
 .candidate .actions { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
 .candidate .actions input { min-width: 20rem; }
+
+/* ---------- review band ---------- */
+.reviews { margin: 0 0 1.5rem; }
+.reviews .lede { margin: .6rem 0 1rem; font-size: .88rem; }
+.review-list { list-style: none; margin: 0; padding: 0; }
+.review-list > li { padding: .7rem 0; border-top: 1px solid var(--hair); }
+.review-list .head { display: flex; gap: .9rem; align-items: baseline; }
+.review-list .name { font-family: var(--mono); font-weight: 600; }
+.review-list .confidence { color: var(--ink-faint); font-size: .84rem; }
+.review-list .recurring {
+  font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--seal);
+}
+.review-list .degraded { margin: .3rem 0 0; font-size: .82rem; color: var(--amber); }
+.review-list .evidence { margin: .4rem 0 0; }

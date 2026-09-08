@@ -40,6 +40,7 @@ interface Backend {
   accounts?: string[];
   diff?: unknown;
   candidates?: unknown[];
+  reviews?: unknown[];
   declareStatus?: number;
   declareDetail?: string;
   reportStatus?: number;
@@ -98,6 +99,9 @@ function backend(config: Backend = {}) {
           status: 200, headers: { "Content-Type": "text/html" },
         }),
       );
+    }
+    if (url.startsWith("/v1/reviews")) {
+      return json(200, { account_id: "447120043318", reviews: config.reviews ?? [] });
     }
     if (url.startsWith("/v1/gateway-candidates")) {
       return json(200, { account_id: "447120043318", candidates: config.candidates ?? [] });
@@ -382,6 +386,9 @@ describe("overlapping loads", () => {
           });
         }
         if (url.startsWith("/v1/accounts")) return json({ accounts: ["1"] });
+        if (url.startsWith("/v1/reviews")) {
+          return json({ account_id: "1", reviews: [] });
+        }
         if (url.startsWith("/v1/gateway-candidates")) {
           return json({ account_id: "1", candidates: [] });
         }
@@ -835,33 +842,6 @@ describe("keyboard", () => {
   });
 });
 
-describe("the review band", () => {
-  async function loaded(config: Backend = {}) {
-    install(config);
-    session.save({ token: "tok-abc", operator: "ezra@custos.dev" });
-    render(<App />);
-    await screen.findByText("finance-close");
-  }
-
-  it("says the register is not everything the scan found", async () => {
-    // SEC-17 keeps these out of the register, and a console that never
-    // mentions them lets an operator believe the list is complete.
-    await loaded({ reviewCandidates: 3 });
-    expect(screen.getByText(/not in this list/i)).toBeInTheDocument();
-    expect(screen.getByText(/3 workloads in the review band/i)).toBeInTheDocument();
-  });
-
-  it("stays quiet when the scan put nothing in the review band", async () => {
-    await loaded({ reviewCandidates: 0 });
-    expect(screen.queryByText(/not in this list/i)).toBeNull();
-  });
-
-  it("gets the singular right", async () => {
-    await loaded({ reviewCandidates: 1 });
-    expect(screen.getByText(/1 workload in the review band/i)).toBeInTheDocument();
-  });
-});
-
 describe("answering a gateway question", () => {
   const candidate = {
     address: "10.0.7.40",
@@ -927,5 +907,39 @@ describe("answering a gateway question", () => {
     expect(
       screen.queryByRole("heading", { name: /is one of these a model gateway/i }),
     ).toBeNull();
+  });
+});
+
+describe("the review band, in the page", () => {
+  const maybe = {
+    principal: "arn:aws:iam::1:role/nightly-doc-summariser",
+    confidence: 0.69,
+    evidence: ["Sent 2.1MB and received 890.0KB, a ratio of 2.4:1."],
+    unavailable: [],
+    scan_id: 12,
+    seen_in_scans: 4,
+  };
+
+  it("shows the maybes rather than pointing at a report", async () => {
+    // Before this the console said "three workloads are not in this list" and
+    // sent the reader to the report, because only the count was stored.
+    install({ reviews: [maybe] });
+    session.save({ token: "tok-abc", operator: "ezra@custos.dev" });
+    render(<App />);
+    await screen.findByText("finance-close");
+
+    expect(
+      await screen.findByText(/1 workload the classifier was unsure about/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText("nightly-doc-summariser")).toBeInTheDocument();
+  });
+
+  it("says nothing when the scan was sure about everything", async () => {
+    install({ reviews: [] });
+    session.save({ token: "tok-abc", operator: "ezra@custos.dev" });
+    render(<App />);
+    await screen.findByText("finance-close");
+
+    expect(screen.queryByText(/the classifier was unsure about/i)).toBeNull();
   });
 });

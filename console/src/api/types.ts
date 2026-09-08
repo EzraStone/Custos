@@ -139,6 +139,22 @@ export interface DriftResponse {
   };
 }
 
+export interface Review {
+  principal: string;
+  confidence: number;
+  evidence: string[];
+  /** Signals that could not be evaluated, usually for want of access logs. */
+  unavailable: string[];
+  scan_id: number;
+  /** How many of this account's scans put this workload in the review band. */
+  seen_in_scans: number;
+}
+
+export interface ReviewsResponse {
+  account_id: string;
+  reviews: Review[];
+}
+
 export interface GatewayCandidate {
   address: string;
   egress: number;
