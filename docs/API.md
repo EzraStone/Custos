@@ -134,6 +134,42 @@ approval decision on each one is a guess.
 A scan that reached nothing internal reports `1.0`, not `0.0`. There is no
 unreadable scope on a scan with no destinations.
 
+## `GET /v1/gateway-candidates`
+
+Internal destinations that behave like model endpoints.
+
+```json
+{
+  "account_id": "447120043318",
+  "candidates": [
+    { "address": "10.0.7.40", "egress": 54400000, "ingress": 12800000,
+      "principals": ["arn:aws:iam::447120043318:role/agent-via-gateway"],
+      "blind_principals": ["arn:aws:iam::447120043318:role/agent-via-gateway"],
+      "question": "10.0.7.40 received 54.4MB from a workload that never reaches a model provider we recognise, and returned 12.8MB — a ratio of 4.3:1. Is it a model gateway?",
+      "scan_id": 12 }
+  ]
+}
+```
+
+**Questions, not findings.** Every entry is an address a workload sends far
+more to than it gets back, reached by workloads that never talk to a model
+provider we recognise — which is either a gateway nobody mentioned or an
+unusually chatty internal API. A person decides which, and their answer goes
+to `POST /v1/endpoints`.
+
+Nothing here is classified as anything. A heuristic that promoted an internal
+address to a model endpoint on its own would manufacture agents out of any busy
+internal service, and the first false positive of that kind costs more trust
+than every true one earns.
+
+Candidates already covered by a declaration are omitted: somebody who answered
+last week should not be asked again on every scan.
+
+Drawn from the most recent scan that produced any, not the most recent scan. A
+gateway that was quiet for an hour is still a gateway, and an empty list
+because nothing used it reads as "we looked and there is nothing" — a different
+and much more reassuring claim.
+
 ## `GET /v1/endpoints`
 
 Model endpoints this account has declared.

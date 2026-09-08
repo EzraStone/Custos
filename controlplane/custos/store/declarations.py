@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from ..declared import Declaration, Declared, build
-from .db import iso, now, parse
+from .db import dumps, iso, loads, now, parse
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,4 +125,61 @@ class DeclarationStore:
         ])
 
 
-__all__ = ["DeclarationRecord", "DeclarationStore"]
+class CandidateStore:
+    """Gateway candidates from a scan, kept so they can be asked about later.
+
+    Separate from DeclarationStore because they are opposite things: a
+    declaration is an answer a customer gave, a candidate is a question we are
+    putting to them. Keeping them in one class would invite a method that
+    turned one into the other automatically, and the point of a candidate is
+    that a person decides.
+    """
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self.conn = conn
+
+    def record(self, scan_id: int, account_id: str, found: list) -> None:
+        self.conn.executemany(
+            "INSERT OR REPLACE INTO gateway_candidates "
+            "(scan_id, account_id, address, egress, ingress, principals, blind, question) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (scan_id, account_id, c.address, c.egress, c.ingress,
+                 dumps(list(c.principals)), dumps(list(c.blind_principals)), c.question)
+                for c in found
+            ],
+        )
+
+    def latest_for(self, account_id: str) -> list[dict]:
+        """Candidates from this account's most recent scan that had any.
+
+        Not from the most recent scan outright. A gateway that was quiet during
+        one window is still a gateway, and an empty list because nothing
+        happened to use it for an hour reads as "we looked and there is
+        nothing" — which is a different and much more reassuring claim.
+        """
+        row = self.conn.execute(
+            "SELECT MAX(scan_id) AS scan_id FROM gateway_candidates WHERE account_id = ?",
+            (account_id,),
+        ).fetchone()
+        if row is None or row["scan_id"] is None:
+            return []
+
+        return [
+            {
+                "address": r["address"],
+                "egress": r["egress"],
+                "ingress": r["ingress"],
+                "principals": loads(r["principals"]),
+                "blind_principals": loads(r["blind"]),
+                "question": r["question"],
+                "scan_id": r["scan_id"],
+            }
+            for r in self.conn.execute(
+                "SELECT * FROM gateway_candidates WHERE scan_id = ? ORDER BY egress DESC",
+                (row["scan_id"],),
+            )
+        ]
+
+
+__all__ = ["CandidateStore", "DeclarationRecord", "DeclarationStore"]

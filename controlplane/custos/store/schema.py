@@ -83,6 +83,28 @@ CREATE TABLE IF NOT EXISTS scans (
 );
 CREATE INDEX IF NOT EXISTS scans_by_account ON scans (account_id, started_at DESC);
 
+-- Gateway candidates from one scan: internal destinations that behave like
+-- model endpoints and are not declared as any.
+--
+-- Stored per scan rather than recomputed, because the telemetry they were
+-- derived from is not kept — observations are, but not the per-window
+-- destination bytes this reads. Pruned with the scan they belong to, which is
+-- correct: a question about traffic from three months ago is not a question
+-- anybody should still be answering.
+CREATE TABLE IF NOT EXISTS gateway_candidates (
+    scan_id       INTEGER NOT NULL REFERENCES scans(id) ON DELETE CASCADE,
+    account_id    TEXT    NOT NULL,
+    address       TEXT    NOT NULL,
+    egress        INTEGER NOT NULL,
+    ingress       INTEGER NOT NULL,
+    principals    TEXT    NOT NULL,
+    blind         TEXT    NOT NULL,
+    question      TEXT    NOT NULL,
+    PRIMARY KEY (scan_id, address)
+);
+CREATE INDEX IF NOT EXISTS gateway_candidates_by_account
+    ON gateway_candidates (account_id, scan_id DESC);
+
 -- Model endpoints a customer declared, per account.
 --
 -- Per account and not global: 10.0.0.0/8 is where every customer's internal

@@ -350,3 +350,54 @@ def _gateway_batch(schema, account: str, start, gateway: str):
             address="10.0.1.5", compute="Lambda",
         )],
     )
+
+
+def test_a_gateway_candidate_becomes_a_question_and_then_stops_being_one():
+    """The loop this whole mechanism exists for, end to end.
+
+    A scan finds an address that behaves like a model endpoint and asks about
+    it. Somebody answers by declaring it. The next scan finds the agent — and
+    stops asking the question, because it has been answered.
+    """
+    from custos import batch as schema
+    from custos.api import TokenStore, create_app
+    from custos.store.db import open_database
+
+    account, token = "447120043318", "tok-cand"
+    conn = open_database()
+    client = TestClient(create_app(conn=conn, tokens=TokenStore({token: account})))
+    headers = {"Authorization": f"Bearer {token}"}
+
+    start = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+    client.post(
+        "/v1/batches",
+        json=_gateway_batch(schema, account, start, "10.0.7.9").model_dump(mode="json"),
+        headers=headers,
+    )
+
+    asked = client.get("/v1/gateway-candidates", headers=headers).json()["candidates"]
+    assert [c["address"] for c in asked] == ["10.0.7.9"]
+    assert "Is it a model gateway?" in asked[0]["question"]
+    assert client.get("/v1/register", headers=headers).json()["agents"] == []
+
+    declared = client.post(
+        "/v1/endpoints",
+        json={"value": "10.0.7.0/24", "kind": "range",
+              "operator": "ezra@custos.dev", "note": "llm-gateway"},
+        headers=headers,
+    )
+    assert declared.status_code == 200
+
+    client.post(
+        "/v1/batches",
+        json=_gateway_batch(
+            schema, account, start + timedelta(hours=2), "10.0.7.9"
+        ).model_dump(mode="json"),
+        headers=headers,
+    )
+
+    assert client.get("/v1/register", headers=headers).json()["agents"], (
+        "the agent stayed invisible after its gateway was declared"
+    )
+    # And the question is not asked again. Somebody answered it.
+    assert client.get("/v1/gateway-candidates", headers=headers).json()["candidates"] == []

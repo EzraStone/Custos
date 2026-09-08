@@ -34,7 +34,7 @@ from ..scan import ScanResult
 from ..spend import PRICES_REVISION
 from ..store.agents import AgentStore
 from ..store.db import now, open_database
-from ..store.declarations import DeclarationStore
+from ..store.declarations import CandidateStore, DeclarationStore
 from ..store.scans import ScanStore
 from .auth import Principal, TokenStore, parse_bearer
 
@@ -340,6 +340,31 @@ def create_app(
                 # showing noise with a confident label on it.
                 "established": baseline.established,
             },
+        }
+
+    @app.get("/v1/gateway-candidates")
+    def get_gateway_candidates(principal: Auth, account: str | None = None) -> dict:
+        """Internal destinations that behave like model endpoints.
+
+        Questions, not findings. Every one is an address a workload sends far
+        more to than it gets back, reached by workloads that never talk to a
+        model provider we recognise — which is either a gateway nobody
+        mentioned or an unusually chatty internal API.
+
+        Nothing here is classified as anything. A heuristic that promoted an
+        address to a model endpoint on its own would manufacture agents out of
+        any busy internal service, so this waits for a person and
+        /v1/endpoints is where their answer goes.
+        """
+        account_id = scope(principal, account)
+        found = CandidateStore(app.state.db).latest_for(account_id)
+        declared = DeclarationStore(app.state.db).declared_for(account_id)
+        return {
+            "account_id": account_id,
+            # Already-answered questions are dropped rather than shown as
+            # resolved. A customer who declared a gateway last week should not
+            # be asked about it again on every scan.
+            "candidates": [c for c in found if not declared.covers(c["address"])],
         }
 
     @app.get("/v1/endpoints")

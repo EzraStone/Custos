@@ -20,13 +20,14 @@ from .batch import Batch
 from .classify import Disposition
 from .declared import Declared
 from .diff import ScanDiff, compare
+from .gateway import candidates as gateway_candidates
 from .reach import IamCapability
 from .report import Coverage
 from .scan import ScanInput, ScanResult
 from .scan import run as run_scan
 from .store.agents import AgentStore
 from .store.db import now, transaction
-from .store.declarations import DeclarationStore
+from .store.declarations import CandidateStore, DeclarationStore
 from .store.scans import BatchRecord, ScanStore
 from .telemetry import Direction, FlowRecord, InboundRequest
 
@@ -246,6 +247,13 @@ def ingest(
             # on, and that is invisible unless it is counted.
             scope_named=named,
             scope_total=total,
+        )
+
+        # Questions to put to the customer, from this scan's traffic. Recorded
+        # rather than recomputed later: the per-window destination bytes they
+        # are derived from are not kept, only observations.
+        CandidateStore(conn).record(
+            scan_id, batch.account_id, gateway_candidates(result.telemetry)
         )
 
         # Captured before this scan's observations are written, so the
