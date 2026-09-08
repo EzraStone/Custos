@@ -277,3 +277,76 @@ def _agent_shaped_batch(schema, account: str, start, destinations=()):
             address="10.0.1.5", compute="Lambda",
         )],
     )
+
+
+def test_declaring_a_gateway_makes_its_agents_visible_on_the_next_scan():
+    """The whole point of the mechanism, through the API a customer uses.
+
+    The same traffic, ingested twice. Before the declaration it is a workload
+    talking to an internal API and there is no agent. After it, the agent is
+    in the register. Nothing about the traffic changed — only what the account
+    told us its addresses mean.
+    """
+    from custos import batch as schema
+    from custos.api import TokenStore, create_app
+    from custos.store.db import open_database
+    from custos.store.declarations import DeclarationStore
+
+    account, token = "447120043318", "tok-gw"
+    conn = open_database()
+    client = TestClient(create_app(conn=conn, tokens=TokenStore({token: account})))
+    headers = {"Authorization": f"Bearer {token}"}
+
+    start = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+    blind = _gateway_batch(schema, account, start, "10.0.7.9")
+    assert client.post(
+        "/v1/batches", json=blind.model_dump(mode="json"), headers=headers
+    ).status_code == 202
+    assert client.get("/v1/register", headers=headers).json()["agents"] == []
+
+    DeclarationStore(conn).declare(
+        account, "10.0.7.0/24", "range", "ezra@custos.dev", "llm-gateway"
+    )
+    conn.commit()
+
+    later = _gateway_batch(schema, account, start + timedelta(hours=2), "10.0.7.9")
+    assert client.post(
+        "/v1/batches", json=later.model_dump(mode="json"), headers=headers
+    ).status_code == 202
+
+    agents = client.get("/v1/register", headers=headers).json()["agents"]
+    assert agents, "the agent stayed invisible after its gateway was declared"
+
+
+def _gateway_batch(schema, account: str, start, gateway: str):
+    """An agent whose model calls all go through one internal address."""
+    flows = []
+    for minute in range(40):
+        at = start + timedelta(minutes=minute)
+        flows.append(schema.FlowRecord(
+            account_id=account, interface_id="eni-1", srcaddr="10.0.1.5",
+            dstaddr=gateway, srcport=41000 + minute, dstport=443,
+            protocol=6, packets=40, bytes=140_000,
+            start=at, end=at + timedelta(seconds=30), action="ACCEPT",
+            log_status="OK", direction="egress", tcp_flags=2,
+        ))
+        flows.append(schema.FlowRecord(
+            account_id=account, interface_id="eni-1", srcaddr=gateway,
+            dstaddr="10.0.1.5", srcport=443, dstport=41000 + minute,
+            protocol=6, packets=8, bytes=9_000,
+            start=at, end=at + timedelta(seconds=30), action="ACCEPT",
+            log_status="OK", direction="ingress", tcp_flags=16,
+        ))
+    return schema.Batch(
+        account_id=account, region="us-east-1",
+        window_start=start, window_end=start + timedelta(hours=1),
+        collector_version="test",
+        collection=schema.Collection(
+            lines_read=len(flows), lines_parsed=len(flows), have_access_logs=True
+        ),
+        flows=flows,
+        attachments=[schema.Attachment(
+            interface_id="eni-1", principal=f"arn:aws:iam::{account}:role/gateway-agent",
+            address="10.0.1.5", compute="Lambda",
+        )],
+    )

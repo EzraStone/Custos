@@ -18,6 +18,7 @@ from .attribute import PrincipalFacts
 from .baseline import Drift, detect_from_history
 from .batch import Batch
 from .classify import Disposition
+from .declared import Declared
 from .diff import ScanDiff, compare
 from .reach import IamCapability
 from .report import Coverage
@@ -25,6 +26,7 @@ from .scan import ScanInput, ScanResult
 from .scan import run as run_scan
 from .store.agents import AgentStore
 from .store.db import now, transaction
+from .store.declarations import DeclarationStore
 from .store.scans import BatchRecord, ScanStore
 from .telemetry import Direction, FlowRecord, InboundRequest
 
@@ -106,7 +108,11 @@ def _is_private(address: str) -> bool:
         return False
 
 
-def to_scan_input(batch: Batch, interval: timedelta = DEFAULT_INTERVAL) -> ScanInput:
+def to_scan_input(
+    batch: Batch,
+    interval: timedelta = DEFAULT_INTERVAL,
+    declared: Declared | None = None,
+) -> ScanInput:
     """Convert a shipped batch into scanner input."""
     records, requests = _to_telemetry(batch)
 
@@ -128,6 +134,7 @@ def to_scan_input(batch: Batch, interval: timedelta = DEFAULT_INTERVAL) -> ScanI
         destination_names={
             d.address: d.name for d in batch.destinations if d.name
         },
+        declared=declared if declared is not None else Declared(),
         facts={
             p.principal: PrincipalFacts(
                 principal=p.principal, account_id=p.account_id,
@@ -219,7 +226,10 @@ def ingest(
 
         # Classification runs against the existing register so a re-scan
         # refreshes records rather than creating duplicates.
-        scan_input = to_scan_input(batch, interval)
+        # Loaded before classification, because a declaration that arrives
+        # after it has already run explains nothing about this scan.
+        declared = DeclarationStore(conn).declared_for(batch.account_id)
+        scan_input = to_scan_input(batch, interval, declared)
         result = run_scan(scan_input)
         named, total = scope_readability(batch, scan_input)
 
