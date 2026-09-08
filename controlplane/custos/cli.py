@@ -216,6 +216,39 @@ def cmd_history(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reviews(args: argparse.Namespace) -> int:
+    """Workloads the classifier was unsure about in the last scan.
+
+    Read only. There is no `custos promote`: the register has one way in and it
+    is a scan, and a command that moved a maybe by hand would make every
+    guarantee about how an agent got there conditional on nobody having used it.
+    """
+    from .store.scans import ReviewStore
+
+    conn = open_database(args.db)
+    store = ReviewStore(conn)
+    found = store.latest_for(args.account)
+    if not found:
+        print("The last scan was sure about everything it saw.")
+        return 0
+
+    print(f"{len(found)} workload{'s' if len(found) != 1 else ''} in the review band.")
+    print("Not confident enough to register as agents, not clearly ordinary either.")
+    print()
+    for r in found:
+        seen = store.recurrence(args.account, r["principal"])
+        # The recurrence is the point. One uncertain window is noise; the same
+        # workload uncertain in eleven scans is a standing question.
+        recurring = f"  (in {seen} scans)" if seen > 1 else ""
+        print(f"  {r['principal'].rsplit('/', 1)[-1]}  {r['confidence']:.2f}{recurring}")
+        if r["unavailable"]:
+            print(f"      could not evaluate: {', '.join(r['unavailable'])}"
+                  " — low confidence may be for want of input")
+        for line in r["evidence"]:
+            print(f"      {line}")
+    return 0
+
+
 def cmd_endpoints(args: argparse.Namespace) -> int:
     """List what this account declared its model endpoints to be."""
     from .store.declarations import DeclarationStore
@@ -461,6 +494,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--no-vacuum", action="store_true",
                    help="skip reclaiming disk space, which locks the database briefly")
     p.set_defaults(func=cmd_prune)
+
+    p = sub.add_parser("reviews", help="workloads the classifier was unsure about")
+    p.add_argument("--account", required=True)
+    p.set_defaults(func=cmd_reviews)
 
     p = sub.add_parser("endpoints", help="model endpoints this account declared")
     p.add_argument("--account", required=True)

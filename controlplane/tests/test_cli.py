@@ -11,6 +11,21 @@ from custos.store.scans import ScanStore
 
 
 @pytest.fixture(scope="module")
+def realistic_batch_path(tmp_path_factory):
+    """A batch from the corpus, written once for the whole module."""
+    import json
+
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+
+    body = build_batch(corpus.build(corpus.CorpusSpec(days=1))).model_dump(mode="json")
+    body["account_id"] = "447120043318"
+    path = tmp_path_factory.mktemp("batches") / "batch.json"
+    path.write_text(json.dumps(body))
+    return path
+
+
+@pytest.fixture(scope="module")
 def batch_file(tmp_path_factory):
     from custos_a0 import corpus
     from custos_a0.batchbridge import build_batch
@@ -381,3 +396,38 @@ def test_gateways_says_nothing_is_hidden_rather_than_printing_an_empty_table(tmp
     open_database(db).close()
     assert main(["--db", str(db), "gateways", "--account", "1"]) == 0
     assert "Nothing looks like an undeclared model gateway" in capsys.readouterr().out
+
+
+def test_reviews_lists_the_maybes_with_their_evidence(tmp_path, capsys, realistic_batch_path):
+    """A maybe with no evidence is a rumour. The whole value of showing these
+    is what is known about them."""
+    db = tmp_path / "r.db"
+    main(["--db", str(db), "scan", str(realistic_batch_path)])
+    capsys.readouterr()
+
+    assert main(["--db", str(db), "reviews", "--account", "447120043318"]) == 0
+    out = capsys.readouterr().out
+    assert "review band" in out
+    assert "ratio of" in out, "the evidence sentences are missing"
+
+
+def test_reviews_says_so_when_there_is_nothing_to_review(tmp_path, capsys):
+    db = tmp_path / "r2.db"
+    open_database(db).close()
+    assert main(["--db", str(db), "reviews", "--account", "1"]) == 0
+    assert "sure about everything" in capsys.readouterr().out
+
+
+def test_there_is_no_command_that_promotes_a_maybe(capsys):
+    """The register has one way in and it is a scan. A command that moved a
+    maybe by hand would make every guarantee about how an agent got there
+    conditional on nobody having used it."""
+    import pytest as _pytest
+
+    from custos import cli
+
+    with _pytest.raises(SystemExit):
+        cli.main(["--help"])
+    helptext = capsys.readouterr().out
+    for forbidden in ("promote", "confirm-agent", "register-agent"):
+        assert forbidden not in helptext
