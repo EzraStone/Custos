@@ -134,6 +134,68 @@ approval decision on each one is a guess.
 A scan that reached nothing internal reports `1.0`, not `0.0`. There is no
 unreadable scope on a scan with no destinations.
 
+## `GET /v1/endpoints`
+
+Model endpoints this account has declared.
+
+```json
+{
+  "account_id": "447120043318",
+  "endpoints": [
+    { "id": 1, "value": "10.0.7.0/24", "kind": "range", "note": "llm-gateway",
+      "declared_by": "ezra@custos.dev", "declared_at": "2026-09-02T10:00:00+00:00",
+      "active": true, "withdrawn_by": "", "withdrawn_at": null }
+  ]
+}
+```
+
+`?include_withdrawn=true` returns the ones no longer in effect as well.
+
+A customer running every model call through an internal gateway has agents we
+cannot see: their model traffic looks like traffic to an internal API, so the
+workload has no model traffic at all and is not a finding of any kind. This is
+how they tell us.
+
+## `POST /v1/endpoints`
+
+Declare a model endpoint.
+
+```json
+{ "value": "10.0.7.0/24", "kind": "range", "operator": "ezra@custos.dev",
+  "note": "llm-gateway" }
+```
+
+`kind` is `range` — a CIDR or a single address — or `aws_service`. `operator`
+is required and must be a human identity: declaring an endpoint changes what
+the classifier considers an agent, which makes it the second decision in this
+system with that property.
+
+**Takes effect on the next scan, not retroactively.** Reclassifying stored
+telemetry would rewrite the history of what was found when, and a register
+whose past changes underneath an operator is one they cannot reason about. The
+response says `"effective": "next scan"` rather than leaving anyone to wonder
+why the list did not move.
+
+Declarations are scoped to the account. 10.0.0.0/8 is where every customer's
+internal services live, and one that leaked between accounts would manufacture
+agents out of unrelated traffic on a coincidental collision.
+
+Returns `400` for an unparseable range or a missing operator. Validated on the
+way in rather than at the next scan, because a declaration a customer believes
+is in effect while their agents stay invisible is the exact failure this exists
+to prevent.
+
+## `DELETE /v1/endpoints/{id}`
+
+Withdraw a declaration. Requires `?operator=`.
+
+The row is marked, never deleted. Declaring can only make more traffic classify
+as model traffic; **withdrawing can make a finding disappear**, which is why
+the record of who did it survives — and why that matters most in precisely the
+case where someone withdraws one to make a finding go away.
+
+Returns `404` if there is no active declaration with that id in this account.
+
 ## `GET /v1/diff`
 
 What changed between the two most recent scans.

@@ -34,6 +34,7 @@ from ..scan import ScanResult
 from ..spend import PRICES_REVISION
 from ..store.agents import AgentStore
 from ..store.db import now, open_database
+from ..store.declarations import DeclarationStore
 from ..store.scans import ScanStore
 from .auth import Principal, TokenStore, parse_bearer
 
@@ -341,6 +342,111 @@ def create_app(
             },
         }
 
+    @app.get("/v1/endpoints")
+    def get_endpoints(
+        principal: Auth, account: str | None = None, include_withdrawn: bool = False
+    ) -> dict:
+        """Model endpoints this account has declared.
+
+        A customer running every model call through an internal gateway has
+        agents we cannot see, because their model traffic looks like traffic to
+        an internal API. This is how they tell us, and how they check what they
+        already told us.
+        """
+        account_id = scope(principal, account)
+        records = DeclarationStore(app.state.db).records_for(
+            account_id, include_withdrawn=include_withdrawn
+        )
+        return {
+            "account_id": account_id,
+            "endpoints": [
+                {
+                    "id": r.id,
+                    "value": r.value,
+                    "kind": r.kind,
+                    "note": r.note,
+                    "declared_by": r.declared_by,
+                    "declared_at": _iso(r.declared_at),
+                    "active": r.active,
+                    "withdrawn_by": r.withdrawn_by,
+                    "withdrawn_at": _iso(r.withdrawn_at) if r.withdrawn_at else None,
+                }
+                for r in records
+            ],
+        }
+
+    @app.post("/v1/endpoints")
+    def declare_endpoint(
+        body: DeclareRequest, principal: Auth, account: str | None = None
+    ) -> dict:
+        """Declare a model endpoint.
+
+        Takes effect on the next scan, not retroactively. Reclassifying stored
+        telemetry would rewrite the history of what was found when, and a
+        register whose past changes underneath an operator is one they cannot
+        reason about — so the response says so rather than leaving them to
+        wonder why the list did not move.
+        """
+        account_id = scope(principal, account)
+        store = DeclarationStore(app.state.db)
+        try:
+            record = store.declare(
+                account_id, body.value, body.kind, body.operator, body.note, at=now()
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+            ) from exc
+
+        # Logged separately from the request, like sanctioning, because it is
+        # the other decision that changes what counts as an agent.
+        event(
+            log, "endpoint.declared", account_id=account_id,
+            value=record.value, kind=record.kind, operator=record.declared_by,
+        )
+        return {
+            "id": record.id,
+            "value": record.value,
+            "kind": record.kind,
+            "note": record.note,
+            "declared_by": record.declared_by,
+            "declared_at": _iso(record.declared_at),
+            "active": True,
+            "effective": "next scan",
+        }
+
+    @app.delete("/v1/endpoints/{declaration_id}")
+    def withdraw_endpoint(
+        declaration_id: int,
+        principal: Auth,
+        operator: str,
+        account: str | None = None,
+    ) -> dict:
+        """Withdraw a declaration. The record of it stays.
+
+        Withdrawing narrows what counts as a model endpoint, so unlike
+        declaring it can make a finding disappear. That is why the row is
+        marked rather than deleted, and why this needs a name.
+        """
+        account_id = scope(principal, account)
+        store = DeclarationStore(app.state.db)
+        try:
+            changed = store.withdraw(declaration_id, account_id, operator, at=now())
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+            ) from exc
+        if not changed:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="no such active declaration for this account",
+            )
+        event(
+            log, "endpoint.withdrawn", account_id=account_id,
+            declaration_id=declaration_id, operator=operator,
+        )
+        return {"id": declaration_id, "active": False}
+
     @app.get("/v1/diff")
     def get_diff(principal: Auth, account: str | None = None) -> dict:
         """What changed between the two most recent scans.
@@ -539,6 +645,13 @@ def _mount_console(app: FastAPI) -> None:
     # console needs — it has one route and no client-side router to fall back
     # for.
     app.mount("/", StaticFiles(directory=str(root), html=True), name="console")
+
+
+class DeclareRequest(BaseModel):
+    value: str = Field(min_length=1, description="A CIDR, an address, or an AWS service name")
+    kind: str = Field(default="range", pattern="^(range|aws_service)$")
+    operator: str = Field(min_length=1, description="Human identity making the declaration")
+    note: str = Field(default="", description="What the customer calls this endpoint")
 
 
 class GrantRequest(BaseModel):

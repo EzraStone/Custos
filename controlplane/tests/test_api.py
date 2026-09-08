@@ -662,3 +662,90 @@ def test_drift_needs_a_credential(client):
 def test_drift_on_an_unknown_agent_is_404(client):
     r = client.get("/v1/agents/agt_nope/drift", headers=AUTH)
     assert r.status_code == 404
+
+
+def _declare(client, **kw):
+    body = {"value": "10.0.7.0/24", "kind": "range", "operator": "ezra@custos.dev"}
+    body.update(kw)
+    return client.post("/v1/endpoints", json=body, headers=AUTH)
+
+
+def test_declaring_an_endpoint_records_who_and_when(client):
+    r = _declare(client, note="llm-gateway")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["declared_by"] == "ezra@custos.dev"
+    assert body["note"] == "llm-gateway"
+    assert body["active"] is True
+
+
+def test_a_declaration_says_it_takes_effect_next_scan(client):
+    """Reclassifying stored telemetry would rewrite the history of what was
+    found when. Saying so beats leaving an operator to wonder why the register
+    did not move."""
+    assert _declare(client).json()["effective"] == "next scan"
+
+
+def test_declaring_needs_an_operator(client):
+    r = client.post(
+        "/v1/endpoints",
+        json={"value": "10.0.7.0/24", "kind": "range", "operator": ""},
+        headers=AUTH,
+    )
+    assert r.status_code == 422
+
+
+def test_an_unparseable_range_is_refused_on_the_way_in(client):
+    r = _declare(client, value="10.0.7.0/99")
+    assert r.status_code == 400
+    assert "not a valid network" in r.json()["detail"]
+    assert client.get("/v1/endpoints", headers=AUTH).json()["endpoints"] == []
+
+
+def test_an_unknown_kind_is_refused(client):
+    assert _declare(client, kind="cidr").status_code == 422
+
+
+def test_endpoints_are_listed_for_the_account(client):
+    _declare(client, note="llm-gateway")
+    listed = client.get("/v1/endpoints", headers=AUTH).json()["endpoints"]
+    assert [e["value"] for e in listed] == ["10.0.7.0/24"]
+
+
+def test_withdrawing_takes_it_out_of_the_active_list(client):
+    declaration_id = _declare(client).json()["id"]
+    r = client.delete(
+        f"/v1/endpoints/{declaration_id}?operator=priya@custos.dev", headers=AUTH
+    )
+    assert r.status_code == 200
+    assert client.get("/v1/endpoints", headers=AUTH).json()["endpoints"] == []
+
+
+def test_a_withdrawn_declaration_is_still_retrievable(client):
+    """Withdrawing can make a finding disappear, so who did it has to survive
+    — and that matters most when someone withdraws one for exactly that
+    reason."""
+    declaration_id = _declare(client).json()["id"]
+    client.delete(f"/v1/endpoints/{declaration_id}?operator=priya@custos.dev", headers=AUTH)
+
+    history = client.get(
+        "/v1/endpoints?include_withdrawn=true", headers=AUTH
+    ).json()["endpoints"]
+    assert len(history) == 1
+    assert history[0]["active"] is False
+    assert history[0]["withdrawn_by"] == "priya@custos.dev"
+
+
+def test_withdrawing_needs_an_operator(client):
+    declaration_id = _declare(client).json()["id"]
+    assert client.delete(f"/v1/endpoints/{declaration_id}", headers=AUTH).status_code == 422
+
+
+def test_withdrawing_something_that_is_not_there_is_404(client):
+    r = client.delete("/v1/endpoints/9999?operator=ezra@custos.dev", headers=AUTH)
+    assert r.status_code == 404
+
+
+def test_endpoints_need_a_credential(client):
+    assert client.get("/v1/endpoints").status_code == 401
+    assert client.post("/v1/endpoints", json={}).status_code == 401
