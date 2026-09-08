@@ -749,3 +749,44 @@ def test_withdrawing_something_that_is_not_there_is_404(client):
 def test_endpoints_need_a_credential(client):
     assert client.get("/v1/endpoints").status_code == 401
     assert client.post("/v1/endpoints", json={}).status_code == 401
+
+
+def test_reviews_are_kept_not_just_counted(client, realistic_payload):
+    """Only the count was stored, so an operator could see that three
+    workloads were uncertain and not which three."""
+    _ingest_real_batch(client, realistic_payload)
+    body = client.get("/v1/reviews", headers=AUTH).json()
+
+    scan = client.get("/v1/scans", headers=AUTH).json()["scans"][0]
+    assert len(body["reviews"]) == scan["review_candidates"]
+    if body["reviews"]:
+        assert body["reviews"][0]["evidence"], "a maybe with no evidence is a rumour"
+
+
+def test_reviews_report_how_often_a_workload_recurs(client, realistic_payload):
+    """One uncertain window is a different thing from every window for a
+    month, and the count is the only way to tell."""
+    _ingest_real_batch(client, realistic_payload)
+    first = client.get("/v1/reviews", headers=AUTH).json()["reviews"]
+    if not first:
+        pytest.skip("this corpus produced no review candidates")
+    assert first[0]["seen_in_scans"] == 1
+
+
+def test_reviews_offer_no_way_into_the_register(client):
+    """A route that promoted a maybe by hand would make every guarantee about
+    how an agent got into the register conditional on nobody using it."""
+    app_routes = {
+        (method, getattr(route, "path", ""))
+        for route in client.app.routes
+        for method in (getattr(route, "methods", None) or set())
+    }
+    writes = {
+        (m, p) for m, p in app_routes
+        if p.startswith("/v1/reviews") and m not in {"GET", "HEAD", "OPTIONS"}
+    }
+    assert not writes, f"the review band has a write path: {writes}"
+
+
+def test_reviews_need_a_credential(client):
+    assert client.get("/v1/reviews").status_code == 401

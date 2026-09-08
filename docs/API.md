@@ -134,6 +134,41 @@ approval decision on each one is a guess.
 A scan that reached nothing internal reports `1.0`, not `0.0`. There is no
 unreadable scope on a scan with no destinations.
 
+## `GET /v1/reviews`
+
+Workloads the classifier was unsure about in the last scan.
+
+```json
+{
+  "account_id": "447120043318",
+  "reviews": [
+    { "principal": "arn:aws:iam::447120043318:role/nightly-doc-summariser",
+      "confidence": 0.69,
+      "evidence": ["Sent 2.1MB and received 890.0KB, a ratio of 2.4:1."],
+      "unavailable": ["decoupling"],
+      "scan_id": 12, "seen_in_scans": 7 }
+  ]
+}
+```
+
+Not agents and not findings. SEC-17 keeps them out of the register: the
+classifier saying "this might be an agent and I am not confident enough to say
+so" is not a claim anything downstream should act on.
+
+**There is no path from here into the register.** Promoting a maybe by hand is
+what the register is not for, and a route that allowed it would make every
+guarantee about how an agent got there conditional on nobody having used it.
+
+`seen_in_scans` is what makes this worth reading. A workload uncertain once is
+one uncertain window; one uncertain in every scan for a month is a different
+thing, and the count is the only way to tell them apart.
+
+`unavailable` names the signals that could not be evaluated — usually the
+decoupling signal, when the account has no load balancer access logs. A
+workload in the review band for that reason is one we could have classified
+with better input, which is a different problem from one that is genuinely
+ambiguous.
+
 ## `GET /v1/gateway-candidates`
 
 Internal destinations that behave like model endpoints.

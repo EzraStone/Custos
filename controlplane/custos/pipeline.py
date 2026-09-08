@@ -28,7 +28,7 @@ from .scan import run as run_scan
 from .store.agents import AgentStore
 from .store.db import now, transaction
 from .store.declarations import CandidateStore, DeclarationStore
-from .store.scans import BatchRecord, ScanStore
+from .store.scans import BatchRecord, ReviewStore, ScanStore
 from .telemetry import Direction, FlowRecord, InboundRequest
 
 DEFAULT_INTERVAL = timedelta(seconds=60)
@@ -252,6 +252,11 @@ def ingest(
         # Questions to put to the customer, from this scan's traffic. Recorded
         # rather than recomputed later: the per-window destination bytes they
         # are derived from are not kept, only observations.
+        # The maybes, kept. Only their count was, so an operator could see that
+        # three workloads were uncertain and not which three — the least
+        # useful possible amount of information about a maybe.
+        ReviewStore(conn).record(scan_id, batch.account_id, result.review_candidates)
+
         CandidateStore(conn).record(
             scan_id, batch.account_id, gateway_candidates(result.telemetry)
         )

@@ -22,7 +22,7 @@ agent's apparent spend and reach.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # Columns added after a table was first written, applied by ALTER on databases
 # that already exist. The schema below is applied with CREATE TABLE IF NOT
@@ -82,6 +82,31 @@ CREATE TABLE IF NOT EXISTS scans (
     scope_total         INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS scans_by_account ON scans (account_id, started_at DESC);
+
+-- Workloads the classifier was unsure about, per scan.
+--
+-- Emphatically not the register. No id that looks like an agent id, no status,
+-- no imprimatur column, no foreign key anything else can follow. A review
+-- candidate is a scan artefact — the classifier saying "this might be an agent
+-- and I am not confident enough to say so" — and the moment it acquires a
+-- state machine somebody will move one into the register by hand, which is the
+-- thing SEC-17 exists to prevent.
+--
+-- Kept because only the count was, and an operator who wants to look at last
+-- week's maybes could not. Pruned with the scan, like observations: a
+-- workload the classifier was unsure about three months ago is not a question
+-- anyone should still be answering from a stale window.
+CREATE TABLE IF NOT EXISTS review_candidates (
+    scan_id     INTEGER NOT NULL REFERENCES scans(id) ON DELETE CASCADE,
+    account_id  TEXT    NOT NULL,
+    principal   TEXT    NOT NULL,
+    confidence  REAL    NOT NULL,
+    evidence    TEXT    NOT NULL,
+    unavailable TEXT    NOT NULL DEFAULT '[]',
+    PRIMARY KEY (scan_id, principal)
+);
+CREATE INDEX IF NOT EXISTS review_candidates_by_account
+    ON review_candidates (account_id, scan_id DESC);
 
 -- Gateway candidates from one scan: internal destinations that behave like
 -- model endpoints and are not declared as any.

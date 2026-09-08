@@ -35,7 +35,7 @@ from ..spend import PRICES_REVISION
 from ..store.agents import AgentStore
 from ..store.db import now, open_database
 from ..store.declarations import CandidateStore, DeclarationStore
-from ..store.scans import ScanStore
+from ..store.scans import ReviewStore, ScanStore
 from .auth import Principal, TokenStore, parse_bearer
 
 log = get("custos.api")
@@ -340,6 +340,34 @@ def create_app(
                 # showing noise with a confident label on it.
                 "established": baseline.established,
             },
+        }
+
+    @app.get("/v1/reviews")
+    def get_reviews(principal: Auth, account: str | None = None) -> dict:
+        """Workloads the classifier was unsure about in the last scan.
+
+        Not agents and not findings. SEC-17 keeps them out of the register —
+        the classifier saying "this might be an agent and I am not confident
+        enough to say so" is not a claim anything downstream should act on.
+
+        There is no path from here into the register. Promoting a maybe by hand
+        is precisely what the register is not for, and a route that allowed it
+        would make every guarantee about how an agent got there conditional on
+        nobody having used it.
+
+        `seen_in_scans` is what makes this worth reading. A workload uncertain
+        once is one uncertain window; one uncertain in every scan for a month
+        is a different thing, and the count is the only way to tell.
+        """
+        account_id = scope(principal, account)
+        reviews = ReviewStore(app.state.db)
+        found = reviews.latest_for(account_id)
+        return {
+            "account_id": account_id,
+            "reviews": [
+                {**r, "seen_in_scans": reviews.recurrence(account_id, r["principal"])}
+                for r in found
+            ],
         }
 
     @app.get("/v1/gateway-candidates")

@@ -238,3 +238,72 @@ class ScanStore:
             row["tools"] = set(loads(row["tools"]))
             row["observed_at"] = parse(row["observed_at"])
         return list(reversed(rows))
+
+
+class ReviewStore:
+    """Workloads the classifier was unsure about.
+
+    Separate from AgentStore on purpose, and the separation is the point. A
+    review candidate has no status, no imprimatur, and no way to become a
+    register entry through this class — the only path into the register is a
+    scan that classified something as an agent.
+
+    Kept because only the count was kept, so an operator could see that three
+    workloads were uncertain and could not see which three. That is the least
+    useful possible amount of information about a maybe.
+    """
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self.conn = conn
+
+    def record(self, scan_id: int, account_id: str, verdicts: list) -> None:
+        self.conn.executemany(
+            "INSERT OR REPLACE INTO review_candidates "
+            "(scan_id, account_id, principal, confidence, evidence, unavailable) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                (scan_id, account_id, v.principal, v.confidence,
+                 dumps(v.evidence), dumps(v.unavailable))
+                for v in verdicts
+            ],
+        )
+
+    def latest_for(self, account_id: str) -> list[dict]:
+        """This account's most recent scan's review candidates."""
+        row = self.conn.execute(
+            "SELECT MAX(scan_id) AS scan_id FROM review_candidates WHERE account_id = ?",
+            (account_id,),
+        ).fetchone()
+        if row is None or row["scan_id"] is None:
+            return []
+        return self._for_scan(row["scan_id"])
+
+    def _for_scan(self, scan_id: int) -> list[dict]:
+        return [
+            {
+                "principal": r["principal"],
+                "confidence": r["confidence"],
+                "evidence": loads(r["evidence"]),
+                "unavailable": loads(r["unavailable"]),
+                "scan_id": r["scan_id"],
+            }
+            for r in self.conn.execute(
+                "SELECT * FROM review_candidates WHERE scan_id = ? "
+                "ORDER BY confidence DESC, principal",
+                (scan_id,),
+            )
+        ]
+
+    def recurrence(self, account_id: str, principal: str) -> int:
+        """How many of this account's scans put this workload in the review band.
+
+        A workload uncertain once is a workload the classifier was unsure about
+        on one window. One uncertain in every scan for a month is a different
+        thing entirely, and without this an operator cannot tell them apart.
+        """
+        row = self.conn.execute(
+            "SELECT COUNT(*) AS n FROM review_candidates "
+            "WHERE account_id = ? AND principal = ?",
+            (account_id, principal),
+        ).fetchone()
+        return int(row["n"]) if row else 0
