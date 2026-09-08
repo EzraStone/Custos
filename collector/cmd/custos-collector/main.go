@@ -286,6 +286,13 @@ WHAT IT READS
                        a description AWS did not write is not sent anywhere.
   ALB access logs      optional: when a request arrived and how large it was
 
+RUN --check BEFORE THE FIRST SCAN
+  Among other things it names internal addresses that send far more than they
+  receive. That is the shape of model traffic, and if one of them is a
+  self-hosted model gateway then every agent behind it is invisible to us
+  until you say so. Declaring it is one command and it is the single most
+  likely reason a scan comes back emptier than you expected.
+
 WHAT IT SENDS
   Exactly the structures in internal/wire. There is no field on any of them
   capable of holding a prompt, a completion, or any other payload body, and the

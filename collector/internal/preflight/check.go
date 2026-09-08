@@ -14,6 +14,7 @@ package preflight
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/netip"
 	"sort"
 	"strings"
@@ -138,7 +139,72 @@ func Run(ctx context.Context, cfg Config, flows FlowSource, names Namer) Report 
 
 	records := checkFlowLogs(ctx, &report, cfg, flows)
 	checkDestinationNames(ctx, &report, names, records)
+	checkForGateway(&report, records)
 	return report
+}
+
+// checkForGateway names internal addresses that might be swallowing this
+// account's model traffic.
+//
+// The model-traffic check above is deliberately crude — any outbound 443 —
+// because using the full catalogue would report a clean pass on exactly the
+// account whose gateway we cannot see. The cost of that crudeness is that it
+// also passes cleanly on that account, saying nothing. This is the other half:
+// it does not decide anything, it names the addresses worth asking about.
+//
+// Worth doing here, before a single byte has been sent, because this is the
+// cheapest possible moment to learn that a scan is going to come back empty
+// for a reason nobody would guess.
+func checkForGateway(report *Report, records []wire.FlowRecord) {
+	const (
+		minRatio = 3.0
+		minBytes = 1_000_000
+	)
+
+	out := map[string]int64{}
+	back := map[string]int64{}
+	for _, r := range records {
+		peer, counter := r.DstAddr, out
+		if r.Direction == wire.Ingress {
+			peer, counter = r.SrcAddr, back
+		}
+		addr, err := netip.ParseAddr(peer)
+		if err != nil || !addr.IsPrivate() {
+			continue
+		}
+		// Ports a model API would plausibly be behind. A datastore port is a
+		// datastore whatever the byte ratio looks like.
+		port := r.DstPort
+		if r.Direction == wire.Ingress {
+			port = r.SrcPort
+		}
+		if port != 443 && port != 8443 && port != 80 && port != 8000 && port != 8080 {
+			continue
+		}
+		counter[peer] += r.Bytes
+	}
+
+	var suspects []string
+	for peer, sent := range out {
+		received := back[peer]
+		if sent < minBytes || float64(sent)/math.Max(float64(received), 1) < minRatio {
+			continue
+		}
+		suspects = append(suspects, fmt.Sprintf("%s (%.1fMB out, %.1fMB back)",
+			peer, float64(sent)/1e6, float64(received)/1e6))
+	}
+	if len(suspects) == 0 {
+		return
+	}
+	sort.Strings(suspects)
+	if len(suspects) > 3 {
+		suspects = suspects[:3]
+	}
+
+	report.add("possible model gateway", Warn, strings.Join(suspects, "; "),
+		"these send far more than they receive, which is the shape of model "+
+			"traffic - if any is a self-hosted gateway, declare it with "+
+			"`custos declare` or every agent behind it stays invisible")
 }
 
 // checkDestinationNames reports how much of the scope an operator will be able

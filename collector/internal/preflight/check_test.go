@@ -317,3 +317,86 @@ func TestNoInternalTrafficIsNotAFinding(t *testing.T) {
 		}
 	}
 }
+
+func gatewayTraffic(peer string, out, back int64) []wire.FlowRecord {
+	var records []wire.FlowRecord
+	for i := 0; i < 40; i++ {
+		records = append(records,
+			wire.FlowRecord{
+				Direction: wire.Egress, DstAddr: peer, DstPort: 443, Bytes: out,
+				SrcAddr: "10.0.1.5", SrcPort: 41000 + i,
+			},
+			wire.FlowRecord{
+				Direction: wire.Ingress, SrcAddr: peer, SrcPort: 443, Bytes: back,
+				DstAddr: "10.0.1.5", DstPort: 41000 + i,
+			},
+		)
+	}
+	return records
+}
+
+// TestAPossibleGatewayIsNamedBeforeAnythingIsSent: the model-traffic check is
+// deliberately crude — any outbound 443 — because the full catalogue would
+// report a clean pass on exactly the account whose gateway we cannot see. The
+// cost is that it passes cleanly there too, saying nothing. This is the other
+// half, and it runs before a single byte leaves the account.
+func TestAPossibleGatewayIsNamedBeforeAnythingIsSent(t *testing.T) {
+	records := append(modelTraffic(1), gatewayTraffic("10.0.7.40", 140_000, 9_000)...)
+	report := run(good(), stubFlows{records: records})
+
+	result := find(t, report, "possible model gateway")
+	if result.Status != Warn || !strings.Contains(result.Detail, "10.0.7.40") {
+		t.Fatalf("got %v, detail %q", result.Status, result.Detail)
+	}
+	if !strings.Contains(result.Remedy, "custos declare") {
+		t.Fatalf("remedy does not say what to do: %q", result.Remedy)
+	}
+	if !strings.Contains(result.Remedy, "invisible") {
+		t.Fatalf("remedy does not say what it costs: %q", result.Remedy)
+	}
+}
+
+func TestASymmetricInternalApiIsNotNamed(t *testing.T) {
+	records := append(modelTraffic(1), gatewayTraffic("10.0.4.23", 40_000, 38_000)...)
+	for _, r := range run(good(), stubFlows{records: records}).Results {
+		if r.Name == "possible model gateway" {
+			t.Fatalf("named an ordinary request/response API: %+v", r)
+		}
+	}
+}
+
+func TestAQuietDestinationIsNotNamed(t *testing.T) {
+	// A megabyte over a whole window is a health check.
+	records := append(modelTraffic(1), gatewayTraffic("10.0.7.40", 1_000, 10)...)
+	for _, r := range run(good(), stubFlows{records: records}).Results {
+		if r.Name == "possible model gateway" {
+			t.Fatalf("named a health check: %+v", r)
+		}
+	}
+}
+
+func TestADatastorePortIsNeverAGateway(t *testing.T) {
+	var records []wire.FlowRecord
+	for i := 0; i < 40; i++ {
+		records = append(records, wire.FlowRecord{
+			Direction: wire.Egress, DstAddr: "10.0.9.44", DstPort: 5432,
+			Bytes: 140_000, SrcAddr: "10.0.1.5", SrcPort: 41000 + i,
+		})
+	}
+	records = append(records, modelTraffic(1)...)
+	for _, r := range run(good(), stubFlows{records: records}).Results {
+		if r.Name == "possible model gateway" {
+			t.Fatalf("named a datastore: %+v", r)
+		}
+	}
+}
+
+// TestAnAccountWithNoInternalTrafficIsNotWarned: a warning that fires on a
+// healthy account is one that gets ignored on the account where it matters.
+func TestAnAccountWithNoInternalTrafficIsNotWarned(t *testing.T) {
+	for _, r := range run(good(), stubFlows{records: modelTraffic(5)}).Results {
+		if r.Name == "possible model gateway" {
+			t.Fatalf("warned on an account with nothing internal: %+v", r)
+		}
+	}
+}
