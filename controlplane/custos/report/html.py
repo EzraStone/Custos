@@ -89,17 +89,62 @@ def _agent_row(agent: Agent) -> str:
     </article>"""
 
 
-def _review_row(verdict: Verdict) -> str:
-    evidence = "".join(f"<li>{_e(line)}</li>" for line in verdict.evidence)
+@dataclass(frozen=True, slots=True)
+class Review:
+    """One workload the classifier was unsure about, as the report shows it.
+
+    A separate shape from `Verdict` because the two sources of review
+    candidates carry different things. A scan has the live verdict, features
+    and firings included. A report rendered from the store has only what was
+    written down — and, crucially, one thing the live verdict cannot know:
+    how many previous scans said the same thing.
+
+    Reconstructing a `Verdict` from stored rows was the alternative, and it
+    would have meant inventing firings with contributions to make `evidence`
+    come back out. Fabricated evidence in the one section of the report whose
+    entire purpose is to say "we are not sure" is not a trade worth making.
+    """
+
+    principal: str
+    confidence: float
+    evidence: tuple[str, ...] = ()
+    seen_in_scans: int = 1
+
+    @classmethod
+    def from_verdict(cls, verdict: Verdict) -> Review:
+        return cls(
+            principal=verdict.principal,
+            confidence=verdict.confidence,
+            evidence=tuple(verdict.evidence),
+        )
+
+
+def _recurrence(seen: int) -> str:
+    """How often this workload has landed here, when that is worth saying.
+
+    One scan is the default and stating it adds nothing. Repetition is the
+    signal: a workload uncertain in every scan for a month is a standing
+    question about the account, not a noisy window.
+    """
+    if seen <= 1:
+        return ""
+    return (
+        f'<div><dt>Seen in</dt><dd>{seen} scans</dd></div>'
+    )
+
+
+def _review_row(review: Review) -> str:
+    evidence = "".join(f"<li>{_e(line)}</li>" for line in review.evidence)
     return f"""
     <article class="finding review">
       <header>
-        <h3>{_e(_short_principal(verdict.principal))}</h3>
+        <h3>{_e(_short_principal(review.principal))}</h3>
         <span class="radius">needs a human</span>
       </header>
       <dl class="meta">
-        <div><dt>Principal</dt><dd class="mono">{_e(verdict.principal)}</dd></div>
-        <div><dt>Confidence</dt><dd>{verdict.confidence:.2f}</dd></div>
+        <div><dt>Principal</dt><dd class="mono">{_e(review.principal)}</dd></div>
+        <div><dt>Confidence</dt><dd>{review.confidence:.2f}</dd></div>
+        {_recurrence(review.seen_in_scans)}
       </dl>
       <details><summary>What was observed</summary>
         <ul class="evidence">{evidence}</ul></details>
@@ -327,11 +372,22 @@ def render(
     drift: list[Drift] | None = None,
     coverage: Coverage | None = None,
     declared: list[str] | None = None,
+    reviews: list[Review] | None = None,
 ) -> str:
-    """Render the scan report as a single self-contained HTML document."""
+    """Render the scan report as a single self-contained HTML document.
+
+    `reviews` overrides what the scan result carries, for the caller rendering
+    from the store rather than from a scan in hand. It is a parameter rather
+    than something read off `result` because the stored rows know how many
+    scans each workload has appeared in and a live `ScanResult` does not.
+    """
     findings = result.register.attributed_findings
     unattributed = result.register.unattributed_findings
-    reviews = result.review_candidates
+    review_rows = (
+        reviews
+        if reviews is not None
+        else [Review.from_verdict(v) for v in result.review_candidates]
+    )
     degraded = sorted({s for v in result.verdicts for s in v.unavailable})
 
     writers = [a for a in result.register.unsanctioned if a.reach.blast_radius.rank > 0]
@@ -358,7 +414,7 @@ def render(
     <div><dt>Principals seen</dt><dd>{result.principals_seen}</dd></div>
     <div><dt>Agents found</dt><dd>{len(result.register.unsanctioned)}</dd></div>
     <div><dt>Write-capable</dt><dd>{len(writers)}</dd></div>
-    <div><dt>For review</dt><dd>{len(reviews)}</dd></div>
+    <div><dt>For review</dt><dd>{len(review_rows)}</dd></div>
     <div><dt>Est. spend</dt><dd>{_money(total_spend)}/mo</dd></div>
   </dl>
 </header>
@@ -375,7 +431,7 @@ def render(
 
 {_unattributed_section(unattributed)}
 {_drift_section(drift or [], result.register.agents)}
-{_review_section(reviews)}
+{_review_section(review_rows)}
 
 <section>
   <h2>What this report does not claim</h2>
@@ -402,8 +458,8 @@ def _unattributed_section(agents: list[Agent]) -> str:
 </section>"""
 
 
-def _review_section(verdicts: list[Verdict]) -> str:
-    if not verdicts:
+def _review_section(reviews: list[Review]) -> str:
+    if not reviews:
         return ""
     return f"""
 <section>
@@ -411,7 +467,7 @@ def _review_section(verdicts: list[Verdict]) -> str:
   <p class="lede">Workloads that resemble agents without meeting the bar. Most
   are batch jobs or build pipelines. They appear here rather than in the
   register because discovery is not permitted to decide this on its own.</p>
-  {"".join(_review_row(v) for v in verdicts)}
+  {"".join(_review_row(r) for r in reviews)}
 </section>"""
 
 

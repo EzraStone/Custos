@@ -277,6 +277,71 @@ def test_report_on_an_empty_account_renders_rather_than_failing(client):
     assert "None found" in response.text
 
 
+def _seed_review(client, principal, confidence=0.5, evidence=("odd bursts",)):
+    """Put one review candidate in the store, against a real scan."""
+    from types import SimpleNamespace
+
+    from custos.store.scans import ReviewStore, ScanStore
+
+    client.post("/v1/batches", json=batch(start=_seed_review.at), headers=AUTH)
+    _seed_review.at += timedelta(hours=1)
+
+    db = client.app.state.db
+    scan_id = ScanStore(db).latest_scan(ACCOUNT).id
+    ReviewStore(db).record(scan_id, ACCOUNT, [
+        SimpleNamespace(
+            principal=principal, confidence=confidence,
+            evidence=list(evidence), unavailable=[],
+        )
+    ])
+    db.commit()
+    return scan_id
+
+
+_seed_review.at = W0
+
+
+# The served report built its ScanResult with an empty verdict list, so an
+# account whose console showed three maybes got a report saying "For review: 0".
+# The report is the artefact that gets forwarded to the workload owner.
+def test_report_shows_the_maybes_the_store_kept(client):
+    _seed_review(client, "arn:aws:sts::447120043318:assumed-role/nightly-etl/i-07")
+
+    page = client.get("/v1/report", headers=AUTH).text
+
+    assert "For review" in page
+    assert "nightly-etl" in page
+    assert "odd bursts" in page, "a maybe with no evidence is a rumour"
+
+
+def test_report_states_how_often_a_maybe_has_recurred(client):
+    """One uncertain window is a question about a window. Every window for a
+    month is a question about the account."""
+    principal = "arn:aws:sts::447120043318:assumed-role/nightly-etl/i-07"
+    _seed_review(client, principal)
+    once = client.get("/v1/report", headers=AUTH).text
+    assert "Seen in" not in once, "one scan is the default and says nothing"
+
+    _seed_review(client, principal)
+    twice = client.get("/v1/report", headers=AUTH).text
+
+    assert "Seen in" in twice
+    assert "2 scans" in twice
+
+
+def test_report_review_band_carries_no_sanction_control(client):
+    """SEC-17 in the report: the maybes are printed, never actionable from
+    here. A button in a static document is a promise nothing can keep."""
+    _seed_review(client, "arn:aws:sts::447120043318:assumed-role/nightly-etl/i-07")
+    page = client.get("/v1/report", headers=AUTH).text
+    # Split on the heading, not the summary label: the label is present even
+    # on a report with no maybes at all, and this must not pass vacuously.
+    section = page.split("<h2>For review</h2>", 1)[1]
+    assert "nightly-etl" in section
+    for control in ("<button", "<form", "<input"):
+        assert control not in section, control
+
+
 # --- logging ------------------------------------------------------------------
 
 def _log_stream():

@@ -29,7 +29,7 @@ from ..logging import event, get
 from ..pipeline import ingest
 from ..register.model import Status
 from ..register.store import Register, TransitionError
-from ..report import Coverage, render
+from ..report import Coverage, Review, render
 from ..scan import ScanResult
 from ..spend import PRICES_REVISION
 from ..store.agents import AgentStore
@@ -773,6 +773,21 @@ def create_app(
                 previous_scan_id=previous.id, current_scan_id=latest.id,
             )
 
+        # The maybes, from the store rather than from the empty verdict list
+        # above. Without this the served report shows "For review: 0" on an
+        # account whose console has three of them, and the report is the
+        # artefact that gets forwarded.
+        reviews = ReviewStore(app.state.db)
+        candidates = [
+            Review(
+                principal=r["principal"],
+                confidence=r["confidence"],
+                evidence=tuple(r["evidence"]),
+                seen_in_scans=reviews.recurrence(account_id, r["principal"]),
+            )
+            for r in reviews.latest_for(account_id)
+        ]
+
         return HTMLResponse(render(
             result, account_label=account_id,
             generated_at=now(), diff=diff, coverage=coverage,
@@ -780,6 +795,7 @@ def create_app(
                 f"{r.value} ({r.note})" if r.note else r.value
                 for r in DeclarationStore(app.state.db).records_for(account_id)
             ],
+            reviews=candidates,
         ))
 
     @app.get("/v1/agents/{agent_id}/audit")

@@ -1,5 +1,5 @@
 """Report rendering."""
 
-from .html import Coverage, render
+from .html import Coverage, Review, render
 
-__all__ = ["Coverage", "render"]
+__all__ = ["Coverage", "Review", "render"]
