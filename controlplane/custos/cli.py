@@ -163,29 +163,55 @@ def cmd_register(args: argparse.Namespace) -> int:
 
 
 def cmd_accounts(args: argparse.Namespace) -> int:
-    """List the accounts this database holds.
+    """List the accounts this database holds, worst first.
 
-    The first thing anyone needs on a fleet database, and otherwise only
-    answerable by guessing an account ID and seeing whether anything comes
-    back.
+    A count of agents per account is not enough to choose between fifty of
+    them. What somebody with an afternoon needs is which account holds
+    unsanctioned agents that can destroy things and which has not been scanned
+    — so the destructive count leads and the ordering follows it.
     """
+    from .store.scans import ScanStore
+
     conn = open_database(args.db)
     rows = conn.execute(
         "SELECT account_id, COUNT(*) AS agents, "
-        "SUM(CASE WHEN status = 'sanctioned' THEN 1 ELSE 0 END) AS sanctioned "
-        "FROM agents GROUP BY account_id ORDER BY account_id"
+        "SUM(CASE WHEN status = 'sanctioned' THEN 1 ELSE 0 END) AS sanctioned, "
+        "SUM(CASE WHEN status NOT IN ('sanctioned', 'retired') "
+        "         AND blast_radius = 'destructive' THEN 1 ELSE 0 END) AS destructive "
+        "FROM agents GROUP BY account_id"
     ).fetchall()
 
     if not rows:
         print("No accounts in this database yet.")
         return 0
 
-    print(f"{'account':<18}{'agents':>8}{'sanctioned':>12}{'unsanctioned':>14}")
-    print("-" * 52)
+    scans = ScanStore(conn)
+    summary = []
     for row in rows:
-        unsanctioned = row["agents"] - (row["sanctioned"] or 0)
-        print(f"{row['account_id']:<18}{row['agents']:>8}"
-              f"{row['sanctioned'] or 0:>12}{unsanctioned:>14}")
+        latest = scans.latest_scan(row["account_id"])
+        summary.append({
+            "account_id": row["account_id"],
+            "agents": row["agents"],
+            "sanctioned": row["sanctioned"] or 0,
+            "unsanctioned": row["agents"] - (row["sanctioned"] or 0),
+            "destructive": row["destructive"] or 0,
+            "last_scan": latest.started_at if latest else None,
+        })
+
+    # Never-scanned first, then by what can do the most damage. An account
+    # nobody has looked at outranks any finding, because a finding is
+    # something somebody knows.
+    summary.sort(key=lambda a: (
+        a["last_scan"] is not None, -a["destructive"], -a["unsanctioned"], a["account_id"],
+    ))
+
+    print(f"{'account':<18}{'agents':>8}{'sanctioned':>12}{'unsanctioned':>14}"
+          f"{'destructive':>13}{'last scan':>14}")
+    print("-" * 79)
+    for a in summary:
+        when = f"{a['last_scan']:%Y-%m-%d}" if a["last_scan"] else "never"
+        print(f"{a['account_id']:<18}{a['agents']:>8}{a['sanctioned']:>12}"
+              f"{a['unsanctioned']:>14}{a['destructive']:>13}{when:>14}")
     return 0
 
 

@@ -231,7 +231,8 @@ def test_accounts_counts_sanctioned_separately(db, batch_file, capsys):
 
     main(["--db", db, "accounts"])
     row = [ln for ln in capsys.readouterr().out.splitlines() if ACCOUNT in ln][0]
-    assert row.split() == [ACCOUNT, "5", "1", "4"]
+    # account, agents, sanctioned, unsanctioned, destructive, last scan
+    assert row.split()[:5] == [ACCOUNT, "5", "1", "4", "1"]
 
 
 def test_accounts_on_an_empty_database_says_so(db, capsys):
@@ -462,3 +463,52 @@ def test_setting_a_zero_rate_is_refused(tmp_path, capsys):
     assert main(["--db", str(db), "set-rate", "anthropic", "--account", "1",
                  "--operator", "ezra@custos.dev", "--input", "0", "--output", "7.5"]) == 2
     assert "greater than zero" in capsys.readouterr().err
+
+
+def test_accounts_puts_the_dangerous_and_the_unscanned_first(tmp_path, capsys):
+    """A count of agents per account is not enough to choose between fifty of
+    them. Never-scanned first, then by what can do the most damage."""
+    from custos.register.model import (
+        Agent,
+        BlastRadius,
+        Identity,
+        ModelUse,
+        Provenance,
+        Reach,
+        Source,
+        Status,
+    )
+    from custos.register.store import agent_id
+    from custos.store.agents import AgentStore
+
+    db = tmp_path / "acc.db"
+    conn = open_database(db)
+    store = AgentStore(conn)
+    at = datetime(2026, 8, 10, tzinfo=UTC)
+
+    def add(account: str, name: str, radius: BlastRadius):
+        ident = f"arn:aws:iam::{account}:role/{name}"
+        store.upsert(Agent(
+            id=agent_id(account, ident), first_seen=at, last_seen=at,
+            status=Status.DISCOVERED,
+            provenance=Provenance(source=Source.DISCOVERED, confidence=0.9,
+                                  observed_principal=ident, evidence=[]),
+            identity=Identity(principal=ident, account_id=account),
+            model=ModelUse(), reach=Reach(blast_radius=radius),
+        ))
+
+    # Many read-only agents, one destructive, and one account with neither.
+    for i in range(5):
+        add("111111111111", f"reader-{i}", BlastRadius.READ)
+    add("222222222222", "deleter", BlastRadius.DESTRUCTIVE)
+    conn.commit()
+    conn.close()
+
+    assert main(["--db", str(db), "accounts"]) == 0
+    out = capsys.readouterr().out
+    lines = [line for line in out.splitlines() if line.startswith(("1111", "2222"))]
+
+    assert lines[0].startswith("222222222222"), (
+        "one agent that can delete outranks five that can only read"
+    )
+    assert "never" in out, "an unscanned account should say so"
