@@ -17,7 +17,7 @@ from custos.register.model import (
     Status,
 )
 from custos.register.store import Register
-from custos.report import render
+from custos.report import Review, render
 from custos.scan import ScanResult
 
 from .conftest import prose
@@ -107,6 +107,62 @@ def test_no_unattributed_section_when_everything_is_owned(page):
 def test_review_candidates_are_not_presented_as_agents(page):
     assert "For review" in page
     assert "needs a human" in page
+
+
+# --- the review band --------------------------------------------------------
+
+
+def test_a_maybe_reaching_an_undeclared_address_says_what_it_would_mean():
+    """The strongest thing the review section can say. A workload with no
+    recognised model traffic sending a transcript-shaped stream at an
+    undeclared address is an agent behind a gateway, and the reader is the one
+    who can confirm it."""
+    page = render(
+        result([agent()]), "acme", T0,
+        reviews=[Review(principal="role/deploy-remediation", confidence=0.52,
+                        evidence=("Sent 40MB, received 2MB.",),
+                        sends_to=("10.0.7.40",))],
+    )
+    assert "10.0.7.40" in page
+    assert "If that is a self-hosted model gateway" in page
+    assert "an agent rather than a maybe" in page
+
+
+def test_an_ordinary_maybe_says_nothing_about_gateways(page):
+    """A note on every row is a note nobody reads."""
+    assert "self-hosted model gateway" not in page
+
+
+def test_the_correlated_maybe_is_printed_first():
+    """It scores lower here on purpose: a section that ordered by confidence —
+    the obvious thing — would put it second."""
+    page = render(
+        result([agent()]), "acme", T0,
+        reviews=[
+            Review(principal="role/ci-runner", confidence=0.68),
+            Review(principal="role/deploy-remediation", confidence=0.41,
+                   sends_to=("10.0.7.40",)),
+        ],
+    )
+    assert page.index("deploy-remediation") < page.index("ci-runner")
+
+
+def test_a_maybe_seen_once_does_not_say_how_often():
+    page = render(
+        result([agent()]), "acme", T0,
+        reviews=[Review(principal="role/ci-runner", confidence=0.5)],
+    )
+    assert "Seen in" not in page
+
+
+def test_an_address_in_a_review_is_escaped():
+    """It reaches the page from telemetry, which is attacker-influenced."""
+    page = render(
+        result([agent()]), "acme", T0,
+        reviews=[Review(principal="role/x", confidence=0.5,
+                        sends_to=('<script>alert("x")</script>',))],
+    )
+    assert "<script>alert" not in page
 
 
 def test_html_is_escaped():
