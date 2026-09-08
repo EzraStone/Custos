@@ -465,8 +465,15 @@ def cmd_prune(args: argparse.Namespace) -> int:
 
     print(
         f"pruned {result.observations:,} observations, {result.scans:,} scans, "
-        f"{result.batches:,} batches"
+        f"{result.batches:,} batches, {result.deliveries:,} delivery records"
     )
+    if result.questions:
+        # Said separately because it is the only line here an operator might
+        # have wanted to act on before it went.
+        print(
+            f"{result.questions:,} open questions went with those scans "
+            "(review candidates and gateway questions)"
+        )
     print("agents and audit entries were not touched")
     return 0
 

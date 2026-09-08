@@ -50,10 +50,21 @@ class Pruned:
     scans: int = 0
     batches: int = 0
     deliveries: int = 0
+    questions: int = 0
+    """Review candidates and gateway questions that went with their scans.
+
+    Counted rather than inferred, because they leave by cascade and a cascade
+    reports nothing. An operator reading "pruned 40 scans" has no way to know
+    that eleven open questions disappeared at the same time, and the first
+    time somebody notices is when a question they meant to answer is gone.
+    """
 
     @property
     def total(self) -> int:
-        return self.observations + self.scans + self.batches + self.deliveries
+        return (
+            self.observations + self.scans + self.batches
+            + self.deliveries + self.questions
+        )
 
 
 def prune(
@@ -91,6 +102,16 @@ def prune(
         observations = conn.execute(
             "DELETE FROM observations WHERE observed_at < ?", (observation_cutoff,)
         ).rowcount
+        # Counted before the delete: these rows leave by cascade, and a
+        # cascade has no rowcount to read afterwards.
+        questions = sum(
+            conn.execute(
+                f"SELECT COUNT(*) AS n FROM {table} WHERE scan_id IN "  # noqa: S608
+                "(SELECT id FROM scans WHERE started_at < ?)",
+                (scan_cutoff,),
+            ).fetchone()["n"]
+            for table in ("review_candidates", "gateway_candidates")
+        )
         scans = conn.execute(
             "DELETE FROM scans WHERE started_at < ?", (scan_cutoff,)
         ).rowcount
@@ -110,6 +131,7 @@ def prune(
         scans=max(scans, 0),
         batches=max(batches, 0),
         deliveries=max(deliveries, 0),
+        questions=max(questions, 0),
     )
 
 

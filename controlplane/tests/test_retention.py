@@ -160,6 +160,20 @@ def test_every_table_hanging_off_a_scan_has_a_way_of_being_pruned():
         )
 
 
+def test_prune_says_how_many_open_questions_it_took():
+    """They leave by cascade, which reports nothing. An operator reading
+    "pruned 40 scans" would not know eleven questions went with them."""
+    conn = open_database()
+    seed_per_scan_rows(conn, _seed_scan(conn, days_ago=400))
+    seed_per_scan_rows(conn, _seed_scan(conn, days_ago=1))
+
+    result = prune(conn, observation_days=90, scan_days=365)
+
+    # One review candidate and one gateway candidate, from the old scan only.
+    assert result.questions == 2
+    assert result.total >= result.questions
+
+
 def test_pruning_leaves_no_row_pointing_at_a_scan_that_is_gone():
     """The property the mechanisms above exist to produce, checked directly."""
     conn = open_database()
