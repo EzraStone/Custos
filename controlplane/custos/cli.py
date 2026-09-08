@@ -68,7 +68,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
     if args.out:
         _write_report(args.out, outcome, batch.account_id,
                       declared=_declared_labels(conn, batch.account_id),
-                      reviews=_reviews_with_history(conn, outcome, batch.account_id))
+                      reviews=_reviews_with_history(conn, outcome, batch.account_id),
+                      questions=_report_questions(conn, batch.account_id))
         print()
         print(f"report        {args.out}")
 
@@ -109,28 +110,36 @@ def _reviews_with_history(conn, outcome, account_id: str) -> list:
     keeps `render` ignorant of the database, which is what lets the report be
     rendered in a test from a scan result and nothing else.
     """
-    from .gateway import blind_reach
     from .report import Review
     from .store.scans import ReviewStore
 
     reviews = ReviewStore(conn)
-    reach = blind_reach(_open_questions(conn, account_id))
     return [
         Review(
             principal=v.principal,
             confidence=v.confidence,
             evidence=tuple(v.evidence),
             seen_in_scans=reviews.recurrence(account_id, v.principal),
-            sends_to=reach.get(v.principal, ()),
         )
         for v in outcome.result.review_candidates
+    ]
+
+
+def _report_questions(conn, account_id: str) -> list:
+    """The open gateway questions, for the report's Questions section."""
+    from .report import Question
+
+    return [
+        Question(address=c.address, question=c.question,
+                 reached_by=c.blind_principals)
+        for c in _open_questions(conn, account_id)
     ]
 
 
 def _write_report(
     path: str, outcome, account_label: str, diff: ScanDiff | None = None,
     drift: list[Drift] | None = None, declared: list[str] | None = None,
-    reviews: list | None = None,
+    reviews: list | None = None, questions: list | None = None,
 ) -> None:
     Path(path).write_text(render(
         outcome.result,
@@ -141,6 +150,7 @@ def _write_report(
         coverage=outcome.coverage,
         declared=declared,
         reviews=reviews,
+        questions=questions,
     ))
 
 
@@ -342,7 +352,6 @@ def cmd_reviews(args: argparse.Namespace) -> int:
     is a scan, and a command that moved a maybe by hand would make every
     guarantee about how an agent got there conditional on nobody having used it.
     """
-    from .gateway import blind_reach
     from .store.scans import ReviewStore
 
     conn = open_database(args.db)
@@ -351,12 +360,6 @@ def cmd_reviews(args: argparse.Namespace) -> int:
     if not found:
         print("The last scan was sure about everything it saw.")
         return 0
-
-    reach = blind_reach(_open_questions(conn, args.account))
-    # Correlated maybes first: a maybe that also sends a transcript-shaped
-    # stream at an undeclared address is the shape of an agent behind a
-    # gateway, and it is the one worth reading.
-    found.sort(key=lambda r: (not reach.get(r["principal"]), -r["confidence"]))
 
     print(f"{len(found)} workload{'s' if len(found) != 1 else ''} in the review band.")
     print("Not confident enough to register as agents, not clearly ordinary either.")
@@ -367,12 +370,6 @@ def cmd_reviews(args: argparse.Namespace) -> int:
         # workload uncertain in eleven scans is a standing question.
         recurring = f"  (in {seen} scans)" if seen > 1 else ""
         print(f"  {r['principal'].rsplit('/', 1)[-1]}  {r['confidence']:.2f}{recurring}")
-        sends_to = reach.get(r["principal"], ())
-        if sends_to:
-            print(f"      reaches no model provider we recognise, and sends "
-                  f"{', '.join(sends_to)} far more than it gets back")
-            print("      if that is a model gateway, this is an agent — "
-                  f"custos declare {sends_to[0]} --account {args.account}")
         if r["unavailable"]:
             print(f"      could not evaluate: {', '.join(r['unavailable'])}"
                   " — low confidence may be for want of input")

@@ -12,7 +12,6 @@ function review(overrides: Partial<Review> = {}): Review {
     unavailable: [],
     scan_id: 12,
     seen_in_scans: 1,
-    sends_to: [],
     ...overrides,
   };
 }
@@ -52,41 +51,6 @@ describe("the review band", () => {
   it("says why a maybe with no evidence is here", () => {
     render(<Reviews reviews={[review({ evidence: [] })]} />);
     expect(screen.getByText(/nothing scored high enough/i)).toBeInTheDocument();
-  });
-
-  it("names the undeclared address a maybe reaches", () => {
-    // The strongest thing this list can say: a workload that resembles an
-    // agent, reaches no provider we recognise, and sends a transcript-shaped
-    // stream at an address nobody has declared is an agent behind a gateway.
-    render(<Reviews reviews={[review({ sends_to: ["10.0.7.40"] })]} />);
-    expect(screen.getByText("10.0.7.40")).toBeInTheDocument();
-    expect(screen.getByText(/if that is a model gateway/i)).toBeInTheDocument();
-  });
-
-  it("says nothing about gateways when there is nothing to say", () => {
-    // A note on every row is a note nobody reads.
-    render(<Reviews reviews={[review()]} />);
-    expect(screen.queryByText(/if that is a model gateway/i)).toBeNull();
-  });
-
-  it("keeps the order the API sent, which puts the correlated one first", () => {
-    // The correlated one deliberately scores lower, so a component that
-    // re-sorted by confidence — the obvious thing to reach for — would put it
-    // second and fail here.
-    render(
-      <Reviews
-        reviews={[
-          review({
-            principal: "role/deploy-remediation",
-            confidence: 0.41,
-            sends_to: ["10.0.7.40"],
-          }),
-          review({ principal: "role/ci-runner", confidence: 0.68 }),
-        ]}
-      />,
-    );
-    const names = screen.getAllByText(/deploy-remediation|ci-runner/);
-    expect(names[0]).toHaveTextContent("deploy-remediation");
   });
 
   it("offers nothing to click", () => {

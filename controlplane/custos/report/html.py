@@ -109,29 +109,14 @@ class Review:
     confidence: float
     evidence: tuple[str, ...] = ()
     seen_in_scans: int = 1
-    sends_to: tuple[str, ...] = ()
-    """Undeclared internal addresses this workload sends a transcript-shaped
-    stream at while reaching no model provider we recognise.
-
-    Not decoration. A maybe with one of these is the specific shape of an
-    agent behind a self-hosted gateway, and the person reading the report is
-    the one who can say in a minute whether that address is a gateway."""
 
     @classmethod
-    def from_verdict(
-        cls, verdict: Verdict, sends_to: tuple[str, ...] = ()
-    ) -> Review:
+    def from_verdict(cls, verdict: Verdict) -> Review:
         return cls(
             principal=verdict.principal,
             confidence=verdict.confidence,
             evidence=tuple(verdict.evidence),
-            sends_to=sends_to,
         )
-
-    @property
-    def sort_key(self) -> tuple:
-        """Correlated maybes first, then by confidence."""
-        return (not self.sends_to, -self.confidence, self.principal)
 
 
 def _recurrence(seen: int) -> str:
@@ -148,21 +133,21 @@ def _recurrence(seen: int) -> str:
     )
 
 
-def _gateway_note(review: Review) -> str:
-    """The sentence that turns two weak signals into one answerable question.
+@dataclass(frozen=True, slots=True)
+class Question:
+    """An internal address that behaves like a model endpoint, and who reaches it.
 
-    Deliberately phrased as something the reader can check rather than as a
-    verdict. Whether 10.0.7.40 is a model gateway is a fact the workload's
-    owner knows and we do not.
+    Not a finding, and printed in its own section for that reason. Everything
+    else in this document is something we concluded; this is the one thing we
+    are asking. It matters more than its size suggests: a workload whose model
+    calls go through an address we do not recognise has no model traffic we
+    can see, so it produces no finding of any kind — and a report with nothing
+    in it is exactly what that account looks like.
     """
-    if not review.sends_to:
-        return ""
-    addresses = ", ".join(_e(a) for a in review.sends_to)
-    return f"""
-      <p class="note">This workload reaches no model provider we recognise, and
-      sends far more than it receives back to {addresses} — an address nobody
-      has declared as a model endpoint. If that is a self-hosted model gateway,
-      this is an agent rather than a maybe.</p>"""
+
+    address: str
+    question: str
+    reached_by: tuple[str, ...] = ()
 
 
 def _review_row(review: Review) -> str:
@@ -178,7 +163,6 @@ def _review_row(review: Review) -> str:
         <div><dt>Confidence</dt><dd>{review.confidence:.2f}</dd></div>
         {_recurrence(review.seen_in_scans)}
       </dl>
-      {_gateway_note(review)}
       <details><summary>What was observed</summary>
         <ul class="evidence">{evidence}</ul></details>
     </article>"""
@@ -406,6 +390,7 @@ def render(
     coverage: Coverage | None = None,
     declared: list[str] | None = None,
     reviews: list[Review] | None = None,
+    questions: list[Question] | None = None,
 ) -> str:
     """Render the scan report as a single self-contained HTML document.
 
@@ -464,6 +449,7 @@ def render(
 
 {_unattributed_section(unattributed)}
 {_drift_section(drift or [], result.register.agents)}
+{_questions_section(questions or [])}
 {_review_section(review_rows)}
 
 <section>
@@ -491,22 +477,52 @@ def _unattributed_section(agents: list[Agent]) -> str:
 </section>"""
 
 
+def _questions_section(questions: list[Question]) -> str:
+    """The one section of this document that asks rather than concludes.
+
+    Placed after the findings and before the review band, because it changes
+    how the rest is read: an account with an undeclared gateway has agents
+    that produce no evidence at all, and a short findings list above an open
+    question here means much less than a short findings list alone.
+    """
+    if not questions:
+        return ""
+    rows = "".join(
+        f"""
+    <article class="finding question">
+      <header>
+        <h3 class="mono">{_e(q.address)}</h3>
+        <span class="radius">needs an answer</span>
+      </header>
+      <p>{_e(q.question)}</p>
+      {f'<p class="who">Reached by {_e(", ".join(_short_principal(p) for p in q.reached_by))}.</p>'
+       if q.reached_by else ""}
+    </article>"""
+        for q in questions
+    )
+    return f"""
+<section>
+  <h2>Questions</h2>
+  <p class="lede">Internal addresses that behave like model endpoints: far more
+  sent than received, by workloads that never reach a model provider we
+  recognise. Nothing here has been classified as anything — a heuristic that
+  promoted an internal address to a model endpoint on its own would manufacture
+  agents out of any busy internal service. If one of these is a model gateway,
+  declare it and the next scan will see what runs behind it.</p>
+  {rows}
+</section>"""
+
+
 def _review_section(reviews: list[Review]) -> str:
     if not reviews:
         return ""
-    first_note = (
-        "Read the ones naming an undeclared address first."
-        if any(r.sends_to for r in reviews)
-        else ""
-    )
     return f"""
 <section>
   <h2>For review</h2>
   <p class="lede">Workloads that resemble agents without meeting the bar. Most
   are batch jobs or build pipelines. They appear here rather than in the
-  register because discovery is not permitted to decide this on its own.
-  {first_note}</p>
-  {"".join(_review_row(r) for r in sorted(reviews, key=lambda r: r.sort_key))}
+  register because discovery is not permitted to decide this on its own.</p>
+  {"".join(_review_row(r) for r in reviews)}
 </section>"""
 
 
@@ -576,9 +592,9 @@ h2{font-family:var(--display);font-size:1.9rem;margin:0 0 .75rem;font-weight:600
   text-transform:uppercase;color:var(--ink-faint);margin-right:.5rem}
 details summary{cursor:pointer;font-family:var(--mono);font-size:.7rem;
   letter-spacing:.1em;text-transform:uppercase;color:var(--seal)}
-.note{margin:.85rem 0 0;padding:.7rem .9rem;font-size:.88rem;
-  color:var(--ink);background:var(--paper);border-left:2px solid var(--amber);
-  max-width:44rem}
+.finding.question{border-left-color:var(--amber)}
+.finding.question p{margin:.5rem 0 0;max-width:46rem}
+.finding.question .who{color:var(--ink-soft);font-size:.86rem}
 .evidence{margin:.85rem 0 0;padding-left:1.1rem;font-size:.86rem;
   color:var(--ink-soft);max-width:44rem}
 .evidence li{margin-bottom:.5rem}

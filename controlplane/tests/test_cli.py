@@ -460,36 +460,32 @@ def stress_batch_path(tmp_path_factory):
     return path
 
 
-def test_reviews_names_the_undeclared_address_a_maybe_reaches(
+def test_the_written_report_carries_the_open_questions(
     tmp_path, capsys, stress_batch_path
 ):
-    """The join. "Is 10.0.7.40 a gateway?" and "deploy-remediation might be an
-    agent" were being printed by two different commands."""
+    """A workload behind an undeclared gateway produces no finding at all, so
+    the account looks clean. The document that gets forwarded has to carry the
+    one thing that would change how it is read."""
     db = tmp_path / "join.db"
-    main(["--db", str(db), "scan", str(stress_batch_path)])
+    report = tmp_path / "stress.html"
+    main(["--db", str(db), "scan", str(stress_batch_path), "--out", str(report)])
     capsys.readouterr()
 
-    assert main(["--db", str(db), "reviews", "--account", ACCOUNT]) == 0
-    out = capsys.readouterr().out
-
-    assert "10.0.7.40" in out
-    assert "custos declare 10.0.7.40" in out, "say what to do about it"
-    # The correlated maybe is printed before the uncorrelated ones.
-    assert out.index("deploy-remediation") < out.index("10.0.7.40") + len(out)
-    first = [ln for ln in out.splitlines() if ln.startswith("  ") and not ln.startswith("      ")]
-    assert "deploy-remediation" in first[0]
+    page = report.read_text()
+    assert "<h2>Questions</h2>" in page
+    assert "10.0.7.40" in page
+    assert "deploy-remediation" in page
 
 
-def test_reviews_on_the_base_corpus_names_no_address(tmp_path, capsys, batch_file):
+def test_the_base_corpus_report_asks_nothing(tmp_path, capsys, batch_file):
     """The half that matters: the base corpus hides nothing behind a gateway,
-    so a note here would be teaching an operator to skip the section."""
+    so a section here would be teaching a reader to skip it."""
     db = tmp_path / "quiet.db"
-    main(["--db", str(db), "scan", str(batch_file)])
+    report = tmp_path / "base.html"
+    main(["--db", str(db), "scan", str(batch_file), "--out", str(report)])
     capsys.readouterr()
 
-    main(["--db", str(db), "reviews", "--account", ACCOUNT])
-    out = capsys.readouterr().out
-    assert "if that is a model gateway" not in out
+    assert "<h2>Questions</h2>" not in report.read_text()
 
 
 def test_gateways_stops_asking_once_the_address_is_declared(

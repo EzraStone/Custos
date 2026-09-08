@@ -855,37 +855,25 @@ def stress_payload():
     return payload
 
 
-# Two screens were showing the same workload twice without saying so: "is
-# 10.0.7.40 a gateway?" and "deploy-remediation might be an agent". They are
-# one question, and it is the case the declaration mechanism exists for.
-def test_a_maybe_that_reaches_an_undeclared_address_says_so(client, stress_payload):
+# A workload whose model calls go through an address we do not recognise
+# produces no finding of any kind, so an account with one looks clean. The
+# report has to carry the question, or the document says nothing about the one
+# thing that would change how it is read.
+def test_the_report_carries_the_open_gateway_questions(client, stress_payload):
     client.post("/v1/batches", json=stress_payload, headers=AUTH)
-    reviews = client.get("/v1/reviews", headers=AUTH).json()["reviews"]
+    page = client.get("/v1/report", headers=AUTH).text
 
-    correlated = [r for r in reviews if r["sends_to"]]
-    assert correlated, "the stress corpus has an agent behind a gateway"
-    assert "10.0.7.40" in correlated[0]["sends_to"]
-    assert "deploy-remediation" in correlated[0]["principal"]
+    assert "<h2>Questions</h2>" in page
+    assert "10.0.7.40" in page
+    assert "Is it a model gateway?" in page
+    assert "deploy-remediation" in page, "name who reaches it"
 
 
-def test_a_correlated_maybe_is_listed_first(client, stress_payload):
-    """It is the one a person should look at, and a list read top-down is the
-    only ordering anyone actually uses."""
+def test_a_declared_address_leaves_the_report(client, stress_payload):
+    """Declared is answered. A report that keeps asking makes the declaration
+    look ignored."""
     client.post("/v1/batches", json=stress_payload, headers=AUTH)
-    reviews = client.get("/v1/reviews", headers=AUTH).json()["reviews"]
-    if len(reviews) < 2:
-        pytest.skip("needs more than one maybe to have an order")
-
-    correlated = [bool(r["sends_to"]) for r in reviews]
-    assert correlated == sorted(correlated, reverse=True)
-
-
-def test_answering_the_question_removes_it_from_the_maybe(client, stress_payload):
-    """Declared is answered. Continuing to cite a declared address as an open
-    question would make the declaration look ignored."""
-    client.post("/v1/batches", json=stress_payload, headers=AUTH)
-    before = client.get("/v1/reviews", headers=AUTH).json()["reviews"]
-    assert any("10.0.7.40" in r["sends_to"] for r in before), "nothing to answer"
+    assert "<h2>Questions</h2>" in client.get("/v1/report", headers=AUTH).text
 
     client.post(
         "/v1/endpoints",
@@ -893,17 +881,21 @@ def test_answering_the_question_removes_it_from_the_maybe(client, stress_payload
               "operator": "ezra@custos.dev"},
         headers=AUTH,
     )
+    page = client.get("/v1/report", headers=AUTH).text
+    questions = page.split("<h2>Questions</h2>", 1)[1].split("</section>", 1)[0]
 
-    after = client.get("/v1/reviews", headers=AUTH).json()["reviews"]
-    assert all("10.0.7.40" not in r["sends_to"] for r in after)
+    assert "10.0.7.40" not in questions
+    # It moves from a question to a stated limitation: the reader still needs
+    # to know the account declared it, because that is why anything behind it
+    # is visible at all.
+    assert "declared 10.0.7.40/32" in page
 
 
-def test_the_join_is_silent_when_nothing_is_behind_a_gateway(client, realistic_payload):
-    """The half that matters. A signal that fires on the base corpus, which
-    has no hidden gateway, would be teaching a customer to ignore it."""
+def test_no_questions_section_when_there_is_nothing_to_ask(client, realistic_payload):
+    """The base corpus hides nothing behind a gateway. A section that appeared
+    anyway would teach a reader to skip it."""
     _ingest_real_batch(client, realistic_payload)
-    reviews = client.get("/v1/reviews", headers=AUTH).json()["reviews"]
-    assert all(not r["sends_to"] for r in reviews)
+    assert "<h2>Questions</h2>" not in client.get("/v1/report", headers=AUTH).text
 
 
 def test_reviews_offer_no_way_into_the_register(client):

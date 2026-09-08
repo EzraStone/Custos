@@ -926,7 +926,6 @@ describe("the review band, in the page", () => {
     unavailable: [],
     scan_id: 12,
     seen_in_scans: 4,
-    sends_to: [],
   };
 
   it("shows the maybes rather than pointing at a report", async () => {

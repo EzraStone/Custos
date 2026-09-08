@@ -17,7 +17,7 @@ from custos.register.model import (
     Status,
 )
 from custos.register.store import Register
-from custos.report import Review, render
+from custos.report import Question, Review, render
 from custos.scan import ScanResult
 
 from .conftest import prose
@@ -112,39 +112,37 @@ def test_review_candidates_are_not_presented_as_agents(page):
 # --- the review band --------------------------------------------------------
 
 
-def test_a_maybe_reaching_an_undeclared_address_says_what_it_would_mean():
-    """The strongest thing the review section can say. A workload with no
-    recognised model traffic sending a transcript-shaped stream at an
-    undeclared address is an agent behind a gateway, and the reader is the one
-    who can confirm it."""
+def test_the_questions_section_asks_rather_than_concludes():
+    """The one section of the report that is a question. A workload behind an
+    undeclared gateway produces no finding at all, so an account with one looks
+    clean — and a clean report above an open question here means much less than
+    a clean report alone."""
     page = render(
         result([agent()]), "acme", T0,
-        reviews=[Review(principal="role/deploy-remediation", confidence=0.52,
-                        evidence=("Sent 40MB, received 2MB.",),
-                        sends_to=("10.0.7.40",))],
+        questions=[Question(address="10.0.7.40",
+                            question="10.0.7.40 received 40.0MB. Is it a model gateway?",
+                            reached_by=("arn:aws:iam::1:role/deploy-remediation",))],
     )
-    assert "10.0.7.40" in page
-    assert "If that is a self-hosted model gateway" in page
-    assert "an agent rather than a maybe" in page
+    assert "<h2>Questions</h2>" in page
+    assert "Is it a model gateway?" in page
+    assert "deploy-remediation" in page
+    assert "declare it and the next scan" in page
 
 
-def test_an_ordinary_maybe_says_nothing_about_gateways(page):
-    """A note on every row is a note nobody reads."""
-    assert "self-hosted model gateway" not in page
+def test_no_questions_section_when_there_is_nothing_to_ask(page):
+    """A section that appears whatever happened is one a reader skips."""
+    assert "<h2>Questions</h2>" not in page
 
 
-def test_the_correlated_maybe_is_printed_first():
-    """It scores lower here on purpose: a section that ordered by confidence —
-    the obvious thing — would put it second."""
+def test_a_question_never_reads_as_a_finding():
+    """A heuristic that promoted an internal address to a model endpoint would
+    manufacture agents out of any busy internal service."""
     page = render(
-        result([agent()]), "acme", T0,
-        reviews=[
-            Review(principal="role/ci-runner", confidence=0.68),
-            Review(principal="role/deploy-remediation", confidence=0.41,
-                   sends_to=("10.0.7.40",)),
-        ],
+        result(), "acme", T0,
+        questions=[Question(address="10.0.7.40", question="Is it a model gateway?")],
     )
-    assert page.index("deploy-remediation") < page.index("ci-runner")
+    assert "No unsanctioned agents found." in page
+    assert "needs an answer" in page
 
 
 def test_a_maybe_seen_once_does_not_say_how_often():
@@ -155,12 +153,13 @@ def test_a_maybe_seen_once_does_not_say_how_often():
     assert "Seen in" not in page
 
 
-def test_an_address_in_a_review_is_escaped():
+def test_an_address_in_a_question_is_escaped():
     """It reaches the page from telemetry, which is attacker-influenced."""
     page = render(
         result([agent()]), "acme", T0,
-        reviews=[Review(principal="role/x", confidence=0.5,
-                        sends_to=('<script>alert("x")</script>',))],
+        questions=[Question(address='<script>alert("x")</script>',
+                            question='<script>alert("q")</script>',
+                            reached_by=('<script>alert("p")</script>',))],
     )
     assert "<script>alert" not in page
 

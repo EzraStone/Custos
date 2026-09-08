@@ -25,12 +25,11 @@ from ..catalog import RANGES_REVISION
 from ..deliver import Channel, notify
 from ..deliver import config as deliver_config
 from ..diff import ScanDiff, compare
-from ..gateway import Candidate, blind_reach
 from ..logging import event, get
 from ..pipeline import ingest
 from ..register.model import Status
 from ..register.store import Register, TransitionError
-from ..report import Coverage, Review, render
+from ..report import Coverage, Question, Review, render
 from ..scan import ScanResult
 from ..spend import PRICES_REVISION
 from ..store.agents import AgentStore
@@ -467,25 +466,13 @@ def create_app(
         """
         account_id = scope(principal, account)
         reviews = ReviewStore(app.state.db)
-        reach = blind_reach([
-            Candidate.from_row(c) for c in _open_questions(account_id)
-        ])
-
-        rows = [
-            {
-                **r,
-                "seen_in_scans": reviews.recurrence(account_id, r["principal"]),
-                # The join. A maybe that also sends a transcript-shaped stream
-                # at an address nobody has declared is not two weak signals; it
-                # is the shape of an agent behind a gateway.
-                "sends_to": list(reach.get(r["principal"], ())),
-            }
-            for r in reviews.latest_for(account_id)
-        ]
-        # Correlated maybes first. Everything else keeps the store's order,
-        # which is confidence descending.
-        rows.sort(key=lambda r: (not r["sends_to"],))
-        return {"account_id": account_id, "reviews": rows}
+        return {
+            "account_id": account_id,
+            "reviews": [
+                {**r, "seen_in_scans": reviews.recurrence(account_id, r["principal"])}
+                for r in reviews.latest_for(account_id)
+            ],
+        }
 
     def _open_questions(account_id: str) -> list[dict]:
         """Gateway questions this account has not answered.
@@ -792,18 +779,19 @@ def create_app(
         # account whose console has three of them, and the report is the
         # artefact that gets forwarded.
         reviews = ReviewStore(app.state.db)
-        reach = blind_reach([
-            Candidate.from_row(c) for c in _open_questions(account_id)
-        ])
         candidates = [
             Review(
                 principal=r["principal"],
                 confidence=r["confidence"],
                 evidence=tuple(r["evidence"]),
                 seen_in_scans=reviews.recurrence(account_id, r["principal"]),
-                sends_to=reach.get(r["principal"], ()),
             )
             for r in reviews.latest_for(account_id)
+        ]
+        questions = [
+            Question(address=q["address"], question=q["question"],
+                     reached_by=tuple(q["blind_principals"]))
+            for q in _open_questions(account_id)
         ]
 
         return HTMLResponse(render(
@@ -814,6 +802,7 @@ def create_app(
                 for r in DeclarationStore(app.state.db).records_for(account_id)
             ],
             reviews=candidates,
+            questions=questions,
         ))
 
     @app.get("/v1/agents/{agent_id}/audit")

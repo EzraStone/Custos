@@ -222,7 +222,7 @@ Workloads the classifier was unsure about in the last scan.
       "confidence": 0.69,
       "evidence": ["Sent 2.1MB and received 890.0KB, a ratio of 2.4:1."],
       "unavailable": ["decoupling"],
-      "scan_id": 12, "seen_in_scans": 7, "sends_to": [] }
+      "scan_id": 12, "seen_in_scans": 7 }
   ]
 }
 ```
@@ -239,17 +239,11 @@ guarantee about how an agent got there conditional on nobody having used it.
 one uncertain window; one uncertain in every scan for a month is a different
 thing, and the count is the only way to tell them apart.
 
-`sends_to` is the join with `GET /v1/gateway-candidates`, and a non-empty one
-changes what this row means. It lists undeclared internal addresses this
-workload sends a transcript-shaped stream at while reaching no model provider
-we recognise. That is not two weak signals — it is the specific shape of an
-agent behind a self-hosted gateway, which is the case
-`POST /v1/endpoints` exists for. Rows with a non-empty `sends_to` are listed
-first.
-
-An address disappears from `sends_to` as soon as it is declared, without
-waiting for the next scan: a declared address is an answered question, and
-citing it again would make the declaration look ignored.
+A workload with no recognised model traffic at all does not appear here. Its
+model-traffic signals are unavailable rather than zero, so it is not scored —
+see `GET /v1/gateway-candidates`, which names the workloads reaching each
+undeclared address. That is the surface for a workload we cannot see, and it
+asks a question rather than reporting a low confidence.
 
 `unavailable` names the signals that could not be evaluated — usually the
 decoupling signal, when the account has no load balancer access logs. A
