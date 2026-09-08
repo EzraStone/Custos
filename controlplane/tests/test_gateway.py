@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from custos.classify.episodes import sessionize
-from custos.gateway import candidates
+from custos.gateway import Candidate, blind_reach, candidates
 from custos.telemetry import Direction, FlowRecord
 
 START = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
@@ -101,3 +101,56 @@ def test_the_question_says_what_was_measured():
 def test_nothing_is_offered_for_an_account_with_no_internal_traffic():
     records = _flows("eni-1", "160.79.104.10", 40, 140_000, 9_000)
     assert candidates(_telemetry(records, {"eni-1": "role/agent"})) == []
+
+
+# --- the join with the review band --------------------------------------------
+
+
+def test_blind_reach_inverts_the_candidate_list():
+    records = _flows("eni-1", "10.0.7.9", 40, 140_000, 9_000)
+    records += _flows("eni-2", "10.0.7.9", 40, 140_000, 9_000)
+    found = candidates(_telemetry(records, {"eni-1": "role/a", "eni-2": "role/b"}))
+
+    assert blind_reach(found) == {
+        "role/a": ("10.0.7.9",),
+        "role/b": ("10.0.7.9",),
+    }
+
+
+def test_a_workload_reaching_two_candidates_carries_both():
+    records = _flows("eni-1", "10.0.7.9", 40, 140_000, 9_000)
+    records += _flows("eni-1", "10.0.8.9", 40, 140_000, 9_000)
+    records += _flows("eni-2", "10.0.7.9", 40, 140_000, 9_000)
+    records += _flows("eni-2", "10.0.8.9", 40, 140_000, 9_000)
+    found = candidates(_telemetry(records, {"eni-1": "role/a", "eni-2": "role/b"}))
+
+    assert blind_reach(found)["role/a"] == ("10.0.7.9", "10.0.8.9")
+
+
+def test_a_workload_with_recognised_model_traffic_is_not_in_the_reach():
+    """Its traffic to an internal address is tool calls. Nothing is hidden, so
+    correlating it with a review verdict would be a false lead."""
+    records = _flows("eni-1", "10.0.7.9", 40, 140_000, 9_000)
+    records += _flows("eni-2", "10.0.7.9", 40, 140_000, 9_000)
+    # eni-2 also talks to a provider we recognise, so it is not blind.
+    records += _flows("eni-2", "160.79.104.10", 20, 90_000, 6_000)
+
+    found = candidates(_telemetry(records, {"eni-1": "role/a", "eni-2": "role/b"}))
+    assert "role/b" not in blind_reach(found)
+
+
+def test_blind_reach_of_nothing_is_nothing():
+    assert blind_reach([]) == {}
+
+
+def test_a_stored_candidate_rebuilds_into_the_same_thing():
+    """The join has to work on questions read back from the store, which is
+    where every caller that matters gets them."""
+    records = _flows("eni-1", "10.0.7.9", 40, 140_000, 9_000)
+    original = candidates(_telemetry(records, {"eni-1": "role/a"}))[0]
+    row = {
+        "address": original.address, "egress": original.egress,
+        "ingress": original.ingress, "principals": list(original.principals),
+        "blind_principals": list(original.blind_principals),
+    }
+    assert Candidate.from_row(row) == original

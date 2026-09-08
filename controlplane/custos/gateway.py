@@ -62,6 +62,16 @@ class Candidate:
     behind a gateway or is not an agent at all.
     """
 
+    @classmethod
+    def from_row(cls, row: dict) -> Candidate:
+        """Rebuild a candidate the store wrote, so the functions below work on
+        stored questions as well as freshly computed ones."""
+        return cls(
+            address=row["address"], egress=row["egress"], ingress=row["ingress"],
+            principals=tuple(row["principals"]),
+            blind_principals=tuple(row["blind_principals"]),
+        )
+
     @property
     def ratio(self) -> float:
         return self.egress / max(self.ingress, 1)
@@ -142,3 +152,30 @@ def candidates(telemetry: list[PrincipalTelemetry], limit: int = 5) -> list[Cand
 
     found.sort(key=lambda c: (-len(c.blind_principals), -c.egress, c.address))
     return found[:limit]
+
+
+def blind_reach(found: list[Candidate]) -> dict[str, tuple[str, ...]]:
+    """Which workloads reach an undeclared candidate without any model traffic.
+
+    The inverse of the candidate list, and the join nobody was making. A
+    gateway question and a review candidate were being shown on the same
+    screen with no indication that they were about the same workload:
+
+        "Is 10.0.7.40 a model gateway?"
+        "deploy-remediation might be an agent, confidence 0.52."
+
+    Those are one question. A workload that resembles an agent, has no model
+    traffic we recognise, and sends a transcript-shaped stream at an address
+    nobody has declared is not two weak signals — it is the specific shape of
+    an agent behind a gateway, which is the case the whole declaration
+    mechanism exists for.
+
+    On the stress corpus this names `deploy-remediation`, which is a labelled
+    agent that the classifier can only reach the review band on. It is the one
+    workload in that corpus a customer most needs to be asked about.
+    """
+    reach: dict[str, set[str]] = {}
+    for candidate in found:
+        for principal in candidate.blind_principals:
+            reach.setdefault(principal, set()).add(candidate.address)
+    return {p: tuple(sorted(a)) for p, a in sorted(reach.items())}
