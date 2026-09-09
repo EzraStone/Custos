@@ -106,6 +106,9 @@ type Config struct {
 	HaveEndpoint  bool
 	HaveToken     bool
 	ProbeInterval time.Duration
+
+	// Format the flow log is written in. The zero value means Custos's own.
+	Format flowlogs.Format
 }
 
 // Namer resolves destination names, so preflight can say how much of the
@@ -128,6 +131,7 @@ func Run(ctx context.Context, cfg Config, flows FlowSource, names Namer) Report 
 	var report Report
 
 	checkConfiguration(&report, cfg)
+	checkFormat(&report, cfg)
 	checkAccessLogs(&report, cfg)
 
 	if flows == nil {
@@ -141,6 +145,42 @@ func Run(ctx context.Context, cfg Config, flows FlowSource, names Namer) Report 
 	checkDestinationNames(ctx, &report, names, records)
 	checkForGateway(&report, records)
 	return report
+}
+
+// checkFormat says what the account's flow log format costs, before the scan.
+//
+// A customer reading their existing log group is doing the cheaper thing, and
+// most existing log groups are in the 2014 default format. That format works —
+// but it has no ports, no AWS service annotations and no flow direction, and
+// each absence changes what the report can say. Discovering that from a thin
+// report a week later is the same failure this whole package exists to
+// prevent: an empty result that looks like a clean account.
+func checkFormat(r *Report, cfg Config) {
+	format := cfg.Format
+	if format.Count() == 0 {
+		format = flowlogs.Default
+	}
+
+	if missing := format.Missing(); len(missing) > 0 {
+		r.add("flow log fields", Fail,
+			fmt.Sprintf("missing %s", strings.Join(missing, ", ")),
+			"a scan cannot mean anything without these; add them to the flow "+
+				"log format, or point CUSTOS_FLOW_LOGS at a log configured by "+
+				"the Custos terraform module")
+		return
+	}
+
+	degradations := format.Degradations()
+	if len(degradations) == 0 {
+		r.add("flow log fields", Pass,
+			fmt.Sprintf("%d fields, nothing missing", format.Count()), "")
+		return
+	}
+
+	r.add("flow log fields", Warn,
+		fmt.Sprintf("%d fields; %s", format.Count(), strings.Join(degradations, "; ")),
+		"the scan will run and each absence above is what it costs; adding the "+
+			"fields to your flow log format is a change to the log, not to Custos")
 }
 
 // checkForGateway names internal addresses that might be swallowing this

@@ -263,6 +263,11 @@ func preflightCheck(ctx context.Context, cfg *config.Config, stdout *os.File) er
 		HaveEndpoint: cfg.Endpoint != "",
 		HaveToken:    cfg.Token != "",
 	}
+	// Reported even when credentials are absent: the format is the one thing
+	// preflight can check about the log without being able to read it.
+	if format, err := cfg.Format(); err == nil {
+		pf.Format = format
+	}
 
 	var (
 		source preflight.FlowSource

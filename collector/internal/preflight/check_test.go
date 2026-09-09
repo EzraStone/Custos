@@ -400,3 +400,66 @@ func TestAnAccountWithNoInternalTrafficIsNotWarned(t *testing.T) {
 		}
 	}
 }
+
+// --- the account's own flow log format ---------------------------------------
+
+// The format an account gets by turning flow logs on and configuring nothing.
+const defaultAWSFormat = "version account-id interface-id srcaddr dstaddr " +
+	"srcport dstport protocol packets bytes start end action log-status"
+
+func TestOurOwnFormatPassesWithNothingToSay(t *testing.T) {
+	report := run(good(), stubFlows{records: modelTraffic(60), stats: flowlogs.Stats{Lines: 60, Parsed: 60}})
+	if got := find(t, report, "flow log fields").Status; got != Pass {
+		t.Fatalf("status %v", got)
+	}
+}
+
+func TestTheDefaultAwsFormatWarnsAndSaysWhatItCosts(t *testing.T) {
+	// Discovering this from a thin report a week later is the same failure
+	// this package exists to prevent: an empty result that reads as clean.
+	cfg := good()
+	cfg.Format = flowlogs.MustParseFormat(defaultAWSFormat)
+
+	result := find(t, run(cfg, stubFlows{
+		records: modelTraffic(60), stats: flowlogs.Stats{Lines: 60, Parsed: 60},
+	}), "flow log fields")
+
+	if result.Status != Warn {
+		t.Fatalf("status %v", result.Status)
+	}
+	if !strings.Contains(result.Detail, "flow-direction absent") {
+		t.Fatalf("detail does not name the cost: %q", result.Detail)
+	}
+	if !strings.Contains(result.Remedy, "change to the log, not to Custos") {
+		t.Fatalf("remedy does not say where the fix lives: %q", result.Remedy)
+	}
+}
+
+func TestADegradedFormatDoesNotBlockTheScan(t *testing.T) {
+	// It costs recall. Refusing to scan over it would turn a degraded result
+	// into no result.
+	cfg := good()
+	cfg.Format = flowlogs.MustParseFormat(defaultAWSFormat)
+
+	if !run(cfg, stubFlows{records: modelTraffic(60), stats: flowlogs.Stats{Lines: 60, Parsed: 60}}).Ready() {
+		t.Fatal("a workable format blocked the scan")
+	}
+}
+
+func TestAFormatMissingSomethingRequiredBlocks(t *testing.T) {
+	cfg := good()
+	cfg.Format = flowlogs.MustParseFormat("version interface-id srcaddr dstaddr")
+
+	report := run(cfg, stubFlows{records: modelTraffic(60), stats: flowlogs.Stats{Lines: 60, Parsed: 60}})
+	result := find(t, report, "flow log fields")
+
+	if result.Status != Fail {
+		t.Fatalf("status %v", result.Status)
+	}
+	if !strings.Contains(result.Detail, "bytes") {
+		t.Fatalf("detail does not name what is missing: %q", result.Detail)
+	}
+	if report.Ready() {
+		t.Fatal("a scan that cannot mean anything was declared ready")
+	}
+}
