@@ -119,3 +119,36 @@ def test_the_message_does_not_overstate_what_tagging_changes():
     # optional tidy-up into a precondition and stalls onboarding.
     message = generate("447120043318", "https://custos.example").message
     assert "does not change what we find" in message
+
+
+# --- the cheaper path ---------------------------------------------------------
+
+
+def test_the_message_offers_the_flow_logs_they_already_have():
+    """The Terraform creates a second copy of their traffic, billed per
+    gigabyte, on top of a second change request. Both are reasons to stall that
+    have nothing to do with whether the product works."""
+    message = prose(generate(ACCOUNT, ENDPOINT).message)
+
+    assert "If you already have VPC Flow Logs, use those" in message
+    assert "bill per gigabyte" in message
+
+
+def test_the_message_says_what_we_need_for_each_delivery():
+    message = prose(generate(ACCOUNT, ENDPOINT).message)
+
+    assert "For S3 there is nothing else to send" in message
+    assert "send the format string you gave AWS" in message
+
+
+def test_the_message_names_the_fields_that_are_not_optional():
+    """Sending back a format missing one of these produces a scan that cannot
+    mean anything, and finding that out after the apply is a wasted week."""
+    message = prose(generate(ACCOUNT, ENDPOINT).message)
+
+    for field in ("interface-id", "srcaddr", "dstaddr", "bytes", "start", "end"):
+        assert field in message, field
+
+
+def test_the_collector_environment_mentions_the_format_variable():
+    assert "CUSTOS_FLOW_LOG_FORMAT" in generate(ACCOUNT, ENDPOINT).collector_env

@@ -63,6 +63,9 @@ class Onboarding:
             f"{self.account_id}:role/custos-discovery",
             "AWS_REGION=us-east-1",
             "CUSTOS_FLOW_LOGS=/aws/vpc/flowlogs",
+            "# Or point at flow logs you already keep, in whatever format they",
+            "# are. S3 needs nothing else; CloudWatch needs the format string:",
+            "# CUSTOS_FLOW_LOG_FORMAT=${version} ${account-id} ${interface-id} ...",
             "# CUSTOS_ACCESS_LOGS=s3://your-alb-logs/AWSLogs/...  "
             "# optional, lifts recall from 60% to 100%",
         ])
@@ -102,6 +105,18 @@ action. Removing it is `terraform destroy` and leaves nothing behind.
      terraform init && terraform apply
 
 3. Send back the `role_arn` output. That is the only thing we need.
+
+If you already have VPC Flow Logs, use those. The Terraform above creates one
+in our format, and you do not have to take it — flow logs bill per gigabyte
+ingested and a second copy of a busy account's traffic is a real line item, on
+top of a second change request. Point us at the log group or S3 prefix you
+already have instead.
+
+For S3 there is nothing else to send: AWS writes the field names at the top of
+every object and we read them. For CloudWatch, send the format string you gave
+AWS. Six fields have to be in it — interface-id, srcaddr, dstaddr, bytes,
+start, end — and `--check` tells you exactly what any others being absent
+costs, before you commit to anything.
 
 Optional and worth it: if you can also point us at your load balancer access
 logs, our recall goes from 60% to 100% — and the agents we miss without them
