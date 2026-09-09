@@ -585,3 +585,80 @@ func TestAnUnparseableLogPointsAtTheFormatVariableNotAtTerraform(t *testing.T) {
 		t.Fatalf("the remedy does not name the setting: %q", remedy)
 	}
 }
+
+// --- the promise this package makes -------------------------------------------
+
+// Every problem it reports carries something to do about it.
+//
+// The Result type says so in a comment — "a check that reports a problem
+// without one has moved the work rather than done it" — and nothing enforced
+// it. A check added later with a blank remedy would leave someone reading
+// "FAIL: flow log fields" with no idea what to change, which is the state this
+// whole package exists to get people out of.
+func TestEveryProblemComesWithSomethingToDo(t *testing.T) {
+	// Every shape of failure this package can produce, in one sweep.
+	reports := []Report{
+		run(good(), stubFlows{err: errors.New("AccessDenied")}),
+		run(good(), stubFlows{records: nil, stats: flowlogs.Stats{}}),
+		run(good(), stubFlows{
+			records: modelTraffic(1),
+			stats:   flowlogs.Stats{Lines: 400, Malformed: 400},
+		}),
+		run(noRole(), stubFlows{records: modelTraffic(60), stats: cleanStats()}),
+		run(noAccessLogs(), stubFlows{records: modelTraffic(60), stats: cleanStats()}),
+		run(defaultFormatConfig(), stubFlows{
+			records: append(modelTraffic(60), v6Records("2606:4700::1")...),
+			stats:   cleanStats(),
+		}),
+		Run(context.Background(), good(), nil, nil),
+	}
+
+	seen := map[string]bool{}
+	for _, report := range reports {
+		for _, result := range report.Results {
+			if result.Status == Pass {
+				continue
+			}
+			seen[result.Name] = true
+			if strings.TrimSpace(result.Remedy) == "" {
+				t.Errorf("%q reports %s with no remedy: %q",
+					result.Name, result.Status, result.Detail)
+			}
+		}
+	}
+
+	// Named rather than counted, so that a check added later is absent from
+	// this list rather than hidden inside a number that still passes.
+	for _, name := range []string{
+		"flow logs readable", "flow log format", "flow log fields",
+		"access logs", "ipv6 destinations", "aws reachability",
+	} {
+		if !seen[name] {
+			t.Errorf("%q never failed or warned in this sweep, so its remedy "+
+				"is untested; add a case that provokes it", name)
+		}
+	}
+}
+
+func cleanStats() flowlogs.Stats {
+	return flowlogs.Stats{Lines: 60, Parsed: 60}
+}
+
+func noRole() Config {
+	cfg := good()
+	cfg.RoleARN = ""
+	cfg.ExternalID = ""
+	return cfg
+}
+
+func noAccessLogs() Config {
+	cfg := good()
+	cfg.AccessLogs = ""
+	return cfg
+}
+
+func defaultFormatConfig() Config {
+	cfg := good()
+	cfg.Format = flowlogs.MustParseFormat(defaultAWSFormat)
+	return cfg
+}
