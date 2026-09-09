@@ -67,6 +67,20 @@ The same applies to a test for behaviour you are keeping: if you cannot think of
 an edit that would make it fail, it is describing the code rather than
 constraining it.
 
+**Clear `__pycache__` after a fast revert.** Break, run, restore, run — done
+quickly enough, the restore lands inside the same filesystem-timestamp second
+as the break, Python keeps the cached bytecode of the broken version, and the
+suite reports a failure that is not there. It looks exactly like a revert that
+did not apply, which is the worst thing for it to look like: the obvious next
+move is to go looking for a bug in code that is already correct.
+
+```
+find controlplane -name __pycache__ -exec rm -rf {} +
+```
+
+Go does not have this problem — its build cache keys on content rather than
+timestamps.
+
 ## Meta-tests
 
 Several tests in this repository test the repository rather than the product:
