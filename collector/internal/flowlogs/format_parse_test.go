@@ -136,3 +136,34 @@ func TestARecordIsNotMistakenForAHeader(t *testing.T) {
 		}
 	}
 }
+
+// TestOnlyRecognisedFieldNamesLeaveTheAccount enforces SEC-23 for the one
+// place a customer's own text could reach the wire.
+//
+// Collection.MissingFields on the wire is built from Absent(), and it is
+// derived from a flow log format the customer wrote, and a format may legitimately contain field names Custos has never
+// heard of. Shipping those would be forwarding customer text under a field
+// that claims to hold a fixed vocabulary.
+func TestOnlyRecognisedFieldNamesLeaveTheAccount(t *testing.T) {
+	format := MustParseFormat(
+		"interface-id srcaddr dstaddr bytes start end acme-internal-tag",
+	)
+	for _, name := range format.Absent() {
+		if name == "acme-internal-tag" {
+			t.Fatal("a customer's own field name reached the wire")
+		}
+		if !known[name] {
+			t.Fatalf("SEC-23: %q is not a name Custos recognises", name)
+		}
+	}
+}
+
+// known is every flow log field name Custos may ever put on the wire, written
+// out here rather than derived, so that widening the vocabulary in the parser
+// has to be a deliberate change in two places.
+var known = map[string]bool{
+	"interface-id": true, "srcaddr": true, "dstaddr": true, "bytes": true,
+	"start": true, "end": true, "account-id": true, "dstport": true,
+	"flow-direction": true, "log-status": true,
+	"pkt-dst-aws-service": true, "pkt-src-aws-service": true,
+}

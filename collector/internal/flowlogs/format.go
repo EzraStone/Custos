@@ -167,6 +167,29 @@ func (f Format) Degradations() []string {
 	return out
 }
 
+// Absent names the fields Custos uses that this format does not carry.
+//
+// Drawn from a fixed vocabulary — Required plus the optional fields above —
+// and never from the customer's own format string. SEC-23: only recognised
+// names leave the account, and a format may legitimately contain field names
+// we have never heard of.
+func (f Format) Absent() []string {
+	var out []string
+	for _, name := range Required {
+		if !f.Has(name) {
+			out = append(out, name)
+		}
+	}
+	names := make([]string, 0, len(optional))
+	for name := range optional {
+		if !f.Has(name) {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return append(out, names...)
+}
+
 // field returns the value at a named position, or "" when the format does not
 // carry it. Callers treat "" and AWS's own "-" the same way.
 func (f Format) field(fields []string, name string) string {

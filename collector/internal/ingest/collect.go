@@ -27,6 +27,11 @@ type FlowSource interface {
 // API calls proportional to the number of workloads rather than to the size of
 // the account.
 type Collector struct {
+	// Format the account's flow log is written in, for reporting what it does
+	// not carry. The reader has its own copy and uses it for parsing; this one
+	// exists so the batch can say what the report may not claim.
+	Format flowlogs.Format
+
 	Flows      FlowSource
 	Requests   RequestSource
 	Network    awsread.NetworkAPI
@@ -197,6 +202,7 @@ func (c *Collector) Collect(ctx context.Context, w awsread.Window) (wire.Batch, 
 		LinesMalformed: int64(stats.Malformed),
 		RecordsSkipped: int64(stats.SkipData + stats.NoData),
 		Truncated:      stats.Truncated,
+		MissingFields:  c.format().Absent(),
 	}
 	if err != nil {
 		// Keep what was read. The caller decides whether a partial window is
@@ -256,6 +262,8 @@ func (c *Collector) Collect(ctx context.Context, w awsread.Window) (wire.Batch, 
 		records, addressesByInterface(resolved),
 	)
 	batch.Flows = records
+	batch.Collection.DirectionInferred = int64(report.Direction.Inferred)
+	batch.Collection.DirectionUndecided = int64(report.Direction.Undecided)
 
 	// What the workloads reached, named. This is the half of the register an
 	// operator is asked to approve, and without it the scope is a list of
@@ -290,6 +298,13 @@ func (c *Collector) Collect(ctx context.Context, w awsread.Window) (wire.Batch, 
 	report.Principals = len(batch.Principals)
 
 	return batch, report, nil
+}
+
+func (c *Collector) format() flowlogs.Format {
+	if c.Format.Count() == 0 {
+		return flowlogs.Default
+	}
+	return c.Format
 }
 
 func addressesByInterface(attachments []wire.Attachment) map[string]string {

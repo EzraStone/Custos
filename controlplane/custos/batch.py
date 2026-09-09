@@ -127,6 +127,21 @@ class Collection(BaseModel):
     truncated: bool = False
     have_access_logs: bool = False
 
+    missing_fields: list[str] = Field(default_factory=list)
+    """Flow log fields the account's format does not carry.
+
+    A fixed vocabulary, never the customer's own format string (SEC-23).
+
+    It changes what the report may claim. An account whose format has no port
+    field has no MCP servers in its register, and a report that does not say so
+    is asserting an absence it never looked for.
+    """
+
+    direction_inferred: int = 0
+    direction_undecided: int = 0
+    """Records whose direction the format did not carry. The undecided ones
+    were dropped rather than guessed, so the second number is coverage lost."""
+
     @property
     def parsed_fraction(self) -> float:
         if self.lines_read <= 0:

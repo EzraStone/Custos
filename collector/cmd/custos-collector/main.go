@@ -180,6 +180,16 @@ func fromFile(cfg *config.Config, path string) (wire.Batch, ingest.Report, error
 		WindowStart: end.Add(-cfg.Window),
 		WindowEnd:   end,
 		Flows:       records,
+		Collection: wire.Collection{
+			LinesRead:          int64(stats.Lines),
+			LinesParsed:        int64(stats.Parsed),
+			LinesMalformed:     int64(stats.Malformed),
+			RecordsSkipped:     int64(stats.SkipData + stats.NoData),
+			Truncated:          stats.Truncated,
+			MissingFields:      format.Absent(),
+			DirectionInferred:  int64(direction.Inferred),
+			DirectionUndecided: int64(direction.Undecided),
+		},
 	}, ingest.Report{Stats: stats, Interfaces: interfaces, Direction: direction}, nil
 }
 
@@ -217,6 +227,7 @@ func fromAWSWindow(
 	}
 
 	collector := &ingest.Collector{
+		Format:     format,
 		Flows:      source,
 		Requests:   accessLogSource(cfg, clients),
 		Network:    clients.Network,

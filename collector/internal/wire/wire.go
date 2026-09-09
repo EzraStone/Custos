@@ -126,6 +126,24 @@ type Collection struct {
 	RecordsSkipped int64 `json:"records_skipped"`
 	Truncated      bool  `json:"truncated"`
 	HaveAccessLogs bool  `json:"have_access_logs"`
+
+	// MissingFields names the flow log fields Custos uses that this account's
+	// format does not carry.
+	//
+	// Drawn from a fixed vocabulary and never from the customer's own format
+	// string (SEC-23): a format may legitimately contain field names we have
+	// never heard of, and forwarding those would be forwarding customer text.
+	//
+	// It ships because it changes what the report may claim. An account whose
+	// format has no port field has no MCP servers in its register, and a
+	// report that does not say so is asserting an absence it never looked for.
+	MissingFields []string `json:"missing_fields,omitempty"`
+
+	// DirectionInferred and DirectionUndecided count records whose direction
+	// the format did not carry. Undecided ones were dropped, so the second
+	// number is coverage lost and belongs beside the parse counters.
+	DirectionInferred  int64 `json:"direction_inferred,omitempty"`
+	DirectionUndecided int64 `json:"direction_undecided,omitempty"`
 }
 
 // Batch is the unit of shipment. This is the complete set of things that ever
