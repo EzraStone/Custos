@@ -123,11 +123,16 @@ func TestAHeaderLineIsRecognised(t *testing.T) {
 }
 
 func TestARecordIsNotMistakenForAHeader(t *testing.T) {
-	// No flow log record contains the literal "srcaddr"; a header always does,
-	// because AWS refuses a format that omits it.
-	record := "2 447120043318 eni-0a1 10.0.1.5 160.79.104.10 41000 443 6 " +
-		"40 140000 1754827200 1754827259 ACCEPT OK"
-	if IsHeader(record) {
-		t.Fatal("a data line was treated as a header")
+	// A record cannot look like a header: the byte count and the two
+	// timestamps are numeric and log-status is upper case.
+	for _, record := range []string{
+		"2 447120043318 eni-0a1 10.0.1.5 160.79.104.10 41000 443 6 " +
+			"40 140000 1754827200 1754827259 ACCEPT OK",
+		"eni-0a1 10.0.1.5 10.0.7.40 140000 1754827200 1754827259",
+		"", "   ", "srcaddr",
+	} {
+		if IsHeader(record) {
+			t.Fatalf("treated as a header: %q", record)
+		}
 	}
 }

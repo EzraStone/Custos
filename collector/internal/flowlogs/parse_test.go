@@ -100,7 +100,7 @@ func TestSkipDataIsCountedNotHidden(t *testing.T) {
 }
 
 func TestHeaderAndBlankLinesAreIgnored(t *testing.T) {
-	input := "version account-id interface-id\n\n" + okLine + "\n\n"
+	input := LogFormatHeader + "\n\n" + okLine + "\n\n"
 	records, stats, err := Parse(strings.NewReader(input))
 	if err != nil {
 		t.Fatal(err)
@@ -120,5 +120,128 @@ func TestCoverageOfAnEmptyStreamIsZeroNotOne(t *testing.T) {
 func TestOverlongLineDoesNotPanic(t *testing.T) {
 	if _, _, err := Parse(strings.NewReader(strings.Repeat("x", 2<<20))); err == nil {
 		t.Log("overlong line handled without panic")
+	}
+}
+
+// --- reading a format we did not configure -----------------------------------
+
+// The format an account gets by turning flow logs on and configuring nothing.
+// It is what most existing log archives contain, and the reason a customer can
+// point Custos at logs they already pay for.
+const awsDefaultFormat = "version account-id interface-id srcaddr dstaddr " +
+	"srcport dstport protocol packets bytes start end action log-status"
+
+const awsDefaultLine = "2 447120043318 eni-0a1b2c3d 10.0.1.5 160.79.104.10 " +
+	"41000 443 6 40 140000 1754827200 1754827259 ACCEPT OK"
+
+func TestARecordInTheDefaultAwsFormatIsRead(t *testing.T) {
+	records, stats, err := ParseFormatted(
+		strings.NewReader(awsDefaultLine), MustParseFormat(awsDefaultFormat),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 || stats.Parsed != 1 {
+		t.Fatalf("got %d records, stats %+v", len(records), stats)
+	}
+
+	r := records[0]
+	if r.InterfaceID != "eni-0a1b2c3d" || r.DstAddr != "160.79.104.10" {
+		t.Fatalf("fields landed in the wrong columns: %+v", r)
+	}
+	if r.Bytes != 140000 || r.DstPort != 443 {
+		t.Fatalf("numbers landed in the wrong columns: %+v", r)
+	}
+	if r.Start.Unix() != 1754827200 {
+		t.Fatalf("timestamp: %v", r.Start)
+	}
+}
+
+func TestFieldsTheFormatDoesNotCarryComeBackEmptyNotWrong(t *testing.T) {
+	// The failure this guards against is worse than a missing value: reading
+	// position 16 of a 14-field line, or silently taking whatever is there.
+	records, _, _ := ParseFormatted(
+		strings.NewReader(awsDefaultLine), MustParseFormat(awsDefaultFormat),
+	)
+	r := records[0]
+	if r.Direction != "" {
+		t.Fatalf("direction invented: %q", r.Direction)
+	}
+	if r.DstAWSService != "" || r.SrcAWSService != "" {
+		t.Fatalf("AWS service invented: %q / %q", r.SrcAWSService, r.DstAWSService)
+	}
+	if r.TCPFlags != 0 || r.VpcID != "" {
+		t.Fatalf("absent fields did not come back zero: %+v", r)
+	}
+}
+
+func TestAFieldOrderWeHaveNeverSeenIsReadCorrectly(t *testing.T) {
+	// Nothing requires a customer's format to resemble ours. If fields were
+	// still being read by position this would decode into the wrong columns
+	// and report a clean account.
+	format := MustParseFormat("bytes end start dstaddr srcaddr interface-id")
+	line := "140000 1754827259 1754827200 160.79.104.10 10.0.1.5 eni-0a1b2c3d"
+
+	records, _, err := ParseFormatted(strings.NewReader(line), format)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("records %d err %v", len(records), err)
+	}
+	r := records[0]
+	if r.SrcAddr != "10.0.1.5" || r.DstAddr != "160.79.104.10" || r.Bytes != 140000 {
+		t.Fatalf("decoded into the wrong columns: %+v", r)
+	}
+}
+
+func TestTheHeaderInTheFileWinsOverTheConfiguredFormat(t *testing.T) {
+	// A stale --flow-log-format setting is otherwise a silent misparse of
+	// every line rather than an error. The file is what was actually written.
+	input := awsDefaultFormat + "\n" + awsDefaultLine
+
+	records, _, err := ParseFormatted(strings.NewReader(input), Default)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("the configured format was believed over the file: %d records", len(records))
+	}
+	if records[0].Bytes != 140000 {
+		t.Fatalf("decoded with the wrong format: %+v", records[0])
+	}
+}
+
+func TestAFormatMissingSomethingRequiredIsRefusedBeforeParsing(t *testing.T) {
+	// Loudly, and before any line is read. A parse that produced zero records
+	// would look exactly like an account with no traffic.
+	_, _, err := ParseFormatted(
+		strings.NewReader(awsDefaultLine),
+		MustParseFormat("version account-id interface-id srcaddr dstaddr"),
+	)
+	if err == nil {
+		t.Fatal("a format with no byte counts was parsed rather than refused")
+	}
+	if !strings.Contains(err.Error(), "bytes") {
+		t.Fatalf("the error does not name what is missing: %v", err)
+	}
+}
+
+func TestAHeaderMissingSomethingRequiredStopsTheRead(t *testing.T) {
+	input := "version account-id interface-id srcaddr dstaddr\n1 2 3 4 5"
+	if _, _, err := ParseFormatted(strings.NewReader(input), Default); err == nil {
+		t.Fatal("a log whose own header is unusable was read anyway")
+	}
+}
+
+func TestAFormatWithoutLogStatusTreatsEveryLineAsARecord(t *testing.T) {
+	// The only reading available. That it overstates coverage is what
+	// Degradations exists to say.
+	format := MustParseFormat("interface-id srcaddr dstaddr bytes start end")
+	line := "eni-0a1 10.0.1.5 10.0.7.40 140000 1754827200 1754827259"
+
+	_, stats, err := ParseFormatted(strings.NewReader(line), format)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Parsed != 1 || stats.NoData != 0 {
+		t.Fatalf("stats %+v", stats)
 	}
 }

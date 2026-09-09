@@ -63,6 +63,10 @@ var optional = map[string]string{
 		"the record",
 }
 
+// LogFormatHeader is LogFormat as AWS writes it at the top of an S3 object:
+// the same fields, named rather than templated.
+var LogFormatHeader = strings.Join(MustParseFormat(LogFormat).Fields(), " ")
+
 var fieldName = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
 var formatToken = regexp.MustCompile(`\$\{([^}]*)\}`)
@@ -179,14 +183,20 @@ func (f Format) field(fields []string, name string) string {
 // IsHeader reports whether a line is the field-name header AWS writes as the
 // first line of a flow log object delivered to S3.
 //
-// The test is that the line names the source address field rather than
-// containing one. No flow log record contains the literal "srcaddr", and a
-// header always does — AWS refuses a format that omits it.
+// The test is that every token is shaped like a field name: lower case,
+// starting with a letter. A record cannot be, because `bytes` and the two
+// timestamps are always numeric and `log-status` is upper case. Matching on a
+// "version " prefix instead would misread the first record of a format whose
+// first field happens to be a lower-case identifier.
 func IsHeader(line string) bool {
-	for _, token := range strings.Fields(line) {
-		if token == "srcaddr" {
-			return true
+	fields := strings.Fields(line)
+	if len(fields) < 2 {
+		return false
+	}
+	for _, token := range fields {
+		if !fieldName.MatchString(token) {
+			return false
 		}
 	}
-	return false
+	return true
 }

@@ -11,6 +11,7 @@ package flowlogs
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -52,25 +53,65 @@ func (s Stats) Coverage() float64 {
 	return float64(s.Parsed) / float64(s.Lines)
 }
 
-// Parse reads flow log lines and returns wire records plus statistics.
+// Default is the format Custos's own Terraform module configures.
+var Default = MustParseFormat(LogFormat)
+
+// Parse reads flow log lines in Custos's own format.
+//
+// Kept as the zero-argument spelling because it is what a caller reading a
+// log group the Terraform module created wants, and because every existing
+// caller and test means exactly this.
 func Parse(r io.Reader) ([]wire.FlowRecord, Stats, error) {
+	return ParseFormatted(r, Default)
+}
+
+// ParseFormatted reads flow log lines in a stated format.
+//
+// A header line inside the stream overrides the format argument for the rest
+// of that stream. AWS writes one at the top of every object it delivers to S3,
+// and believing the file over the configuration is right: the file is what was
+// actually written, and a stale --flow-log-format setting is otherwise a
+// silent misparse rather than an error.
+func ParseFormatted(r io.Reader, format Format) ([]wire.FlowRecord, Stats, error) {
 	var (
 		out     []wire.FlowRecord
 		stats   Stats
 		scanner = bufio.NewScanner(r)
 	)
+	if !format.Usable() {
+		return nil, stats, fmt.Errorf(
+			"flow log format is missing %s", strings.Join(format.Missing(), ", "),
+		)
+	}
 	// Flow log lines are short, but a corrupted stream can produce a very long
 	// one; cap the buffer rather than letting it grow without bound.
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "version ") {
-			continue // blank, or the header some exports include
+		if line == "" {
+			continue
+		}
+		if IsHeader(line) {
+			// The file says what it contains. Trusting it over the caller's
+			// argument turns a stale format setting into a correct parse
+			// rather than a silent misread of every line.
+			seen, err := ParseFormat(line)
+			if err != nil {
+				return nil, stats, fmt.Errorf("unreadable header line: %w", err)
+			}
+			if !seen.Usable() {
+				return nil, stats, fmt.Errorf(
+					"this log's format is missing %s",
+					strings.Join(seen.Missing(), ", "),
+				)
+			}
+			format = seen
+			continue
 		}
 		stats.Lines++
 
-		record, status, err := parseLine(line)
+		record, status, err := parseLine(line, format)
 		switch {
 		case err != nil:
 			stats.Malformed++
@@ -92,53 +133,62 @@ func Parse(r io.Reader) ([]wire.FlowRecord, Stats, error) {
 	return out, stats, scanner.Err()
 }
 
-func parseLine(line string) (wire.FlowRecord, string, error) {
+func parseLine(line string, format Format) (wire.FlowRecord, string, error) {
 	f := strings.Fields(line)
-	if len(f) != fieldCount {
+	if len(f) != format.Count() {
 		return wire.FlowRecord{}, "", errFieldCount
 	}
-	if f[13] != "OK" {
-		return wire.FlowRecord{}, f[13], nil
+
+	// A format without log-status cannot carry NODATA or SKIPDATA, so every
+	// line it does carry is a record. Assuming OK is the only reading
+	// available; that it overstates coverage is stated by Degradations.
+	status := format.field(f, "log-status")
+	if status == "" {
+		status = "OK"
+	}
+	if status != "OK" {
+		return wire.FlowRecord{}, status, nil
 	}
 
-	ints := make([]int64, 0, 8)
-	for _, idx := range []int{5, 6, 7, 8, 9, 10, 11, 19} {
-		v, err := strconv.ParseInt(f[idx], 10, 64)
-		if err != nil {
+	num := func(name string) (int64, error) {
+		raw := format.field(f, name)
+		if raw == "" {
+			return 0, nil
+		}
+		return strconv.ParseInt(raw, 10, 64)
+	}
+
+	var err error
+	var v [8]int64
+	for i, name := range []string{
+		"srcport", "dstport", "protocol", "packets", "bytes",
+		"start", "end", "tcp-flags",
+	} {
+		if v[i], err = num(name); err != nil {
 			return wire.FlowRecord{}, "", err
 		}
-		ints = append(ints, v)
-	}
-
-	// AWS writes "-" for a field it has no value for.
-	srcService, dstService := f[17], f[18]
-	if srcService == "-" {
-		srcService = ""
-	}
-	if dstService == "-" {
-		dstService = ""
 	}
 
 	return wire.FlowRecord{
-		AccountID:     f[1],
-		InterfaceID:   f[2],
-		SrcAddr:       f[3],
-		DstAddr:       f[4],
-		SrcPort:       int(ints[0]),
-		DstPort:       int(ints[1]),
-		Protocol:      int(ints[2]),
-		Packets:       ints[3],
-		Bytes:         ints[4],
-		Start:         time.Unix(ints[5], 0).UTC(),
-		End:           time.Unix(ints[6], 0).UTC(),
-		Action:        f[12],
-		LogStatus:     f[13],
-		VpcID:         f[14],
-		SubnetID:      f[15],
-		Direction:     wire.Direction(f[16]),
-		SrcAWSService: srcService,
-		DstAWSService: dstService,
-		TCPFlags:      int(ints[7]),
+		AccountID:     format.field(f, "account-id"),
+		InterfaceID:   format.field(f, "interface-id"),
+		SrcAddr:       format.field(f, "srcaddr"),
+		DstAddr:       format.field(f, "dstaddr"),
+		SrcPort:       int(v[0]),
+		DstPort:       int(v[1]),
+		Protocol:      int(v[2]),
+		Packets:       v[3],
+		Bytes:         v[4],
+		Start:         time.Unix(v[5], 0).UTC(),
+		End:           time.Unix(v[6], 0).UTC(),
+		Action:        format.field(f, "action"),
+		LogStatus:     status,
+		VpcID:         format.field(f, "vpc-id"),
+		SubnetID:      format.field(f, "subnet-id"),
+		Direction:     wire.Direction(format.field(f, "flow-direction")),
+		SrcAWSService: format.field(f, "pkt-src-aws-service"),
+		DstAWSService: format.field(f, "pkt-dst-aws-service"),
+		TCPFlags:      int(v[7]),
 	}, "OK", nil
 }
 
@@ -146,4 +196,4 @@ type parseError string
 
 func (e parseError) Error() string { return string(e) }
 
-const errFieldCount = parseError("flow log line does not have 19 fields")
+const errFieldCount = parseError("flow log line does not have the field count its format names")
