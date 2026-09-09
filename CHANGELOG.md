@@ -4,6 +4,33 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### Two hundred megabytes
+
+**A full collection window did not fit down the wire.** One window at the
+collector's own record limit is 500,000 flow records, which is 225MB of JSON,
+and the shipper posted it uncompressed under a fixed thirty-second timeout.
+That send does not complete on any real egress path, and the failure it
+produces is the worst kind: the collector reports that shipping failed, retries
+three times, and the customer's first impression is that the product does not
+work. The corpus never showed it — 33,000 records is 40KB.
+
+Batches are compressed now, at a measured 32x, so 225MB goes as 6.2MB. Flow log
+JSON is the most compressible payload imaginable. The request deadline scales
+with the body instead of being one number for a 40KB batch and a 200MB one.
+
+**And it was not survivable at the other end either.** Validating that batch
+costs 2.7GB of resident memory. The deployment now says 4GB with the
+measurement beside it, and a batch above 320MB is refused with a message
+telling the operator to shorten the collection window — an error that names the
+remedy beats an OOM kill that says nothing. A test reads the collector's record
+limit out of the Go source and checks it still fits.
+
+**An agent reaching a provider over IPv6 is invisible, and now says so.** Every
+range in the catalogue is IPv4 and there are no published v6 ranges we can
+verify; guessing one would manufacture findings out of unrelated traffic. Same
+shape as the gateway problem, same treatment — counted before the scan by
+`--check`, disclosed in the report, not silently absent.
+
 ### Read the logs they already have
 
 **The collector no longer requires a flow log in our format.** It required one

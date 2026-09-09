@@ -463,3 +463,64 @@ func TestAFormatMissingSomethingRequiredBlocks(t *testing.T) {
 		t.Fatal("a scan that cannot mean anything was declared ready")
 	}
 }
+
+// --- IPv6, which the catalogue cannot speak to --------------------------------
+
+func v6Records(dsts ...string) []wire.FlowRecord {
+	var out []wire.FlowRecord
+	for i, d := range dsts {
+		out = append(out, wire.FlowRecord{
+			InterfaceID: "eni-1", SrcAddr: "10.0.1.5", DstAddr: d,
+			SrcPort: 41000 + i, DstPort: 443, Bytes: 140_000,
+			Direction: wire.Egress,
+			Start:     time.Unix(1754827200, 0).UTC(),
+			End:       time.Unix(1754827259, 0).UTC(),
+		})
+	}
+	return out
+}
+
+func TestPublicIPv6DestinationsAreWarnedAboutBeforeTheScan(t *testing.T) {
+	// An agent whose model calls go over IPv6 is invisible, so a thin report
+	// on a dual-stack account means much less than it looks like it does.
+	report := run(good(), stubFlows{
+		records: v6Records("2606:4700::1", "2606:4700::2", "2606:4700::1"),
+		stats:   flowlogs.Stats{Lines: 3, Parsed: 3},
+	})
+	result := find(t, report, "ipv6 destinations")
+
+	if result.Status != Warn {
+		t.Fatalf("status %v", result.Status)
+	}
+	if !strings.Contains(result.Detail, "2 public IPv6") {
+		t.Fatalf("counted wrong, or not once each: %q", result.Detail)
+	}
+	if !strings.Contains(result.Remedy, "will not appear in the report") {
+		t.Fatalf("remedy does not say what it costs: %q", result.Remedy)
+	}
+}
+
+func TestPrivateIPv6IsNotAWarning(t *testing.T) {
+	// A dual-stack VPC's internal traffic classifies fine. Warning about it
+	// would put this on every dual-stack account whether or not it had a
+	// blind spot.
+	report := run(good(), stubFlows{
+		records: v6Records("fd00::1", "fe80::1"),
+		stats:   flowlogs.Stats{Lines: 2, Parsed: 2},
+	})
+	if got := find(t, report, "ipv6 destinations").Status; got != Pass {
+		t.Fatalf("status %v", got)
+	}
+}
+
+func TestIPv6DoesNotBlockAScan(t *testing.T) {
+	// It costs recall on some traffic. Refusing to scan would turn a partial
+	// result into no result.
+	report := run(good(), stubFlows{
+		records: append(modelTraffic(60), v6Records("2606:4700::1")...),
+		stats:   flowlogs.Stats{Lines: 61, Parsed: 61},
+	})
+	if !report.Ready() {
+		t.Fatal("an account with IPv6 egress was refused a scan")
+	}
+}

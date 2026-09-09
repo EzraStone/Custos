@@ -19,6 +19,7 @@ custos diff                 →  what changed since last week
 | Classify agents from flow log metadata | Works. G0 passed, margin 0.26 |
 | Read flow logs from CloudWatch or S3 | Works |
 | Read the flow log format the account already has | Works. Fields located by name; S3 objects name their own |
+| IPv6 model endpoints | **Blind.** The catalogue is IPv4 only. Counted and disclosed, not guessed |
 | Read ALB access logs | Works. Four fields taken, the rest discarded at parse |
 | Resolve interface → principal, EC2 | Works |
 | Resolve interface → principal, Lambda / ECS | Works |
@@ -122,6 +123,27 @@ filtered list that always shows the total, and `sanctioned` being absent from
 the status control. Everything else about it is a guess.
 
 Nothing depends on it. The CLI and the HTML report still do everything it does.
+
+**An agent reaching a provider over IPv6 is invisible.** Every range in the
+model endpoint catalogue is IPv4, the providers are reachable over IPv6, and
+there are no published v6 ranges we can verify. Guessing one would be worse
+than having none: a false positive manufactures an agent out of unrelated
+traffic, which is why the catalogue is narrow in the first place.
+
+It has the same shape as the gateway problem and gets the same treatment —
+`--check` counts an account's public IPv6 destinations before the scan and the
+report says a model endpoint among them would not appear at all. It is not
+fixed, it is stated. It matters more each year: AWS began charging for public
+IPv4 addresses in 2024 and dual-stack VPCs are the response.
+
+**A full window is 225MB of JSON, and that was not survivable until today.**
+Measured: 500,000 flow records validate in 20.6 seconds and 2.7GB of resident
+memory. The shipper was posting that uncompressed under a fixed thirty-second
+timeout, which does not complete on any real egress path — the corpus never
+showed it because 33,000 records is 40KB. Batches now go compressed (32x), the
+deadline scales with the body, the container is sized from the measurement, and
+a batch too large to validate is refused with a message naming the remedy
+rather than being killed mid-request.
 
 **How much a real account's flow log format costs is unmeasured.** Reading a
 log a customer already keeps is now supported, and the AWS default format is

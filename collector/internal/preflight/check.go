@@ -144,7 +144,48 @@ func Run(ctx context.Context, cfg Config, flows FlowSource, names Namer) Report 
 	records := checkFlowLogs(ctx, &report, cfg, flows)
 	checkDestinationNames(ctx, &report, names, records)
 	checkForGateway(&report, records)
+	checkForIPv6(&report, records)
 	return report
+}
+
+// checkForIPv6 counts public IPv6 destinations, which the catalogue cannot
+// speak to.
+//
+// Every range in the model endpoint catalogue is IPv4. The providers are
+// reachable over IPv6 and there are no published v6 ranges we can verify, so
+// an agent whose model calls go over IPv6 is invisible — the same shape as an
+// agent behind an undeclared gateway.
+//
+// Said before the scan rather than only in the report, because it changes what
+// the first conversation about a thin result should be about. It matters more
+// each year: AWS began charging for public IPv4 addresses in 2024 and
+// dual-stack VPCs are the response.
+func checkForIPv6(report *Report, records []wire.FlowRecord) {
+	seen := map[string]bool{}
+	for _, r := range records {
+		peer := r.DstAddr
+		if r.Direction == wire.Ingress {
+			peer = r.SrcAddr
+		}
+		addr, err := netip.ParseAddr(peer)
+		// Private v6 classifies fine. Counting it would put this warning on
+		// every dual-stack account whether or not it had a blind spot.
+		if err != nil || !addr.Is6() || addr.IsPrivate() || addr.IsLinkLocalUnicast() {
+			continue
+		}
+		seen[peer] = true
+	}
+	if len(seen) == 0 {
+		report.add("ipv6 destinations", Pass, "none reached", "")
+		return
+	}
+
+	report.add("ipv6 destinations", Warn,
+		fmt.Sprintf("%d public IPv6 addresses reached; the model endpoint "+
+			"catalogue is IPv4 only", len(seen)),
+		"an agent reaching a provider over IPv6 will not appear in the report "+
+			"at all; if these workloads call model APIs, prefer IPv4 egress "+
+			"for them or tell us the addresses so they can be declared")
 }
 
 // checkFormat says what the account's flow log format costs, before the scan.
