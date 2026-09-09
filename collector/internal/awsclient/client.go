@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/cloudtrail"
@@ -90,9 +91,42 @@ func (c *ServerlessClients) ListClusters(
 	return c.ECS.ListClusters(ctx, in, opts...)
 }
 
+// MaxRetryAttempts is what a first scan of a large account needs.
+//
+// The SDK default is three, which is right for an application making a few
+// calls. This makes thousands: one DescribeNetworkInterfaces page per thousand
+// interfaces, an IAM read per principal, a CloudTrail lookup per unresolved
+// address. On an account with a few thousand interfaces EC2 throttles, three
+// attempts are spent inside a second, and the call fails.
+//
+// What a customer sees when it does is not an error. It is a report where half
+// the findings are unattributed — the same shape an account with no resource
+// tags produces — so the failure arrives disguised as a fact about them.
+const MaxRetryAttempts = 8
+
+// retryer backs off on throttling and adapts to it.
+//
+// Adaptive mode rate-limits the client itself once AWS starts pushing back,
+// rather than retrying into a wall. That matters here because the collector's
+// calls are a burst: it resolves every interface in a window at once, and the
+// throttle it earns applies to the customer's whole account, not just to us.
+// Being a good citizen in someone else's account is not optional for something
+// they installed on our word.
+func retryer() aws.Retryer {
+	return retry.NewAdaptiveMode(func(o *retry.AdaptiveModeOptions) {
+		o.StandardOptions = append(o.StandardOptions, func(s *retry.StandardOptions) {
+			s.MaxAttempts = MaxRetryAttempts
+		})
+	})
+}
+
 // New builds clients, assuming a cross-account role when one is configured.
 func New(ctx context.Context, opts Options) (*Clients, error) {
-	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(opts.Region))
+	cfg, err := config.LoadDefaultConfig(
+		ctx,
+		config.WithRegion(opts.Region),
+		config.WithRetryer(retryer),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("loading AWS configuration: %w", err)
 	}
