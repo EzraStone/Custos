@@ -45,10 +45,18 @@ class Onboarding:
 
     @property
     def tfvars(self) -> str:
-        """terraform.tfvars for the customer to apply."""
+        """terraform.tfvars for the customer to apply.
+
+        `log_buckets` is commented rather than omitted. It is empty for an
+        account on CloudWatch delivery with no access logs, and required for
+        every other shape — and a variable nobody knew existed is how a
+        customer ends up applying a role that cannot read their own logs.
+        """
         return (
             f'external_id       = "{self.external_id}"\n'
             f'custos_account_id = "{self.custos_account_id}"\n'
+            "# log_buckets     = []  "
+            "# name any bucket holding flow logs or access logs\n"
         )
 
     @property
@@ -114,7 +122,9 @@ already have instead.
 
 For S3 there is nothing else to send: AWS writes the field names at the top of
 every object and we read them. For CloudWatch, send the format string you gave
-AWS. Six fields have to be in it — interface-id, srcaddr, dstaddr, bytes,
+AWS. Either way, if any of your logs are in S3 — flow logs delivered there, or
+the access logs below — name those buckets in `log_buckets` above, or the role
+will not be able to read them. Six fields have to be in it — interface-id, srcaddr, dstaddr, bytes,
 start, end — and `--check` tells you exactly what any others being absent
 costs, before you commit to anything.
 

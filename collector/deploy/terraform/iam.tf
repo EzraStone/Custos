@@ -92,6 +92,30 @@ data "aws_iam_policy_document" "read_only" {
     resources = ["*"]
   }
 
+  # Log objects in S3. Two destinations exist for flow logs and the cheaper one
+  # is S3, so a cost-conscious platform team — which is the target profile — is
+  # more likely to have this than CloudWatch. Load balancer access logs are
+  # always in S3.
+  #
+  # Scoped to named buckets. Granting s3:GetObject on "*" to a role a customer
+  # created on our word would be the single worst line in this file, and the
+  # extra variable is a small price for not writing it.
+  dynamic "statement" {
+    for_each = length(var.log_buckets) > 0 ? [1] : []
+    content {
+      sid    = "ReadLogObjects"
+      effect = "Allow"
+      actions = [
+        "s3:ListBucket",
+        "s3:GetObject",
+      ]
+      resources = concat(
+        [for b in var.log_buckets : "arn:aws:s3:::${b}"],
+        [for b in var.log_buckets : "arn:aws:s3:::${b}/*"],
+      )
+    }
+  }
+
   # CloudTrail, for principal-to-interface correlation.
   statement {
     sid       = "ReadCloudTrail"

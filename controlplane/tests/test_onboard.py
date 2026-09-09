@@ -152,3 +152,15 @@ def test_the_message_names_the_fields_that_are_not_optional():
 
 def test_the_collector_environment_mentions_the_format_variable():
     assert "CUSTOS_FLOW_LOG_FORMAT" in generate(ACCOUNT, ENDPOINT).collector_env
+
+
+def test_the_tfvars_mention_the_bucket_variable():
+    """Empty is correct for CloudWatch delivery with no access logs, and wrong
+    for every other shape. A variable nobody knew existed is how a customer
+    applies a role that cannot read their own logs."""
+    assert "log_buckets" in generate(ACCOUNT, ENDPOINT).tfvars
+
+
+def test_the_message_says_when_the_bucket_variable_matters():
+    message = prose(generate(ACCOUNT, ENDPOINT).message)
+    assert "name those buckets in `log_buckets`" in message

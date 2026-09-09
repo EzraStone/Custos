@@ -73,4 +73,22 @@ variable "retention_days" {
   default = 14
 }
 
+variable "log_buckets" {
+  description = <<-EOT
+    S3 buckets Custos may read logs from.
+
+    Needed whenever flow logs are delivered to S3 rather than CloudWatch, and
+    whenever load balancer access logs are provided. Both are read with
+    ListBucket and GetObject and nothing else — the deny policy forbids every
+    write in the account regardless.
+
+    Empty grants no S3 access at all, which is correct for an account using
+    CloudWatch delivery and no access logs. Least privilege here is worth the
+    extra variable: "we can read two named buckets" is a different sentence in
+    a security review from "we can read your S3".
+  EOT
+  type        = list(string)
+  default     = []
+}
+
 data "aws_caller_identity" "current" {}
