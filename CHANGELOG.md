@@ -4,6 +4,24 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### Two accounts on the hour
+
+**The second one's window was being dropped.** One process, one connection, one
+SQLite file, and FastAPI routes in a thread pool — so two collectors arriving
+together hit the same connection, the second `BEGIN` failed with "cannot start
+a transaction within a transaction", and the request 500'd. The collector
+retries three times against the same clash and gives up. This is the schedule,
+not an edge case.
+
+Write transactions now take a process-wide lock, so the second account waits.
+Reads stay outside it on purpose: holding every console read behind a
+twenty-second ingest would be the worse trade, and the cost of that choice — a
+brief view of a scan still being written — is stated rather than hidden.
+
+The ceiling this creates is arithmetic instead of a crash, and it is written
+down: total ingest seconds per collection interval, bracketed by 0.3s for a
+quiet account's window and 25s for one at the collector's record limit.
+
 ### Two hundred megabytes
 
 **A full collection window did not fit down the wire.** One window at the

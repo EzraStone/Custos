@@ -112,6 +112,31 @@ A batch larger than 320MB is refused with a message telling the operator to
 shorten `CUSTOS_WINDOW` so fewer records ship per batch. That is the supported
 answer to a busy account: more, smaller windows.
 
+## How many accounts one process holds
+
+Ingestion is serialised. One process holds one connection to one SQLite file,
+and write transactions take a process-wide lock — two accounts arriving
+together is the schedule rather than an edge case, and before the lock the
+second one's window was dropped with a 500.
+
+So the number to watch is total ingest seconds per collection interval, not
+requests per second. Two measurements bracket it:
+
+| One window | Records | JSON | Validate + ingest |
+|---|---|---|---|
+| A quiet account (the A0 corpus, one day) | 11,588 | 5.6MB | **0.3s** |
+| The collector's own record limit | 500,000 | 225MB | **25s** |
+
+At an hourly interval a process has 3,600 seconds to spend. That is roughly 140
+accounts running at the collector's ceiling, or thousands of quiet ones — and
+neither is the number that will bite first. What bites first is a handful of
+busy accounts all set to a fifteen-minute interval, so the arithmetic is worth
+doing once with the customer's own figures.
+
+If it does not fit: more, smaller windows do not help (the same records cost the
+same), but a second process with its own database does, one per group of
+accounts. Splitting by account is free — nothing in the register spans them.
+
 ## Backups
 
 The database is a single file. Copy it. With WAL enabled a live copy can be

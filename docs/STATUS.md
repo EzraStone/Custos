@@ -136,6 +136,15 @@ report says a model endpoint among them would not appear at all. It is not
 fixed, it is stated. It matters more each year: AWS began charging for public
 IPv4 addresses in 2024 and dual-stack VPCs are the response.
 
+**Ingestion is serialised, and until today two accounts shipping on the hour
+dropped one of them.** One process, one connection, one SQLite file, and
+FastAPI routes in a thread pool: the second `BEGIN` failed and that window was
+gone. Fixed with a process-wide write lock, so the second account waits. The
+ceiling that replaces it is arithmetic rather than a crash — total ingest
+seconds per collection interval, bracketed at 0.3s for a quiet account's window
+and 25s for one at the collector's record limit, and written down in
+`deploy/README.md`.
+
 **A full window is 225MB of JSON, and that was not survivable until today.**
 Measured: 500,000 flow records validate in 20.6 seconds and 2.7GB of resident
 memory. The shipper was posting that uncompressed under a fixed thirty-second
