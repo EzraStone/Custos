@@ -29,12 +29,8 @@ data "aws_iam_policy_document" "read_only" {
     sid    = "ReadNetworkMetadata"
     effect = "Allow"
     actions = [
-      "ec2:DescribeFlowLogs",
       "ec2:DescribeNetworkInterfaces",
       "ec2:DescribeInstances",
-      "ec2:DescribeSubnets",
-      "ec2:DescribeVpcs",
-      "ec2:DescribeTags",
     ]
     resources = ["*"] # these Describe calls do not support resource scoping
   }
@@ -47,8 +43,6 @@ data "aws_iam_policy_document" "read_only" {
     effect = "Allow"
     actions = [
       "logs:DescribeLogGroups",
-      "logs:DescribeLogStreams",
-      "logs:GetLogEvents",
       "logs:FilterLogEvents",
     ]
     resources = ["arn:aws:logs:*:${data.aws_caller_identity.current.account_id}:log-group:*"]
@@ -62,7 +56,6 @@ data "aws_iam_policy_document" "read_only" {
     effect = "Allow"
     actions = [
       "iam:GetRole",
-      "iam:ListRoles",
       "iam:ListRoleTags",
       "iam:ListAttachedRolePolicies",
       "iam:ListRolePolicies",
@@ -79,15 +72,9 @@ data "aws_iam_policy_document" "read_only" {
     effect = "Allow"
     actions = [
       "ecs:ListClusters",
-      "ecs:ListServices",
-      "ecs:DescribeServices",
-      "ecs:DescribeTaskDefinition",
-      "lambda:ListFunctions",
-      "lambda:GetFunctionConfiguration",
-      "ecs:ListTasks",
       "ecs:DescribeTasks",
-      "eks:ListClusters",
-      "eks:DescribeCluster",
+      "ecs:DescribeTaskDefinition",
+      "lambda:GetFunctionConfiguration",
     ]
     resources = ["*"]
   }
@@ -142,6 +129,13 @@ resource "aws_iam_role_policy" "custos" {
   role   = aws_iam_role.custos.id
   policy = data.aws_iam_policy_document.read_only.json
 }
+
+# Nothing above is granted because it might be useful later. Thirteen actions
+# were removed the day a test started comparing this file against the operations
+# the collector can actually perform — among them iam:ListRoles and
+# ec2:DescribeTags on "*", which are exactly the lines a security reviewer
+# circles and which nothing has ever called. A permission that has to be
+# defended is a permission that should be earning its place.
 
 # Explicitly deny every mutating action, belt and braces. The policy above
 # grants none of these, so this changes nothing today — it exists so that a

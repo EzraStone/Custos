@@ -61,34 +61,19 @@ func TestTheGrantIsNotWiderThanTheCode(t *testing.T) {
 	}
 }
 
-// justified names actions the policy grants that no interface method calls,
-// with why. Every entry is a permission a customer is being asked for, so each
-// one has to survive being read aloud in a security review.
-var justified = map[string]bool{
-	// Preflight asks whether flow logs exist and where they go, before any
-	// scan. Without it the answer to "why did the scan find nothing" is a
-	// guess.
-	"ec2:DescribeFlowLogs": true,
-	// Destination naming reads subnet and VPC names so a register entry can
-	// say "billing-api" rather than "10.0.4.23".
-	"ec2:DescribeSubnets": true,
-	"ec2:DescribeVpcs":    true,
-	"ec2:DescribeTags":    true,
-	// Attribution reads resource tags from instances it has already described.
-	"iam:ListRoles": true,
-	// Compute attribution walks clusters and services to reach a task.
-	"ecs:ListServices":     true,
-	"ecs:DescribeServices": true,
-	"ecs:ListTasks":        true,
-	"lambda:ListFunctions": true,
-	// EKS resolves node-level attribution for pods.
-	"eks:ListClusters":    true,
-	"eks:DescribeCluster": true,
-	// Paged reads of a log group, used when a group is named rather than
-	// searched.
-	"logs:DescribeLogStreams": true,
-	"logs:GetLogEvents":       true,
-}
+// justified names actions the policy grants that no interface method calls.
+//
+// It is empty, and keeping it that way is the point. When this test was
+// written the map had thirteen entries, each with a plausible sentence about
+// why the permission was needed — and not one of the thirteen was called by
+// any code in the repository. The reasons were invented to make a new test
+// pass, which is the failure this test exists to prevent, committed inside the
+// test itself.
+//
+// The policy lost all thirteen. Anything added here needs a reason that
+// survives being read aloud in a security review, and a grep proving the
+// grant is used by something a grep cannot see.
+var justified = map[string]bool{}
 
 // iamActions maps an SDK operation to the IAM action that authorises it.
 //
