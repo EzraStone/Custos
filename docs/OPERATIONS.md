@@ -18,6 +18,8 @@ export AWS_REGION=us-east-1
 export CUSTOS_ACCOUNT_ID=447120043318
 export CUSTOS_FLOW_LOGS=/aws/vpc/flowlogs          # or s3://bucket/prefix
 export CUSTOS_ACCESS_LOGS=s3://their-alb-logs/AWSLogs/...   # worth asking for
+# Only if they pointed us at a log they already had, and only for CloudWatch:
+export CUSTOS_FLOW_LOG_FORMAT="${version} ${account-id} ${interface-id} ..."
 
 CUSTOS_DRY_RUN=1 ./custos-collector > batch.json
 ```
@@ -29,6 +31,23 @@ conversation.
 **Ask for the access logs.** Without them recall drops from 100% to 60% on our
 corpus, and the agents missed are the low-volume ones — which are usually the
 ones they most want to know about. The ask is easier with that number attached.
+
+**Do not insist on our flow log.** The Terraform module creates one in the
+format Custos was built around, and it is the best case. It is also a second
+copy of their traffic billed per gigabyte and a second change request, and
+either is a reason to stall that has nothing to do with the product. If they
+already have flow logs, point at those.
+
+For S3 that needs nothing: AWS writes the field names at the top of every
+object. For CloudWatch, ask them for the format string they gave AWS and set
+`CUSTOS_FLOW_LOG_FORMAT`.
+
+Then read the `flow log fields` line from `--check`. It says exactly what their
+format costs — no ports means no MCP servers in the register, no direction
+field means it is inferred from each interface's address. Say those out loud in
+the first call rather than letting them read it off a thin report a week later.
+A gap in their log that looks like a finding about their account is the one
+mistake this product cannot recover from.
 
 ## 3. Scan it
 

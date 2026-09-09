@@ -348,6 +348,13 @@ CONFIGURATION
   CUSTOS_ENDPOINT      https URL of the control plane   (required to send)
   CUSTOS_TOKEN         credential you hold              (required to send)
   CUSTOS_FLOW_LOGS     log group name, or s3://bucket/prefix   (required)
+  CUSTOS_FLOW_LOG_FORMAT
+                       the format your flow log is written in, if it is not
+                       the one our terraform module configures. Only needed
+                       for CloudWatch: objects delivered to S3 name their own
+                       fields and we read that. Six fields are required —
+                       interface-id, srcaddr, dstaddr, bytes, start, end —
+                       and --check says what any others cost you.
   CUSTOS_ACCESS_LOGS   s3://bucket/prefix for ALB logs  (optional, lifts recall
                        from 60% to 100% on our test corpus)
   CUSTOS_ACCOUNT_ID    account being scanned

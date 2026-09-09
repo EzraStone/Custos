@@ -58,6 +58,24 @@ Flow logs are read from wherever you already deliver them — set
 `CUSTOS_FLOW_LOGS` to a CloudWatch Logs group name or to `s3://bucket/prefix`.
 We do not ask you to change your delivery destination.
 
+**Nor your format.** The Terraform module here creates a flow log in the format
+Custos was built around, and if you run it you need nothing else. You do not
+have to: VPC Flow Logs bill per gigabyte ingested, a second copy of a busy
+account's traffic is a real line item, and a second Terraform apply is a change
+request. Point `CUSTOS_FLOW_LOGS` at the log you already keep instead.
+
+For S3 there is nothing to configure — AWS writes the field names at the top of
+every object and we read them. For CloudWatch, set `CUSTOS_FLOW_LOG_FORMAT` to
+the format string you gave AWS.
+
+Six fields are required, because without them a scan cannot mean anything:
+`interface-id`, `srcaddr`, `dstaddr`, `bytes`, `start`, `end`. Everything else
+is optional and costs something specific — no `dstport` means nothing is
+identified as an MCP server, no `flow-direction` means direction is inferred
+from each interface's own address. `--check` lists exactly what your format
+costs before you run a scan, and the report repeats it, so a gap in the log is
+never mistaken for a finding about the account.
+
 ## What it sends
 
 Exactly the structures in [`internal/wire/wire.go`](internal/wire/wire.go).
@@ -121,6 +139,7 @@ Every operation the collector attempts is recorded and available to you.
 | `CUSTOS_ENDPOINT` | to send | Control plane, https only |
 | `CUSTOS_TOKEN` | to send | Credential you hold |
 | `CUSTOS_FLOW_LOGS` | yes | Log group or S3 prefix |
+| `CUSTOS_FLOW_LOG_FORMAT` | no | Your flow log's format, if not ours. Unnecessary for S3 |
 | `CUSTOS_ACCESS_LOGS` | no | ALB access logs; improves recall |
 | `CUSTOS_ACCOUNT_ID` | no | Account being scanned |
 | `CUSTOS_WINDOW` | no | Collection window, default `1h` |

@@ -4,6 +4,38 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### Read the logs they already have
+
+**The collector no longer requires a flow log in our format.** It required one
+because the parser read fixed positions, so a log written any other way decoded
+into the wrong columns or failed the field-count check on every line — and both
+of those report a clean account.
+
+Fields are now located by name. A platform team with flow logs already going to
+an S3 archive was being asked to pay twice, since VPC Flow Logs bill per
+gigabyte, and to get a second Terraform apply through change control. Both are
+reasons to stall that have nothing to do with whether the product works.
+
+S3 needs no configuration at all: AWS writes the field names at the top of every
+object, and the file is believed over any setting — a stale format setting
+becomes a correct parse rather than a silent misread of every line. CloudWatch
+carries no header, so `CUSTOS_FLOW_LOG_FORMAT` says.
+
+**Direction is inferred where the format has none.** The AWS default format has
+no `flow-direction` field, and every finding rests on the asymmetry between what
+a workload sends and what it receives. Two sources: the interface's own address
+as AWS reports it, and failing that the address present at some end of every
+record on that interface — exact rather than heuristic, since one end of every
+record on an interface is that interface. What neither answers is dropped rather
+than guessed. A dropped record costs coverage, which is counted and reported; a
+guessed one puts bytes on the wrong side of the ratio, silently.
+
+**Every absence is stated twice.** `--check` says what the account's format
+costs before the first scan, and the report says what it prevented the report
+from claiming. An account whose log has no port field has no MCP servers in its
+register, and the report now says why rather than letting its silence read as a
+finding.
+
 ### A signal with nothing to measure
 
 **Four of the five classifier signals were being evaluated over an empty set.**

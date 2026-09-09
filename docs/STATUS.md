@@ -18,6 +18,7 @@ custos diff                 →  what changed since last week
 |---|---|
 | Classify agents from flow log metadata | Works. G0 passed, margin 0.26 |
 | Read flow logs from CloudWatch or S3 | Works |
+| Read the flow log format the account already has | Works. Fields located by name; S3 objects name their own |
 | Read ALB access logs | Works. Four fields taken, the rest discarded at parse |
 | Resolve interface → principal, EC2 | Works |
 | Resolve interface → principal, Lambda / ECS | Works |
@@ -121,6 +122,14 @@ filtered list that always shows the total, and `sanctioned` being absent from
 the status control. Everything else about it is a guess.
 
 Nothing depends on it. The CLI and the HTML report still do everything it does.
+
+**How much a real account's flow log format costs is unmeasured.** Reading a
+log a customer already keeps is now supported, and the AWS default format is
+usable — but it has no ports, no service annotations and no direction field.
+What that does to recall on real traffic is a question only a real account
+answers. The costs are stated in `--check` and in the report, so the failure
+mode is a stated gap rather than a silent one, which is the most that can be
+arranged from here.
 
 **Nobody has run this against an account we did not build.** Tag hygiene,
 unanticipated workload shapes, and provider endpoints outside our catalogue are
