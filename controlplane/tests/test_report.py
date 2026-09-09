@@ -139,6 +139,22 @@ def test_records_dropped_for_want_of_a_direction_are_disclosed():
     assert "Their bytes are in no figure above" in page
 
 
+def test_public_ipv6_destinations_are_disclosed_as_a_blind_spot():
+    """An agent reaching a provider over IPv6 produces no finding at all, so a
+    report with no findings on a dual-stack account means much less than it
+    appears to."""
+    page = render(
+        result([agent()]), "acme", T0,
+        coverage=Coverage(ipv6_destinations=12),
+    )
+    assert "12 of the public destinations reached were IPv6" in page
+    assert "catalogue is IPv4 only" in page
+
+
+def test_an_ipv4_only_account_is_told_none_of_that(page):
+    assert "were IPv6" not in page
+
+
 def test_an_unrecognised_missing_field_is_not_rendered_as_a_sentence():
     """SEC-23 at the render: the list arrives from a batch, and only names we
     have a stated cost for become prose in a customer's document."""

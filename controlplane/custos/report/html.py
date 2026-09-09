@@ -197,6 +197,14 @@ def _format_limits(coverage: Coverage | None) -> list[str]:
     items = [
         _FIELD_COSTS[name] for name in coverage.missing_fields if name in _FIELD_COSTS
     ]
+    if coverage.ipv6_destinations:
+        items.append(
+            f"{coverage.ipv6_destinations:,} of the public destinations reached "
+            "were IPv6. The model endpoint catalogue is IPv4 only — there are no "
+            "published provider ranges for IPv6 we can verify, and guessing one "
+            "would manufacture findings out of unrelated traffic. An agent "
+            "reaching a provider over IPv6 does not appear above at all."
+        )
     if coverage.direction_undecided:
         items.append(
             f"{coverage.direction_undecided:,} flow records were discarded "
@@ -371,6 +379,13 @@ class Coverage:
     direction_undecided: int = 0
     """Records dropped because their direction could not be established.
     Coverage the parse counters do not show, because the lines parsed."""
+    ipv6_destinations: int = 0
+    """Public IPv6 addresses this scan's traffic reached.
+
+    The provider catalogue is IPv4 only. A model endpoint reached over IPv6 is
+    classified as an ordinary external address, so the agent behind it makes no
+    finding at all — the same shape as an undeclared gateway, and it gets the
+    same treatment here: said rather than left to look like a clean account."""
 
     @property
     def complete(self) -> bool:

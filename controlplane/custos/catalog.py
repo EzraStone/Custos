@@ -56,6 +56,19 @@ MODEL_RANGES: tuple[str, ...] = (
     "104.18.0.0/16",     # OpenAI via Cloudflare
     "52.94.236.0/24",    # Bedrock runtime regional
 )
+"""IPv4 only, and that is a blind spot rather than an oversight.
+
+The providers are reachable over IPv6 and we have no published v6 ranges we can
+verify. Guessing one would be worse than having none: a false positive here
+manufactures an agent out of unrelated traffic, and the whole catalogue is
+narrow for that reason.
+
+So an agent that reaches a provider over IPv6 is invisible, in exactly the way
+an agent behind an undeclared gateway is. The remedy is the same — the report
+counts an account's public IPv6 destinations and says what it could not
+classify — and it matters more each year, because AWS began charging for public
+IPv4 addresses in 2024 and dual-stack VPCs are the response.
+"""
 
 # Mechanism 3: ports that identify a service class on internal addresses.
 MCP_PORTS = frozenset({8931, 3000, 8080})
@@ -78,6 +91,18 @@ _STORAGE_AWS_SERVICES = frozenset({"S3", "DYNAMODB", "RDS", "ELASTICACHE"})
 _MODEL_NETS: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = tuple(
     ipaddress.ip_network(c) for c in MODEL_RANGES
 )
+
+
+def is_ipv6(address: str) -> bool:
+    """Whether an address is IPv6. Not a classification, a question about form.
+
+    Used to count what the catalogue cannot speak to, since MODEL_RANGES is
+    IPv4 only.
+    """
+    try:
+        return ipaddress.ip_address(address).version == 6
+    except ValueError:
+        return False
 
 
 def clear_caches() -> None:

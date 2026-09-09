@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from .attribute import PrincipalFacts
 from .baseline import Drift, detect_from_history
 from .batch import Batch
+from .catalog import is_ipv6
 from .classify import Disposition
 from .declared import Declared
 from .diff import ScanDiff, compare
@@ -104,6 +105,23 @@ def scope_readability(batch: Batch, scan_input: ScanInput) -> tuple[int, int]:
     return named, len(peers)
 
 
+def ipv6_destinations(scan_input: ScanInput) -> int:
+    """Public IPv6 addresses this scan's traffic reached.
+
+    The provider catalogue is IPv4 only, so a model endpoint reached over IPv6
+    is classified as an ordinary external address and the agent behind it makes
+    no finding at all. That is the same shape as an undeclared gateway, and it
+    gets the same treatment: counted, and said in the report, rather than left
+    to look like a clean account.
+    """
+    seen: set[str] = set()
+    for record in scan_input.records:
+        peer = record.dstaddr if record.direction is Direction.EGRESS else record.srcaddr
+        if is_ipv6(peer) and not _is_private(peer):
+            seen.add(peer)
+    return len(seen)
+
+
 def _is_private(address: str) -> bool:
     try:
         return ipaddress.ip_address(address).is_private
@@ -161,7 +179,7 @@ def to_scan_input(
     )
 
 
-def _coverage(batch: Batch, scope: tuple[int, int] = (0, 0)) -> Coverage:
+def _coverage(batch: Batch, scope: tuple[int, int] = (0, 0), ipv6: int = 0) -> Coverage:
     """Build the report's coverage summary from what the collector reported.
 
     A batch carrying no collection statistics gets the default, which renders
@@ -174,7 +192,9 @@ def _coverage(batch: Batch, scope: tuple[int, int] = (0, 0)) -> Coverage:
         # Unknown coverage, but the scope figures are still known: they come
         # from what the flow logs contained, not from what the collector said
         # about its own reading.
-        return Coverage(scope_named=scope[0], scope_total=scope[1])
+        return Coverage(
+            scope_named=scope[0], scope_total=scope[1], ipv6_destinations=ipv6
+        )
     return Coverage(
         parsed_fraction=stats.parsed_fraction,
         truncated=stats.truncated,
@@ -183,6 +203,7 @@ def _coverage(batch: Batch, scope: tuple[int, int] = (0, 0)) -> Coverage:
         scope_total=scope[1],
         missing_fields=tuple(stats.missing_fields),
         direction_undecided=stats.direction_undecided,
+        ipv6_destinations=ipv6,
     )
 
 
@@ -341,7 +362,7 @@ def ingest(
     return IngestResult(
         batch=record, scan_id=scan_id, result=result,
         coverage_note=_coverage_note(batch, result),
-        coverage=_coverage(batch, (named, total)),
+        coverage=_coverage(batch, (named, total), ipv6_destinations(scan_input)),
         diff=diff, drift=drift,
     )
 

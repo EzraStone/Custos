@@ -45,3 +45,42 @@ def test_private_detection():
 # --- extension ----------------------------------------------------------------
 
 
+# --- IPv6, which the catalogue cannot speak to --------------------------------
+
+
+def test_the_model_ranges_are_all_ipv4():
+    """Not an assertion about correctness — an assertion that the blind spot
+    the report describes is the blind spot that exists. If a v6 range is ever
+    added, the report's claim becomes false and this fails first."""
+    import ipaddress
+
+    from custos.catalog import MODEL_RANGES
+
+    for cidr in MODEL_RANGES:
+        assert ipaddress.ip_network(cidr).version == 4, cidr
+
+
+def test_a_provider_reached_over_ipv6_is_not_recognised():
+    """The blind spot itself, stated as a test so it cannot be forgotten. An
+    agent whose model calls go over IPv6 produces no finding at all."""
+    from custos.catalog import is_model_endpoint
+
+    assert not is_model_endpoint("2606:4700::6810:85e5")
+
+
+def test_ipv6_is_a_question_about_form_not_a_classification():
+    from custos.catalog import is_ipv6
+
+    assert is_ipv6("2606:4700::6810:85e5")
+    assert is_ipv6("fd00::1")
+    assert not is_ipv6("160.79.104.10")
+    assert not is_ipv6("not-an-address")
+
+
+def test_private_ipv6_is_private():
+    """A dual-stack VPC's internal traffic must not be counted as an
+    unclassifiable public destination — it classifies fine."""
+    from custos.catalog import DestinationClass, classify, is_private
+
+    assert is_private("fd00::1")
+    assert classify("fd00::1", 8931) is DestinationClass.MCP
