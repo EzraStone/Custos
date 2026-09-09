@@ -136,6 +136,14 @@ report says a model endpoint among them would not appear at all. It is not
 fixed, it is stated. It matters more each year: AWS began charging for public
 IPv4 addresses in 2024 and dual-stack VPCs are the response.
 
+**A first scan of a large account was throttled into looking like a clean
+one.** The AWS SDK's default retry budget is three attempts; the collector makes
+thousands of calls in a burst, so EC2 throttling spent it inside a second and
+the describe calls failed. The result was a report full of unattributed
+findings — the same shape an untagged account produces — so the failure read as
+a fact about the customer. Eight attempts in adaptive mode now, and the report
+says how many reads failed so the two can be told apart.
+
 **Ingestion is serialised, and until today two accounts shipping on the hour
 dropped one of them.** One process, one connection, one SQLite file, and
 FastAPI routes in a thread pool: the second `BEGIN` failed and that window was

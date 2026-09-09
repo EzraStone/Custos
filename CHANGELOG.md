@@ -4,6 +4,28 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### A first scan of a large account
+
+**The retry budget was the SDK's default of three attempts.** That is right for
+an application making a few calls. The collector makes thousands in a burst —
+one DescribeNetworkInterfaces page per thousand interfaces, an IAM read per
+principal, a CloudTrail lookup per unresolved address — so on an account with a
+few thousand interfaces EC2 throttles and three attempts are spent inside a
+second.
+
+What that produced was not an error. It was a report where half the findings
+were unattributed, which is exactly the shape an account with no resource tags
+produces, so the failure arrived disguised as a fact about the customer. Now
+eight attempts in adaptive mode, which rate-limits the client once AWS pushes
+back rather than retrying into a wall — the throttle the collector earns applies
+to the customer's whole account, not just to us.
+
+**And the report can now tell those two apart.** The batch carries a count of
+AWS reads that failed after retries, and the report says it beside the
+unattributed findings. The count ships and the messages do not: an AWS error
+string can quote a resource ARN or a policy, and nothing describing an account's
+contents leaves it except through the named wire fields.
+
 ### Two accounts on the hour
 
 **The second one's window was being dropped.** One process, one connection, one
