@@ -4,6 +4,24 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### A role that could not read the logs
+
+**The IAM policy granted no S3 access at all.** The collector reads flow logs
+delivered to S3 and load balancer access logs with ListObjectsV2 and GetObject.
+A customer took a change request through their organisation, applied the role,
+ran the collector, and got AccessDenied on every object — on the delivery path
+the target profile is most likely to be using.
+
+Fixed and scoped to named buckets rather than "*", with the bucket list carried
+in the onboarding material so nobody discovers the variable afterwards.
+
+The fix is the small part. A test now connects the two artefacts that had
+nothing between them: the interfaces in `awsread/api.go` are the complete set of
+operations the collector can perform, and each must appear in the Terraform
+policy. It parses the Go rather than reading a list, and it runs in both
+directions — a granted action nothing calls is a permission a customer was
+asked for and did not need.
+
 ### A first scan of a large account
 
 **The retry budget was the SDK's default of three attempts.** That is right for

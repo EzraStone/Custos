@@ -136,6 +136,20 @@ report says a model endpoint among them would not appear at all. It is not
 fixed, it is stated. It matters more each year: AWS began charging for public
 IPv4 addresses in 2024 and dual-stack VPCs are the response.
 
+**The IAM policy did not grant the S3 reads the collector makes.** Flow logs
+delivered to S3 and load balancer access logs are both read with ListObjectsV2
+and GetObject, and the Terraform granted neither — so a customer who took a
+change request through their org, applied the role and ran the collector got
+AccessDenied on every object. S3 is the cheaper flow log destination and the
+only place access logs go, so this was the path the target profile was most
+likely to take.
+
+Fixed, scoped to named buckets. What matters more is that a test now connects
+the two artefacts: the interfaces in `awsread/api.go` are the complete set of
+operations the collector can perform, and every one has to appear in the
+Terraform. It runs the other way too, because a permission granted and never
+used is what a security review finds.
+
 **A first scan of a large account was throttled into looking like a clean
 one.** The AWS SDK's default retry budget is three attempts; the collector makes
 thousands of calls in a burst, so EC2 throttling spent it inside a second and
