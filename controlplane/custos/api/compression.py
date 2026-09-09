@@ -1,4 +1,4 @@
-"""Accepting a compressed batch.
+"""Accepting a compressed batch, and refusing one that is too large.
 
 One collection window at the collector's own record limit is 500,000 flow
 records, which is 203MB of JSON. Flow log JSON is the most compressible payload
@@ -22,13 +22,26 @@ import zlib
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-MAX_DECOMPRESSED = 512 * 1024 * 1024
-"""Ceiling on one decompressed batch.
+MAX_DECOMPRESSED = 320 * 1024 * 1024
+"""Ceiling on one batch, compressed or not.
 
-Above the 203MB a full window costs, so a legitimate collector never meets it,
-and far below what would take the process down. A batch larger than this is
-either a bomb or a collector configured with a window nobody should be using.
+Set from a measurement rather than a round number. One window at the
+collector's own record limit — 500,000 flow records — is 225MB of JSON, and
+validating it costs 20.6s and 2.7GB of resident memory in this process. That is
+already the most a single request should be allowed to cost, so the ceiling
+sits just above it.
+
+Two jobs, one number. Against an anonymous caller it bounds a decompression
+bomb. Against a real collector it turns "the container was killed mid-request
+and the window is gone" into an error that names the remedy — a shorter
+collection window ships fewer records per batch.
 """
+
+TOO_LARGE_DETAIL = (
+    b"batch too large: one window at the collector's record limit is about "
+    b"225MB of JSON, and this is larger. Shorten CUSTOS_WINDOW so fewer "
+    b"records ship per batch."
+)
 
 # zlib's window size, with the 16 that says "expect a gzip header".
 _GZIP_WINDOW = 16 + zlib.MAX_WBITS
@@ -55,6 +68,14 @@ class GzipRequestMiddleware:
             return
 
         headers = Headers(scope=scope)
+
+        # An uncompressed body is capped by its declared length. Reading it to
+        # find out how big it is would be doing the expensive thing first.
+        declared = headers.get("content-length")
+        if declared and declared.isdigit() and int(declared) > MAX_DECOMPRESSED:
+            await _refuse(send, 413, TOO_LARGE_DETAIL)
+            return
+
         if headers.get("content-encoding", "").lower() != "gzip":
             await self.app(scope, receive, send)
             return
@@ -62,7 +83,7 @@ class GzipRequestMiddleware:
         try:
             body = await _read_decompressed(receive)
         except TooLarge:
-            await _refuse(send, 413, b"batch too large decompressed")
+            await _refuse(send, 413, TOO_LARGE_DETAIL)
             return
         except zlib.error:
             await _refuse(send, 400, b"body is not valid gzip")
@@ -116,12 +137,13 @@ def _replay(body: bytes) -> Receive:
 
 
 async def _refuse(send: Send, status: int, detail: bytes) -> None:
+    body = b'{"detail":"' + detail + b'"}'
     await send({
         "type": "http.response.start",
         "status": status,
         "headers": [
             (b"content-type", b"application/json"),
-            (b"content-length", str(len(detail) + 14).encode()),
+            (b"content-length", str(len(body)).encode()),
         ],
     })
-    await send({"type": "http.response.body", "body": b'{"detail":"' + detail + b'"}'})
+    await send({"type": "http.response.body", "body": body})

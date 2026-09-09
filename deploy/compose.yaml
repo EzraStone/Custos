@@ -19,6 +19,16 @@ services:
     volumes:
       - custos-data:/data
     restart: unless-stopped
+    # Sized from a measurement, not a guess. One collection window at the
+    # collector's own record limit is 500,000 flow records — 225MB of JSON —
+    # and validating it costs 2.7GB of resident memory and about 20 seconds.
+    # A 2GB container dies on the first busy account's first window, and what
+    # the operator sees is a restart rather than an error.
+    #
+    # The control plane refuses a batch above 320MB with a message naming the
+    # remedy, so the ceiling below is what one accepted batch can cost plus
+    # room for the process itself.
+    mem_limit: 4g
     # The control plane makes no outbound connections. Saying so in the
     # deployment is cheaper than saying it in a security questionnaire.
     read_only: true

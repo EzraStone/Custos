@@ -111,8 +111,35 @@ def test_a_decompression_bomb_is_refused_rather_than_buffered(client):
 
 def test_the_cap_is_above_what_a_real_window_costs():
     """A legitimate collector must never meet it. One window at the collector's
-    record limit is 203MB of JSON."""
-    assert MAX_DECOMPRESSED > 203 * 1024 * 1024
+    record limit is 225MB of JSON, measured."""
+    assert MAX_DECOMPRESSED > 225 * 1024 * 1024
+
+
+def test_the_cap_is_not_far_above_it_either():
+    """Validating that window already costs 2.7GB of resident memory. A cap
+    with room for four of them is not a cap."""
+    assert MAX_DECOMPRESSED < 2 * 225 * 1024 * 1024
+
+
+def test_an_oversized_refusal_names_the_remedy(client):
+    """Otherwise the operator's next move is to retry the same window."""
+    bomb = gzip.compress(b"\0" * (MAX_DECOMPRESSED + 1024))
+    detail = client.post("/v1/batches", content=bomb, headers=HEADERS).json()["detail"]
+    assert "CUSTOS_WINDOW" in detail
+
+
+def test_an_uncompressed_body_is_capped_by_its_declared_length(client):
+    """Reading it to find out how big it is would be doing the expensive thing
+    first, which is the whole failure being avoided."""
+    response = client.post(
+        "/v1/batches",
+        content=b"{}",
+        headers=AUTH | {
+            "Content-Type": "application/json",
+            "Content-Length": str(MAX_DECOMPRESSED + 1),
+        },
+    )
+    assert response.status_code == 413
 
 
 def test_a_batch_that_is_merely_large_is_not_refused(client):

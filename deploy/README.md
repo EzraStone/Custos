@@ -95,6 +95,23 @@ trade.
 See [../docs/DELIVERY.md](../docs/DELIVERY.md) for what gets sent and what
 deliberately does not.
 
+## How much memory it needs
+
+4GB, and the number comes from a measurement rather than a guess.
+
+One collection window at the collector's own record limit is 500,000 flow
+records, which is 225MB of JSON. Validating that batch costs **2.7GB of
+resident memory and about 20 seconds** in this process. A 2GB container dies on
+the first busy account's first window, and what the operator sees is a restart
+rather than an error — the window is gone and nothing says why.
+
+Batches are compressed on the wire (about 32x, so 6.2MB) but they are validated
+uncompressed, which is where the memory goes.
+
+A batch larger than 320MB is refused with a message telling the operator to
+shorten `CUSTOS_WINDOW` so fewer records ship per batch. That is the supported
+answer to a busy account: more, smaller windows.
+
 ## Backups
 
 The database is a single file. Copy it. With WAL enabled a live copy can be
