@@ -44,6 +44,18 @@ type CloudWatchReader struct {
 	API       awsread.LogsAPI
 	Group     string
 	MaxEvents int
+
+	// Format the log group is written in. The zero value means Custos's own,
+	// which is what the Terraform module creates. CloudWatch carries no header
+	// line, so a customer pointing at a log group they already had has to say.
+	Format flowlogs.Format
+}
+
+func (r *CloudWatchReader) format() flowlogs.Format {
+	if r.Format.Count() == 0 {
+		return flowlogs.Default
+	}
+	return r.Format
 }
 
 // Read collects flow records for the window.
@@ -81,7 +93,9 @@ func (r *CloudWatchReader) Read(ctx context.Context, w awsread.Window) ([]wire.F
 			if event.Message == nil {
 				continue
 			}
-			batch, batchStats, err := flowlogs.Parse(strings.NewReader(*event.Message))
+			batch, batchStats, err := flowlogs.ParseFormatted(
+				strings.NewReader(*event.Message), r.format(),
+			)
 			if err != nil {
 				stats.Malformed++
 				continue

@@ -42,6 +42,18 @@ type S3Reader struct {
 	AccountID string
 	Region    string
 	MaxEvents int
+
+	// Format to assume for an object with no header line. Every object AWS
+	// delivers has one, so this is the fallback for a bucket somebody else
+	// wrote — and the header wins wherever there is one.
+	Format flowlogs.Format
+}
+
+func (r *S3Reader) format() flowlogs.Format {
+	if r.Format.Count() == 0 {
+		return flowlogs.Default
+	}
+	return r.Format
 }
 
 // dayPrefixes returns the S3 prefixes covering a window, one per UTC day.
@@ -143,7 +155,9 @@ func (r *S3Reader) readObject(ctx context.Context, key string, w awsread.Window)
 	}
 	defer gz.Close()
 
-	records, stats, err := flowlogs.Parse(io.LimitReader(gz, MaxObjectBytes))
+	records, stats, err := flowlogs.ParseFormatted(
+		io.LimitReader(gz, MaxObjectBytes), r.format(),
+	)
 	if err != nil {
 		return records, stats, err
 	}

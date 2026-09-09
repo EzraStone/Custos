@@ -76,6 +76,13 @@ type Report struct {
 	Destinations  int
 	PeerAddresses int
 
+	// Direction records how many records had a direction read from the log
+	// and how many were inferred. A format with no flow-direction field is
+	// common — the AWS default has none — and the inference is exact where it
+	// answers at all, but records it could not decide are dropped, so the
+	// fraction belongs next to coverage.
+	Direction flowlogs.DirectionStats
+
 	Degraded []Attribution
 	Errors   []string
 }
@@ -106,6 +113,12 @@ func (r Report) Summary() string {
 		fmt.Fprintf(&b, "NOTE: no load balancer access logs configured — the strongest "+
 			"classifier signal is unavailable, so low-volume agents will surface for "+
 			"review rather than as findings\n")
+	}
+
+	if r.Direction.Inferred > 0 || r.Direction.Undecided > 0 {
+		fmt.Fprintf(&b, "inferred direction for %d records; %d could not be "+
+			"decided and were dropped (%.1f%% decided)\n",
+			r.Direction.Inferred, r.Direction.Undecided, r.Direction.Decided()*100)
 	}
 
 	if r.Stats.SkipData > 0 {
@@ -235,6 +248,15 @@ func (c *Collector) Collect(ctx context.Context, w awsread.Window) (wire.Batch, 
 	batch.Attachments = resolved
 	report.Degraded = degraded
 
+	// Direction, for a log format that does not carry it. Done here because
+	// the authoritative source is the interface's own address, which only
+	// exists once attribution has run. Records left undecided are dropped,
+	// so everything downstream works from the filtered set.
+	records, report.Direction = flowlogs.InferDirection(
+		records, addressesByInterface(resolved),
+	)
+	batch.Flows = records
+
 	// What the workloads reached, named. This is the half of the register an
 	// operator is asked to approve, and without it the scope is a list of
 	// addresses. A failure here costs the names and not the scan: the control
@@ -268,6 +290,16 @@ func (c *Collector) Collect(ctx context.Context, w awsread.Window) (wire.Batch, 
 	report.Principals = len(batch.Principals)
 
 	return batch, report, nil
+}
+
+func addressesByInterface(attachments []wire.Attachment) map[string]string {
+	out := make(map[string]string, len(attachments))
+	for _, a := range attachments {
+		if a.Address != "" {
+			out[a.InterfaceID] = a.Address
+		}
+	}
+	return out
 }
 
 // DistinctInterfaces returns the unique interface IDs in a set of records.

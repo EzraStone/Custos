@@ -158,10 +158,20 @@ func fromFile(cfg *config.Config, path string) (wire.Batch, ingest.Report, error
 	}
 	defer fh.Close()
 
-	records, stats, err := flowlogs.Parse(fh)
+	format, err := cfg.Format()
+	if err != nil {
+		return wire.Batch{}, ingest.Report{}, err
+	}
+	records, stats, err := flowlogs.ParseFormatted(fh, format)
 	if err != nil {
 		return wire.Batch{}, ingest.Report{}, fmt.Errorf("parsing flow logs: %w", err)
 	}
+
+	// No attribution on this path, so direction inference has only the records
+	// themselves to work from. It still answers for any interface that talked
+	// to more than one peer, which on a real file is nearly all of them.
+	interfaces := len(ingest.DistinctInterfaces(records))
+	records, direction := flowlogs.InferDirection(records, nil)
 
 	end := time.Now().UTC()
 	return wire.Batch{
@@ -170,7 +180,7 @@ func fromFile(cfg *config.Config, path string) (wire.Batch, ingest.Report, error
 		WindowStart: end.Add(-cfg.Window),
 		WindowEnd:   end,
 		Flows:       records,
-	}, ingest.Report{Stats: stats, Interfaces: len(ingest.DistinctInterfaces(records))}, nil
+	}, ingest.Report{Stats: stats, Interfaces: interfaces, Direction: direction}, nil
 }
 
 func fromAWS(ctx context.Context, cfg *config.Config) (wire.Batch, ingest.Report, error) {
@@ -189,14 +199,21 @@ func fromAWSWindow(
 		return wire.Batch{}, ingest.Report{}, err
 	}
 
+	format, err := cfg.Format()
+	if err != nil {
+		return wire.Batch{}, ingest.Report{}, err
+	}
+
 	var source ingest.FlowSource
 	if bucket, prefix, ok := cfg.S3Source(); ok {
 		source = &ingest.S3Reader{
 			API: clients.Objects, Bucket: bucket, Prefix: prefix,
-			AccountID: cfg.AccountID, Region: cfg.Region,
+			AccountID: cfg.AccountID, Region: cfg.Region, Format: format,
 		}
 	} else {
-		source = &ingest.CloudWatchReader{API: clients.Logs, Group: cfg.FlowLogs}
+		source = &ingest.CloudWatchReader{
+			API: clients.Logs, Group: cfg.FlowLogs, Format: format,
+		}
 	}
 
 	collector := &ingest.Collector{
@@ -255,13 +272,19 @@ func preflightCheck(ctx context.Context, cfg *config.Config, stdout *os.File) er
 		Region: cfg.Region, RoleARN: cfg.RoleARN, ExternalID: cfg.ExternalID,
 	}); err == nil {
 		namer = &ingest.DestinationResolver{API: clients.Network}
+		format, err := cfg.Format()
+		if err != nil {
+			return fmt.Errorf("flow log format: %w", err)
+		}
 		if bucket, prefix, ok := cfg.S3Source(); ok {
 			source = &ingest.S3Reader{
 				API: clients.Objects, Bucket: bucket, Prefix: prefix,
-				AccountID: cfg.AccountID, Region: cfg.Region,
+				AccountID: cfg.AccountID, Region: cfg.Region, Format: format,
 			}
 		} else if cfg.FlowLogs != "" {
-			source = &ingest.CloudWatchReader{API: clients.Logs, Group: cfg.FlowLogs}
+			source = &ingest.CloudWatchReader{
+				API: clients.Logs, Group: cfg.FlowLogs, Format: format,
+			}
 		}
 	}
 

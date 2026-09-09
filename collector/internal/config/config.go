@@ -18,6 +18,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/EzraStone/Custos/collector/internal/flowlogs"
 )
 
 // Config is everything the collector needs. There are no defaults for the two
@@ -35,6 +37,18 @@ type Config struct {
 	AccessLogs string // optional: ALB access log prefix
 	Window     time.Duration
 	DryRun     bool // read and print, never send
+
+	// FlowLogFormat is the format the account's flow log is written in.
+	//
+	// Empty means the format Custos's own Terraform module configures. It only
+	// has to be set when pointing the collector at a log group the customer
+	// already had — which is the cheaper thing for them to do, because VPC
+	// Flow Logs bill per gigabyte and a second copy of a large account's
+	// traffic is a real line item.
+	//
+	// Not needed for S3 at all: AWS writes the field names at the top of every
+	// object it delivers there, and the file is believed over this setting.
+	FlowLogFormat string
 
 	// RoleARN is the cross-account role to assume. Empty means use ambient
 	// credentials, which is how a customer runs this inside their own account.
@@ -76,18 +90,19 @@ const DefaultWindow = time.Hour
 // Load reads configuration from the environment.
 func Load(getenv func(string) string) (*Config, error) {
 	c := &Config{
-		Endpoint:   strings.TrimSpace(getenv("CUSTOS_ENDPOINT")),
-		Token:      strings.TrimSpace(getenv("CUSTOS_TOKEN")),
-		AccountID:  strings.TrimSpace(getenv("CUSTOS_ACCOUNT_ID")),
-		Region:     strings.TrimSpace(getenv("AWS_REGION")),
-		FlowLogs:   strings.TrimSpace(getenv("CUSTOS_FLOW_LOGS")),
-		AccessLogs: strings.TrimSpace(getenv("CUSTOS_ACCESS_LOGS")),
-		Window:     DefaultWindow,
-		DryRun:     getenv("CUSTOS_DRY_RUN") == "1",
-		RoleARN:    strings.TrimSpace(getenv("CUSTOS_ROLE_ARN")),
-		ExternalID: strings.TrimSpace(getenv("CUSTOS_EXTERNAL_ID")),
-		Daemon:     getenv("CUSTOS_DAEMON") == "1",
-		StatePath:  strings.TrimSpace(getenv("CUSTOS_STATE_PATH")),
+		Endpoint:      strings.TrimSpace(getenv("CUSTOS_ENDPOINT")),
+		Token:         strings.TrimSpace(getenv("CUSTOS_TOKEN")),
+		AccountID:     strings.TrimSpace(getenv("CUSTOS_ACCOUNT_ID")),
+		Region:        strings.TrimSpace(getenv("AWS_REGION")),
+		FlowLogs:      strings.TrimSpace(getenv("CUSTOS_FLOW_LOGS")),
+		AccessLogs:    strings.TrimSpace(getenv("CUSTOS_ACCESS_LOGS")),
+		FlowLogFormat: strings.TrimSpace(getenv("CUSTOS_FLOW_LOG_FORMAT")),
+		Window:        DefaultWindow,
+		DryRun:        getenv("CUSTOS_DRY_RUN") == "1",
+		RoleARN:       strings.TrimSpace(getenv("CUSTOS_ROLE_ARN")),
+		ExternalID:    strings.TrimSpace(getenv("CUSTOS_EXTERNAL_ID")),
+		Daemon:        getenv("CUSTOS_DAEMON") == "1",
+		StatePath:     strings.TrimSpace(getenv("CUSTOS_STATE_PATH")),
 	}
 	if c.StatePath == "" {
 		c.StatePath = "custos-collector-state.json"
@@ -140,6 +155,12 @@ func (c *Config) Validate() error {
 	if c.RoleARN != "" && c.Region == "" {
 		return errors.New("AWS_REGION is required when assuming a role")
 	}
+	if _, err := c.Format(); err != nil {
+		// Refused here rather than at the first line read. A bad format
+		// produces zero records, and zero records looks exactly like an
+		// account with nothing running in it.
+		return fmt.Errorf("CUSTOS_FLOW_LOG_FORMAT: %w", err)
+	}
 	if c.Daemon && c.DryRun {
 		// A dry-run daemon would loop forever printing batches and advancing
 		// its cursor over windows nothing received. Refusing is clearer than
@@ -147,6 +168,25 @@ func (c *Config) Validate() error {
 		return errors.New("CUSTOS_DAEMON and CUSTOS_DRY_RUN are mutually exclusive")
 	}
 	return nil
+}
+
+// Format is the flow log format to read, defaulting to the one Custos's own
+// Terraform module configures.
+func (c *Config) Format() (flowlogs.Format, error) {
+	if c.FlowLogFormat == "" {
+		return flowlogs.Default, nil
+	}
+	f, err := flowlogs.ParseFormat(c.FlowLogFormat)
+	if err != nil {
+		return flowlogs.Format{}, err
+	}
+	if !f.Usable() {
+		return flowlogs.Format{}, fmt.Errorf(
+			"missing %s, without which a scan cannot mean anything",
+			strings.Join(f.Missing(), ", "),
+		)
+	}
+	return f, nil
 }
 
 // WillSend reports whether this configuration permits network egress at all.

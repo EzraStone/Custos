@@ -2,7 +2,11 @@ package config
 
 import (
 	"errors"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/EzraStone/Custos/collector/internal/flowlogs"
 )
 
 func env(pairs map[string]string) func(string) string {
@@ -157,5 +161,82 @@ func TestStatePathIsConfigurable(t *testing.T) {
 	}
 	if c.StatePath != "/var/lib/custos/cursor.json" {
 		t.Fatalf("got %q", c.StatePath)
+	}
+}
+
+// --- reading a log the customer already has ----------------------------------
+
+func TestNoFormatMeansTheOneWeConfigure(t *testing.T) {
+	c := &Config{
+		Endpoint: "https://api.custos.dev", Token: "t",
+		FlowLogs: "custos-flow-logs", Window: time.Hour,
+	}
+	f, err := c.Format()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !f.Usable() || f.Count() != flowlogs.Default.Count() {
+		t.Fatalf("default format: %v", f.Fields())
+	}
+}
+
+func TestAnAccountsOwnFormatIsAccepted(t *testing.T) {
+	c := &Config{
+		Endpoint: "https://api.custos.dev", Token: "t",
+		FlowLogs: "existing-flow-logs", Window: time.Hour,
+		FlowLogFormat: "${version} ${account-id} ${interface-id} ${srcaddr} " +
+			"${dstaddr} ${srcport} ${dstport} ${protocol} ${packets} ${bytes} " +
+			"${start} ${end} ${action} ${log-status}",
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	f, err := c.Format()
+	if err != nil || !f.Usable() {
+		t.Fatalf("format %v err %v", f.Fields(), err)
+	}
+}
+
+func TestAFormatMissingSomethingRequiredIsRefusedAtStartup(t *testing.T) {
+	// Not at the first line read. A bad format produces zero records, and zero
+	// records looks exactly like an account with nothing running in it.
+	c := &Config{
+		Endpoint: "https://api.custos.dev", Token: "t",
+		FlowLogs: "existing-flow-logs", Window: time.Hour,
+		FlowLogFormat: "${version} ${account-id} ${srcaddr} ${dstaddr}",
+	}
+	err := c.Validate()
+	if err == nil {
+		t.Fatal("a format with no byte counts started up")
+	}
+	if !strings.Contains(err.Error(), "bytes") {
+		t.Fatalf("the error does not name what is missing: %v", err)
+	}
+}
+
+func TestNonsenseInTheFormatVariableIsRefused(t *testing.T) {
+	c := &Config{
+		Endpoint: "https://api.custos.dev", Token: "t",
+		FlowLogs: "g", Window: time.Hour, FlowLogFormat: "SELECT * FROM logs",
+	}
+	if err := c.Validate(); err == nil {
+		t.Fatal("accepted nonsense as a flow log format")
+	}
+}
+
+func TestTheFormatIsLoadedFromTheEnvironment(t *testing.T) {
+	vars := map[string]string{
+		"CUSTOS_ENDPOINT":        "https://api.custos.dev",
+		"CUSTOS_TOKEN":           "t",
+		"CUSTOS_FLOW_LOGS":       "existing",
+		"CUSTOS_FLOW_LOG_FORMAT": "interface-id srcaddr dstaddr bytes start end",
+	}
+	c, err := Load(env(vars))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := c.Format()
+	if err != nil || f.Count() != 6 {
+		t.Fatalf("format %v err %v", f.Fields(), err)
 	}
 }
