@@ -104,6 +104,12 @@ appears anywhere in the parsed record.
 
 No, enforced in three places independently.
 
+0. The IAM role grants twenty-one read actions, and a test in
+   `internal/awsread/policy_test.go` fails if the collector calls one that is
+   not granted **or** is granted one it does not call. Thirteen were removed
+   the day that test was written, including `iam:ListRoles` and
+   `ec2:DescribeTags` on `*`.
+
 1. The IAM role grants no write permission.
 2. A second policy explicitly denies every mutating action, including
    `logs:StartQuery`, which creates a billable resource.

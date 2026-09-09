@@ -136,6 +136,14 @@ report says a model endpoint among them would not appear at all. It is not
 fixed, it is stated. It matters more each year: AWS began charging for public
 IPv4 addresses in 2024 and dual-stack VPCs are the response.
 
+**The IAM policy asked for thirteen permissions nothing used, and I nearly
+kept them.** The same test that found the missing S3 grant flagged thirteen
+granted actions no code calls — and the first thing I did was write a
+justification map with a plausible sentence beside each one, none of which was
+true. That is the failure the test exists to prevent, committed inside the test.
+The policy lost all thirteen, among them `iam:ListRoles` and `ec2:DescribeTags`
+on `*`. Twenty-one actions remain.
+
 **The IAM policy did not grant the S3 reads the collector makes.** Flow logs
 delivered to S3 and load balancer access logs are both read with ListObjectsV2
 and GetObject, and the Terraform granted neither — so a customer who took a

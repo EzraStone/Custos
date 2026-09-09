@@ -4,6 +4,19 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### A role that asked for too much and delivered too little
+
+**Thirteen permissions removed.** The policy granted `iam:ListRoles`,
+`ec2:DescribeTags`, `ec2:DescribeSubnets`, `ec2:DescribeVpcs`,
+`ec2:DescribeFlowLogs`, `logs:GetLogEvents`, `logs:DescribeLogStreams`,
+`ecs:ListServices`, `ecs:DescribeServices`, `ecs:ListTasks`,
+`lambda:ListFunctions`, `eks:ListClusters` and `eks:DescribeCluster`. Nothing
+in the collector calls any of them. Twenty-one actions remain.
+
+The first two are the ones that matter: `iam:ListRoles` on `*` enumerates every
+role in an account and `ec2:DescribeTags` on `*` reads every tag, granted by a
+product whose whole argument is that it asks for less than you expect.
+
 ### A role that could not read the logs
 
 **The IAM policy granted no S3 access at all.** The collector reads flow logs
