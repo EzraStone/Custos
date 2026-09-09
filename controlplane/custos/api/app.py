@@ -38,6 +38,7 @@ from ..store.declarations import CandidateStore, DeclarationStore
 from ..store.rates import RateStore
 from ..store.scans import ReviewStore, ScanStore
 from .auth import Principal, TokenStore, parse_bearer
+from .compression import GzipRequestMiddleware
 
 log = get("custos.api")
 
@@ -137,6 +138,11 @@ def create_app(
         redoc_url=None,
         openapi_url=None,
     )
+    # Before anything else reads the body. The collector compresses batches
+    # because a full window is 203MB of JSON and 6.2MB gzipped, and Starlette
+    # decompresses responses rather than requests.
+    app.add_middleware(GzipRequestMiddleware)
+
     app.state.db = database
     app.state.tokens = token_store
     app.state.channels = delivery

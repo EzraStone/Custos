@@ -12,6 +12,7 @@ package ship
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -23,10 +24,40 @@ import (
 )
 
 const (
-	userAgent      = "custos-collector"
-	defaultTimeout = 30 * time.Second
-	maxAttempts    = 4
+	userAgent   = "custos-collector"
+	maxAttempts = 4
+
+	// baseTimeout covers connection setup and the control plane's own work on
+	// a small batch. It is a floor, not the budget: see timeoutFor.
+	baseTimeout = 30 * time.Second
+
+	// perMegabyte is added to the timeout for every megabyte on the wire,
+	// which is roughly 8 Mbit/s sustained. Deliberately pessimistic: a
+	// collector running inside a customer's VPC behind an egress proxy has no
+	// claim on the bandwidth a laptop would see.
+	perMegabyte = time.Second
+
+	// maxTimeout bounds the whole thing. A send that has not completed in ten
+	// minutes is not going to, and a daemon blocked on one is a daemon that
+	// has stopped collecting.
+	maxTimeout = 10 * time.Minute
 )
+
+// timeoutFor scales the request deadline to the size of what is being sent.
+//
+// A fixed thirty seconds was a bug waiting for the first busy account. One
+// window at the collector's own record limit is 500,000 flow records, which is
+// 203MB of JSON — 6.2MB gzipped, but still far more than thirty seconds of a
+// throttled egress path. The failure it produces is the worst kind: the
+// collector reports that shipping failed, retries three times, and the
+// customer's first impression is that the product does not work.
+func timeoutFor(bodyBytes int) time.Duration {
+	d := baseTimeout + time.Duration(bodyBytes/(1<<20))*perMegabyte
+	if d > maxTimeout {
+		return maxTimeout
+	}
+	return d
+}
 
 // Shipper posts batches over TLS.
 type Shipper struct {
@@ -44,7 +75,9 @@ func New(endpoint, token, version string) *Shipper {
 		token:    token,
 		version:  version,
 		client: &http.Client{
-			Timeout: defaultTimeout,
+			// No client-level timeout: it would apply the same deadline to a
+			// 40KB batch and a 200MB one. The deadline is set per request,
+			// from the size of the body.
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
 			},
@@ -58,9 +91,19 @@ func New(endpoint, token, version string) *Shipper {
 func (s *Shipper) Send(ctx context.Context, batch wire.Batch) error {
 	batch.Collector = s.version
 
-	body, err := json.Marshal(batch)
+	raw, err := json.Marshal(batch)
 	if err != nil {
 		return fmt.Errorf("encoding batch: %w", err)
+	}
+
+	// Compressed, because flow log JSON is the most compressible payload
+	// imaginable: the same keys, the same addresses and the same subnets
+	// repeated hundreds of thousands of times. Measured at 32x on a full
+	// window — 203MB becomes 6.2MB — which is the difference between a send
+	// that completes over a customer's egress path and one that does not.
+	body, err := compress(raw)
+	if err != nil {
+		return fmt.Errorf("compressing batch: %w", err)
 	}
 
 	var lastErr error
@@ -91,13 +134,29 @@ func (s *Shipper) Send(ctx context.Context, batch wire.Batch) error {
 	return fmt.Errorf("after %d attempts: %w", maxAttempts, lastErr)
 }
 
+func compress(raw []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	if _, err := zw.Write(raw); err != nil {
+		return nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 func (s *Shipper) post(ctx context.Context, body []byte) (int, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeoutFor(len(body)))
+	defer cancel()
+
 	req, err := http.NewRequestWithContext(
 		ctx, http.MethodPost, s.endpoint+"/v1/batches", bytes.NewReader(body))
 	if err != nil {
 		return 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Encoding", "gzip")
 	req.Header.Set("Authorization", "Bearer "+s.token)
 	req.Header.Set("User-Agent", userAgent+"/"+s.version)
 

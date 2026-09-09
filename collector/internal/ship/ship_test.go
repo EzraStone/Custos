@@ -1,8 +1,10 @@
 package ship
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -28,10 +30,16 @@ func batch() wire.Batch {
 
 func TestSendPostsJSONWithBearerToken(t *testing.T) {
 	var got wire.Batch
-	var auth string
+	var auth, encoding string
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth = r.Header.Get("Authorization")
-		_ = json.NewDecoder(r.Body).Decode(&got)
+		encoding = r.Header.Get("Content-Encoding")
+		zr, err := gzip.NewReader(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		_ = json.NewDecoder(zr).Decode(&got)
 		w.WriteHeader(http.StatusAccepted)
 	}))
 	defer srv.Close()
@@ -44,6 +52,9 @@ func TestSendPostsJSONWithBearerToken(t *testing.T) {
 	}
 	if auth != "Bearer secret-token" {
 		t.Fatalf("bad auth header %q", auth)
+	}
+	if encoding != "gzip" {
+		t.Fatalf("body must declare its encoding, got %q", encoding)
 	}
 	if len(got.Flows) != 1 || got.Flows[0].Bytes != 286432 {
 		t.Fatalf("batch did not round trip: %+v", got)
@@ -107,5 +118,59 @@ func TestDescribeShowsExactlyWhatWouldBeSent(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("dry-run output missing %q", want)
 		}
+	}
+}
+
+// --- size ---------------------------------------------------------------------
+
+// One window at the collector's own record limit is 500,000 flow records,
+// which is 203MB of JSON. Flow log JSON is the most compressible payload
+// imaginable — the same keys, addresses and subnets hundreds of thousands of
+// times over — and measures about 32x.
+func TestABigBatchGoesOnTheWireSmall(t *testing.T) {
+	var big wire.Batch
+	big.AccountID = "447120043318"
+	for i := 0; i < 20_000; i++ {
+		big.Flows = append(big.Flows, wire.FlowRecord{
+			AccountID: "447120043318", InterfaceID: fmt.Sprintf("eni-%06x", i%500),
+			SrcAddr: "10.0.1.5", DstAddr: "160.79.104.10",
+			SrcPort: 41000 + i%20000, DstPort: 443, Protocol: 6,
+			Packets: 40, Bytes: 140000, Action: "ACCEPT", LogStatus: "OK",
+			VpcID: "vpc-0a1b2c3d", SubnetID: "subnet-0ab12345",
+			Direction: wire.Egress, TCPFlags: 19,
+		})
+	}
+
+	raw, err := json.Marshal(big)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sent, err := compress(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ratio := float64(len(raw)) / float64(len(sent))
+	if ratio < 10 {
+		t.Fatalf("compression ratio %.1fx — the size problem is back", ratio)
+	}
+}
+
+// A fixed thirty-second deadline was a bug waiting for the first busy account:
+// the same budget for a 40KB batch and a 200MB one.
+func TestTheDeadlineScalesWithWhatIsBeingSent(t *testing.T) {
+	small := timeoutFor(40 << 10)
+	large := timeoutFor(200 << 20)
+
+	if small < baseTimeout {
+		t.Fatalf("a small batch got less than the floor: %v", small)
+	}
+	if large <= small {
+		t.Fatalf("a 200MB body got %v, no more than a 40KB one at %v", large, small)
+	}
+	if large > maxTimeout {
+		t.Fatalf("unbounded: %v", large)
+	}
+	if timeoutFor(1<<40) != maxTimeout {
+		t.Fatal("an absurd body must clamp rather than block a daemon forever")
 	}
 }
