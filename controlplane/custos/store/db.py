@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -63,8 +64,11 @@ def connect(path: str | Path = ":memory:") -> sqlite3.Connection:
     # Foreign keys are off by default in SQLite, which quietly turns every
     # REFERENCES clause in the schema into documentation.
     conn.execute("PRAGMA foreign_keys = ON")
-    # WAL lets a report render while a scan writes. Without it the console
-    # blocks behind ingestion, which is exactly when someone is watching.
+    # WAL, so that a second connection can read while this one writes. The
+    # control plane holds a single connection today, so nothing yet takes
+    # advantage of it — this is here for the reader connection that a
+    # deployment past one process will need, and because turning it on later
+    # against a live database is a worse moment to discover it.
     if str(path) != ":memory:":
         conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA synchronous = NORMAL")
@@ -113,6 +117,31 @@ def open_database(path: str | Path = ":memory:") -> sqlite3.Connection:
     return conn
 
 
+_WRITES = threading.Lock()
+"""Serialises write transactions across the process.
+
+The control plane is one process holding one connection to one SQLite file, and
+FastAPI runs its routes in a thread pool. Two accounts shipping on the hour
+therefore reach `transaction` on the same connection at the same time, and
+SQLite has one transaction per connection: the second `BEGIN` fails with
+"cannot start a transaction within a transaction", the request 500s, and that
+account's window is dropped. Reproduced before this existed, with two threads
+and a shared connection.
+
+A lock rather than a connection per thread. Per-thread connections are the
+larger and better answer, and they are not available while the tests and the
+scanner share an in-memory database, which exists only inside the connection
+that opened it. What this buys is that the second account waits instead of
+failing, which is the whole of the difference that matters.
+
+What it does not buy: a read issued while a write transaction is open is on the
+same connection and sees the uncommitted rows. The window is one ingest and the
+consequence is a console that briefly shows a scan still being written. Holding
+every read behind a twenty-second ingest would be the worse trade, so it is
+stated rather than prevented.
+"""
+
+
 @contextmanager
 def transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
     """Run a block in one transaction, rolling back on any exception.
@@ -120,12 +149,15 @@ def transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
     Ingesting a batch touches four tables. A partial write would leave a scan
     row with no observations, which reads downstream as an agent that stopped
     being seen — a drift finding manufactured out of a crash.
+
+    Serialised process-wide: see `_WRITES`.
     """
-    conn.execute("BEGIN")
-    try:
-        yield conn
-    except Exception:
-        conn.execute("ROLLBACK")
-        raise
-    else:
-        conn.execute("COMMIT")
+    with _WRITES:
+        conn.execute("BEGIN")
+        try:
+            yield conn
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        else:
+            conn.execute("COMMIT")
