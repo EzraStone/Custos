@@ -762,6 +762,8 @@ def create_app(
             truncated=latest.truncated if latest else False,
             scope_named=latest.scope_named if latest else 0,
             scope_total=latest.scope_total if latest else 0,
+            missing_fields=latest.missing_fields if latest else (),
+            direction_undecided=latest.direction_undecided if latest else 0,
         ) if latest else None
 
         diff = ScanDiff()

@@ -168,8 +168,50 @@ def _review_row(review: Review) -> str:
     </article>"""
 
 
+# What each absent flow log field costs the report, phrased as what the report
+# may not claim. A reader has to be able to tell "we looked and found none"
+# from "the log this account keeps cannot answer that".
+_FIELD_COSTS = {
+    "dstport": "Destination ports were not recorded by this account's flow "
+               "log, so nothing here is identified as an MCP server or a "
+               "datastore. Their absence from the scope above is a gap in the "
+               "log, not a finding.",
+    "pkt-dst-aws-service": "AWS service annotations were not recorded, so "
+                           "Bedrock and S3 traffic was classified from address "
+                           "ranges alone. An AWS endpoint outside those ranges "
+                           "reads as an ordinary external address.",
+    "pkt-src-aws-service": "The AWS service at the source end was not "
+                           "recorded, so the return leg of an AWS conversation "
+                           "arrives unattributed.",
+    "log-status": "AWS's own NODATA and SKIPDATA markers were not recorded, so "
+                  "the coverage figure above cannot account for records AWS "
+                  "dropped before we read them. It is an upper bound.",
+}
+
+
+def _format_limits(coverage: Coverage | None) -> list[str]:
+    """What the account's flow log format prevents this report from saying."""
+    if coverage is None:
+        return []
+
+    items = [
+        _FIELD_COSTS[name] for name in coverage.missing_fields if name in _FIELD_COSTS
+    ]
+    if coverage.direction_undecided:
+        items.append(
+            f"{coverage.direction_undecided:,} flow records were discarded "
+            "because this account's flow log does not record direction and "
+            "neither end could be established as the interface's own address. "
+            "Their bytes are in no figure above."
+        )
+    return items
+
+
 def _limitations(
-    result: ScanResult, degraded: list[str], declared: list[str] | None = None
+    result: ScanResult,
+    degraded: list[str],
+    declared: list[str] | None = None,
+    coverage: Coverage | None = None,
 ) -> str:
     items = [
         "Payload contents were never collected. Identities, endpoints, byte "
@@ -219,6 +261,7 @@ def _limitations(
             "bytes rather than from token counts, so they remain estimates — "
             "but they are estimates at your prices rather than ours."
         )
+    items.extend(_format_limits(coverage))
     if degraded:
         items.append(
             "Load balancer access logs were not available for this scan. The "
@@ -318,6 +361,16 @@ class Coverage:
     skipped_records: int = 0
     scope_named: int = 0
     scope_total: int = 0
+    missing_fields: tuple[str, ...] = ()
+    """Flow log fields this account's format does not carry.
+
+    An account whose format has no port field has no MCP servers in its
+    register. The report has to say that, or its silence on MCP servers reads
+    as a finding rather than as a field nobody looked at."""
+
+    direction_undecided: int = 0
+    """Records dropped because their direction could not be established.
+    Coverage the parse counters do not show, because the lines parsed."""
 
     @property
     def complete(self) -> bool:
@@ -454,7 +507,7 @@ def render(
 
 <section>
   <h2>What this report does not claim</h2>
-  <ul class="limits">{_limitations(result, degraded, declared)}</ul>
+  <ul class="limits">{_limitations(result, degraded, declared, coverage)}</ul>
 </section>
 
 <footer>

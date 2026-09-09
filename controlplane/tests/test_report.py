@@ -17,7 +17,7 @@ from custos.register.model import (
     Status,
 )
 from custos.register.store import Register
-from custos.report import Question, Review, render
+from custos.report import Coverage, Question, Review, render
 from custos.scan import ScanResult
 
 from .conftest import prose
@@ -107,6 +107,46 @@ def test_no_unattributed_section_when_everything_is_owned(page):
 def test_review_candidates_are_not_presented_as_agents(page):
     assert "For review" in page
     assert "needs a human" in page
+
+
+# --- what the account's flow log could not answer -----------------------------
+
+
+def test_a_format_without_ports_says_why_there_are_no_mcp_servers():
+    """Otherwise the report's silence on MCP servers reads as a finding rather
+    than as a field nobody recorded."""
+    page = render(
+        result([agent()]), "acme", T0,
+        coverage=Coverage(missing_fields=("dstport",)),
+    )
+    assert "Destination ports were not recorded" in page
+    assert "a gap in the log, not a finding" in page
+
+
+def test_a_complete_format_says_none_of_that(page):
+    assert "were not recorded by this account" not in page
+    assert "does not record direction" not in page
+
+
+def test_records_dropped_for_want_of_a_direction_are_disclosed():
+    """The parse counters cannot show these: the lines parsed. They were
+    dropped afterwards, and their bytes are in no figure in the report."""
+    page = render(
+        result([agent()]), "acme", T0,
+        coverage=Coverage(direction_undecided=4210),
+    )
+    assert "4,210 flow records were discarded" in page
+    assert "Their bytes are in no figure above" in page
+
+
+def test_an_unrecognised_missing_field_is_not_rendered_as_a_sentence():
+    """SEC-23 at the render: the list arrives from a batch, and only names we
+    have a stated cost for become prose in a customer's document."""
+    page = render(
+        result([agent()]), "acme", T0,
+        coverage=Coverage(missing_fields=("acme-internal-tag",)),
+    )
+    assert "acme-internal-tag" not in page
 
 
 # --- the review band --------------------------------------------------------

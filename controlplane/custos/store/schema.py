@@ -22,7 +22,7 @@ agent's apparent spend and reach.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 # Columns added after a table was first written, applied by ALTER on databases
 # that already exist. The schema below is applied with CREATE TABLE IF NOT
@@ -35,6 +35,12 @@ SCHEMA_VERSION = 6
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("scans", "scope_named", "INTEGER NOT NULL DEFAULT 0"),
     ("scans", "scope_total", "INTEGER NOT NULL DEFAULT 0"),
+    # What the account's flow log format did not carry, and what direction
+    # inference could not decide. Both change what a report may claim, so both
+    # have to survive to the render rather than living in a collector log the
+    # customer never sees.
+    ("scans", "missing_fields", "TEXT NOT NULL DEFAULT '[]'"),
+    ("scans", "direction_undecided", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 SCHEMA = """

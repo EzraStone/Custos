@@ -46,6 +46,8 @@ class ScanRecord:
     truncated: bool
     scope_named: int = 0
     scope_total: int = 0
+    missing_fields: tuple[str, ...] = ()
+    direction_undecided: int = 0
 
     @property
     def scope_readable(self) -> float:
@@ -128,15 +130,18 @@ class ScanStore:
         catalogue_revision: str,
         scope_named: int = 0,
         scope_total: int = 0,
+        missing_fields: tuple[str, ...] = (),
+        direction_undecided: int = 0,
     ) -> int:
         cursor = self.conn.execute(
             "INSERT INTO scans (batch_id, account_id, started_at, principals_seen, "
             "agents_found, review_candidates, coverage, truncated, catalogue_revision, "
-            "scope_named, scope_total) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "scope_named, scope_total, missing_fields, direction_undecided) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (batch_id, account_id, iso(started_at), principals_seen, agents_found,
              review_candidates, coverage, int(truncated), catalogue_revision,
-             scope_named, scope_total),
+             scope_named, scope_total, dumps(list(missing_fields)),
+             direction_undecided),
         )
         return cursor.lastrowid
 
@@ -173,6 +178,8 @@ class ScanStore:
                 review_candidates=row["review_candidates"],
                 coverage=row["coverage"], truncated=bool(row["truncated"]),
                 scope_named=row["scope_named"], scope_total=row["scope_total"],
+                missing_fields=tuple(loads(row["missing_fields"])),
+                direction_undecided=row["direction_undecided"],
             )
             for row in self.conn.execute(
                 "SELECT * FROM scans WHERE account_id = ? ORDER BY started_at DESC, id DESC "
@@ -206,6 +213,8 @@ class ScanStore:
             review_candidates=row["review_candidates"],
             coverage=row["coverage"], truncated=bool(row["truncated"]),
             scope_named=row["scope_named"], scope_total=row["scope_total"],
+            missing_fields=tuple(loads(row["missing_fields"])),
+            direction_undecided=row["direction_undecided"],
         )
 
     def observations_for_scan(self, scan_id: int) -> dict[str, dict]:

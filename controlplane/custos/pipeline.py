@@ -181,6 +181,8 @@ def _coverage(batch: Batch, scope: tuple[int, int] = (0, 0)) -> Coverage:
         skipped_records=stats.records_skipped,
         scope_named=scope[0],
         scope_total=scope[1],
+        missing_fields=tuple(stats.missing_fields),
+        direction_undecided=stats.direction_undecided,
     )
 
 
@@ -252,6 +254,12 @@ def ingest(
             # on, and that is invisible unless it is counted.
             scope_named=named,
             scope_total=total,
+            # What the account's flow log format did not carry. It changes what
+            # the report may claim — an account with no port field has no MCP
+            # servers in its register, and a report that does not say so is
+            # asserting an absence it never looked for.
+            missing_fields=tuple(batch.collection.missing_fields),
+            direction_undecided=batch.collection.direction_undecided,
         )
 
         # Questions to put to the customer, from this scan's traffic. Recorded
