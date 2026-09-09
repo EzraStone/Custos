@@ -203,6 +203,7 @@ def _coverage(batch: Batch, scope: tuple[int, int] = (0, 0), ipv6: int = 0) -> C
         scope_total=scope[1],
         missing_fields=tuple(stats.missing_fields),
         direction_undecided=stats.direction_undecided,
+        read_errors=stats.read_errors,
         ipv6_destinations=ipv6,
     )
 
@@ -281,6 +282,7 @@ def ingest(
             # asserting an absence it never looked for.
             missing_fields=tuple(batch.collection.missing_fields),
             direction_undecided=batch.collection.direction_undecided,
+            read_errors=batch.collection.read_errors,
         )
 
         # Questions to put to the customer, from this scan's traffic. Recorded

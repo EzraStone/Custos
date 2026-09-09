@@ -48,6 +48,7 @@ class ScanRecord:
     scope_total: int = 0
     missing_fields: tuple[str, ...] = ()
     direction_undecided: int = 0
+    read_errors: int = 0
 
     @property
     def scope_readable(self) -> float:
@@ -132,16 +133,18 @@ class ScanStore:
         scope_total: int = 0,
         missing_fields: tuple[str, ...] = (),
         direction_undecided: int = 0,
+        read_errors: int = 0,
     ) -> int:
         cursor = self.conn.execute(
             "INSERT INTO scans (batch_id, account_id, started_at, principals_seen, "
             "agents_found, review_candidates, coverage, truncated, catalogue_revision, "
-            "scope_named, scope_total, missing_fields, direction_undecided) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "scope_named, scope_total, missing_fields, direction_undecided, "
+            "read_errors) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (batch_id, account_id, iso(started_at), principals_seen, agents_found,
              review_candidates, coverage, int(truncated), catalogue_revision,
              scope_named, scope_total, dumps(list(missing_fields)),
-             direction_undecided),
+             direction_undecided, read_errors),
         )
         return cursor.lastrowid
 
@@ -180,6 +183,7 @@ class ScanStore:
                 scope_named=row["scope_named"], scope_total=row["scope_total"],
                 missing_fields=tuple(loads(row["missing_fields"])),
                 direction_undecided=row["direction_undecided"],
+                read_errors=row["read_errors"],
             )
             for row in self.conn.execute(
                 "SELECT * FROM scans WHERE account_id = ? ORDER BY started_at DESC, id DESC "
@@ -215,6 +219,7 @@ class ScanStore:
             scope_named=row["scope_named"], scope_total=row["scope_total"],
             missing_fields=tuple(loads(row["missing_fields"])),
             direction_undecided=row["direction_undecided"],
+            read_errors=row["read_errors"],
         )
 
     def observations_for_scan(self, scan_id: int) -> dict[str, dict]:

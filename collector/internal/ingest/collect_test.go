@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -331,5 +332,70 @@ func TestNothingInternalReachedSaysNothing(t *testing.T) {
 	r := Report{}
 	if strings.Contains(r.Summary(), "internal destinations") {
 		t.Fatalf("reported on a run with no internal destinations:\n%s", r.Summary())
+	}
+}
+
+// --- what could not be read ---------------------------------------------------
+
+// An interface nobody could describe produces a finding with no owner, which is
+// exactly what an account with no resource tags produces. Without the count the
+// report presents our throttling as a fact about the customer's tagging.
+func TestFailedReadsAreCountedOntoTheBatch(t *testing.T) {
+	flows := stubFlows{
+		records: []wire.FlowRecord{flow("eni-1")},
+		err:     errors.New("RequestLimitExceeded"),
+	}
+
+	batch, report, err := collector(flows, nil, nil).Collect(
+		context.Background(), s3Window(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Errors) == 0 {
+		t.Fatal("the stub must fail, or this proves nothing")
+	}
+	if batch.Collection.ReadErrors != int64(len(report.Errors)) {
+		t.Fatalf("counted %d of %d failed reads",
+			batch.Collection.ReadErrors, len(report.Errors))
+	}
+}
+
+func TestACleanCollectionCountsNoFailedReads(t *testing.T) {
+	flows := stubFlows{
+		records: []wire.FlowRecord{flow("eni-1")},
+		stats:   flowlogs.Stats{Lines: 1, Parsed: 1},
+	}
+	batch, _, err := collector(flows, nil, nil).Collect(context.Background(), s3Window())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if batch.Collection.ReadErrors != 0 {
+		t.Fatalf("invented %d failed reads", batch.Collection.ReadErrors)
+	}
+}
+
+// The count leaves the account and the messages do not. An AWS error string can
+// quote a resource ARN or a policy, and nothing describing the account's
+// contents leaves it except through the named wire fields.
+func TestTheErrorMessagesThemselvesDoNotShip(t *testing.T) {
+	secret := "arn:aws:iam::447120043318:role/finance-close-privileged"
+	flows := stubFlows{
+		records: []wire.FlowRecord{flow("eni-1")},
+		err:     errors.New("AccessDenied on " + secret),
+	}
+
+	batch, report, _ := collector(flows, nil, nil).Collect(
+		context.Background(), s3Window(),
+	)
+	if !strings.Contains(strings.Join(report.Errors, " "), secret) {
+		t.Fatal("the local report should carry the message; it is what someone acts on")
+	}
+	encoded, err := json.Marshal(batch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), secret) {
+		t.Fatal("an AWS error message reached the wire")
 	}
 }

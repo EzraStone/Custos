@@ -139,6 +139,26 @@ def test_records_dropped_for_want_of_a_direction_are_disclosed():
     assert "Their bytes are in no figure above" in page
 
 
+def test_failed_aws_reads_are_disclosed_beside_the_unattributed_findings():
+    """An interface nobody could describe produces a finding with no owner,
+    which is exactly what an account with no resource tags produces. Without
+    this the report presents our throttling as a fact about their tagging."""
+    orphan = agent(principal="arn:aws:iam::1:role/svc0001", team="")
+    page = render(result([orphan]), "acme", T0, coverage=Coverage(read_errors=3))
+
+    assert "3 AWS reads failed" in page
+    assert "rather than for want of resource tags" in page
+
+
+def test_one_failed_read_is_not_pluralised():
+    page = render(result([agent()]), "acme", T0, coverage=Coverage(read_errors=1))
+    assert "1 AWS read failed" in page
+
+
+def test_a_scan_with_no_failed_reads_says_nothing_about_them(page):
+    assert "AWS read" not in page
+
+
 def test_public_ipv6_destinations_are_disclosed_as_a_blind_spot():
     """An agent reaching a provider over IPv6 produces no finding at all, so a
     report with no findings on a dual-stack account means much less than it

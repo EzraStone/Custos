@@ -770,6 +770,7 @@ def create_app(
             scope_total=latest.scope_total if latest else 0,
             missing_fields=latest.missing_fields if latest else (),
             direction_undecided=latest.direction_undecided if latest else 0,
+            read_errors=latest.read_errors if latest else 0,
         ) if latest else None
 
         diff = ScanDiff()

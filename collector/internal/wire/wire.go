@@ -144,6 +144,20 @@ type Collection struct {
 	// number is coverage lost and belongs beside the parse counters.
 	DirectionInferred  int64 `json:"direction_inferred,omitempty"`
 	DirectionUndecided int64 `json:"direction_undecided,omitempty"`
+
+	// ReadErrors counts AWS reads that failed after retries during this
+	// collection.
+	//
+	// A count and not the messages: an AWS error string can quote a resource
+	// ARN or a policy, and SEC-18 is the rule that nothing describing the
+	// account's contents leaves it except through the named fields above. The
+	// messages are printed locally, where the person who can act on them is.
+	//
+	// It ships because an interface nobody could describe produces a finding
+	// with no owner, which is the same shape an untagged account produces. A
+	// report that cannot tell those apart presents our throttling as a fact
+	// about the customer's tagging.
+	ReadErrors int64 `json:"read_errors,omitempty"`
 }
 
 // Batch is the unit of shipment. This is the complete set of things that ever

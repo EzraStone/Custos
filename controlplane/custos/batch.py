@@ -139,6 +139,13 @@ class Collection(BaseModel):
 
     direction_inferred: int = 0
     direction_undecided: int = 0
+    read_errors: int = 0
+    """AWS reads that failed after retries during this collection.
+
+    An interface nobody could describe produces a finding with no owner, which
+    is the same shape an untagged account produces. Without this the report
+    cannot tell those apart and presents our throttling as a fact about the
+    customer's tagging."""
     """Records whose direction the format did not carry. The undecided ones
     were dropped rather than guessed, so the second number is coverage lost."""
 

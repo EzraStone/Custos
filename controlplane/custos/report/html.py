@@ -197,6 +197,13 @@ def _format_limits(coverage: Coverage | None) -> list[str]:
     items = [
         _FIELD_COSTS[name] for name in coverage.missing_fields if name in _FIELD_COSTS
     ]
+    if coverage.read_errors:
+        items.append(
+            f"{coverage.read_errors:,} AWS read{'s' if coverage.read_errors != 1 else ''} "
+            "failed while this scan was collected, after retries. Anything they "
+            "would have named is missing: a finding under 'Unattributed' may be "
+            "there for that reason rather than for want of resource tags."
+        )
     if coverage.ipv6_destinations:
         items.append(
             f"{coverage.ipv6_destinations:,} of the public destinations reached "
@@ -379,6 +386,14 @@ class Coverage:
     direction_undecided: int = 0
     """Records dropped because their direction could not be established.
     Coverage the parse counters do not show, because the lines parsed."""
+    read_errors: int = 0
+    """AWS reads that failed after retries while this scan was collected.
+
+    An interface nobody could describe produces a finding with no owner, which
+    is exactly what an account with no resource tags produces. Saying the count
+    is what lets a reader tell those apart instead of concluding something
+    about their tagging."""
+
     ipv6_destinations: int = 0
     """Public IPv6 addresses this scan's traffic reached.
 

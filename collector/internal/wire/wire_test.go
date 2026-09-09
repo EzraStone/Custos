@@ -43,6 +43,7 @@ var allowedFields = map[string]map[string]bool{
 		"LinesRead": true, "LinesParsed": true, "LinesMalformed": true,
 		"RecordsSkipped": true, "Truncated": true, "HaveAccessLogs": true,
 		"MissingFields": true, "DirectionInferred": true, "DirectionUndecided": true,
+		"ReadErrors": true,
 	},
 }
 

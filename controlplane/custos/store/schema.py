@@ -22,7 +22,7 @@ agent's apparent spend and reach.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 # Columns added after a table was first written, applied by ALTER on databases
 # that already exist. The schema below is applied with CREATE TABLE IF NOT
@@ -41,6 +41,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     # customer never sees.
     ("scans", "missing_fields", "TEXT NOT NULL DEFAULT '[]'"),
     ("scans", "direction_undecided", "INTEGER NOT NULL DEFAULT 0"),
+    ("scans", "read_errors", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 SCHEMA = """

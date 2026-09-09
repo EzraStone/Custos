@@ -166,6 +166,21 @@ func (r Report) Summary() string {
 // returns nothing because one IAM call failed is a scan the customer will not
 // run twice.
 func (c *Collector) Collect(ctx context.Context, w awsread.Window) (wire.Batch, Report, error) {
+	batch, report, err := c.collect(ctx, w)
+
+	// Counted in one place because the body has several exits, and a count
+	// that is right on two of three paths is worse than none — it would read
+	// as "no reads failed" on the path where the most of them do.
+	//
+	// The count ships and the messages do not: an AWS error string can quote a
+	// resource ARN or a policy, and nothing describing the account's contents
+	// leaves it except through the named wire fields. The messages are printed
+	// locally, where the person who can act on them is.
+	batch.Collection.ReadErrors = int64(len(report.Errors))
+	return batch, report, err
+}
+
+func (c *Collector) collect(ctx context.Context, w awsread.Window) (wire.Batch, Report, error) {
 	batch := wire.Batch{
 		AccountID:   c.AccountID,
 		Region:      c.Region,
