@@ -415,6 +415,29 @@ func checkAccessLogs(report *Report, cfg Config) {
 	report.add("access logs", Pass, cfg.AccessLogs, "")
 }
 
+// readRemedy names the specific thing to change, when the error says which.
+//
+// "check that the role can read the log group" is true of every read failure
+// and useful for none of them. A denied read of an S3 log archive has exactly
+// one cause worth naming first — the bucket is not in the role's grant — and
+// that grant is a Terraform variable most people do not know exists.
+func readRemedy(cfg Config, err error) string {
+	denied := strings.Contains(err.Error(), "AccessDenied") ||
+		strings.Contains(err.Error(), "not authorized") ||
+		strings.Contains(err.Error(), "403")
+
+	if denied && strings.HasPrefix(cfg.FlowLogs, "s3://") {
+		return "the role cannot read that bucket: add it to log_buckets in " +
+			"terraform.tfvars and re-apply, then re-run this check"
+	}
+	if denied {
+		return "the role cannot read that log group: check the region, and " +
+			"that the log group name matches the one the role was granted"
+	}
+	return "check that the log group or bucket exists, that the region is " +
+		"right, and that the role can be assumed"
+}
+
 func checkFlowLogs(ctx context.Context, report *Report, cfg Config, flows FlowSource) []wire.FlowRecord {
 	interval := cfg.ProbeInterval
 	if interval <= 0 {
@@ -425,8 +448,7 @@ func checkFlowLogs(ctx context.Context, report *Report, cfg Config, flows FlowSo
 
 	records, stats, err := flows.Read(ctx, window)
 	if err != nil {
-		report.add("flow logs readable", Fail, err.Error(),
-			"check that the role can read the log group and that the region is right")
+		report.add("flow logs readable", Fail, err.Error(), readRemedy(cfg, err))
 		return nil
 	}
 
@@ -446,8 +468,9 @@ func checkFlowLogs(ctx context.Context, report *Report, cfg Config, flows FlowSo
 	if stats.Malformed > 0 && stats.Parsed == 0 {
 		report.add("flow log format", Fail,
 			fmt.Sprintf("%d lines read, none parsed", stats.Malformed),
-			"the log format does not match what Custos expects - apply the "+
-				"Terraform module's log_format, or send us a sample line")
+			"the lines are not in the format Custos was told to expect - set "+
+				"CUSTOS_FLOW_LOG_FORMAT to the format string this log was "+
+				"configured with, or send us a sample line")
 		return records
 	}
 

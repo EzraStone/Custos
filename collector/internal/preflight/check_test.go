@@ -524,3 +524,64 @@ func TestIPv6DoesNotBlockAScan(t *testing.T) {
 		t.Fatal("an account with IPv6 egress was refused a scan")
 	}
 }
+
+// --- remedies that name the actual fix ----------------------------------------
+
+// "check that the role can read the log group" is true of every read failure
+// and useful for none of them. The S3 grant is a Terraform variable most people
+// do not know exists, so a denied read of a bucket has to name it.
+func TestADeniedBucketReadNamesTheTerraformVariable(t *testing.T) {
+	cfg := good()
+	cfg.FlowLogs = "s3://acme-log-archive/AWSLogs"
+
+	report := run(cfg, stubFlows{err: errors.New(
+		"operation error S3: ListObjectsV2, AccessDenied: Access Denied")})
+	result := find(t, report, "flow logs readable")
+
+	if result.Status != Fail {
+		t.Fatalf("status %v", result.Status)
+	}
+	if !strings.Contains(result.Remedy, "log_buckets") {
+		t.Fatalf("the remedy does not name the variable: %q", result.Remedy)
+	}
+}
+
+func TestADeniedLogGroupReadDoesNotSendThemToTheBucketVariable(t *testing.T) {
+	cfg := good()
+	cfg.FlowLogs = "/aws/vpc/flowlogs"
+
+	remedy := find(t, run(cfg, stubFlows{
+		err: errors.New("AccessDeniedException: not authorized to perform logs:FilterLogEvents"),
+	}), "flow logs readable").Remedy
+
+	if strings.Contains(remedy, "log_buckets") {
+		t.Fatalf("a CloudWatch failure was blamed on an S3 variable: %q", remedy)
+	}
+	if !strings.Contains(remedy, "log group") {
+		t.Fatalf("the remedy does not name what failed: %q", remedy)
+	}
+}
+
+func TestAReadThatFailedForSomeOtherReasonSaysSo(t *testing.T) {
+	remedy := find(t, run(good(), stubFlows{
+		err: errors.New("ResourceNotFoundException: log group does not exist"),
+	}), "flow logs readable").Remedy
+
+	if strings.Contains(remedy, "log_buckets") || strings.Contains(remedy, "cannot read") {
+		t.Fatalf("a missing log group was reported as a permission problem: %q", remedy)
+	}
+}
+
+// Custos reads whatever format an account has now, so a remedy telling someone
+// to apply our Terraform sends them down the expensive path this product
+// deliberately stopped requiring.
+func TestAnUnparseableLogPointsAtTheFormatVariableNotAtTerraform(t *testing.T) {
+	remedy := find(t, run(good(), stubFlows{
+		records: modelTraffic(1),
+		stats:   flowlogs.Stats{Lines: 400, Malformed: 400},
+	}), "flow log format").Remedy
+
+	if !strings.Contains(remedy, "CUSTOS_FLOW_LOG_FORMAT") {
+		t.Fatalf("the remedy does not name the setting: %q", remedy)
+	}
+}
