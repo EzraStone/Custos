@@ -137,6 +137,17 @@ report says a model endpoint among them would not appear at all. It is not
 fixed, it is stated. It matters more each year: AWS began charging for public
 IPv4 addresses in 2024 and dual-stack VPCs are the response.
 
+**The report described an account from one region's scan.** Making a batch
+one region's window left the served report building its figures from the
+latest scan while rendering agents from every region: a limitations section
+naming one region over a list containing two regions' agents, one region's
+flow log format described as the account's, an incomplete-coverage banner
+suppressed by a healthy region while 40% of another's flow log went unread,
+and a masthead principal count from one region beside an agent count from all
+of them. The report is now assembled from the latest scan of each region, and
+a test reads the route's source so the next figure added to the masthead
+cannot be written the old way.
+
 **A scan covered one region and reported on the account.** The collector took
 a single AWS_REGION, nothing anywhere named it, and "No unsanctioned agents
 found." was a claim about a third of an estate printed as a claim about all of

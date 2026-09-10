@@ -29,6 +29,40 @@ this system hides an agent, and a hidden agent is a gap somebody can be told
 about. This one invents them, in a document whose whole value is that a
 security team believes it.
 
+### The report described an account from one region's scan
+
+**A scan is one region's window; the report is the whole register.** Once a
+batch became one region, the served report kept building its figures from the
+latest scan — which is now one region — while rendering agents from all of
+them. Four false claims came out of that, all of them in the part of the
+document a security team reads to decide what the list is worth:
+
+- The limitations said "covered eu-west-1 and no other region" over a list
+  containing us-east-1's agents.
+- One region's flow log format was described as the account's, so a port field
+  switched off in one region read as "this account records no ports" — false of
+  the others, and a gap nobody could locate.
+- The incomplete-coverage banner, which sits above everything precisely so it
+  is read before any conclusion is formed, was suppressed by a healthy region:
+  40% of one region's flow log unread, no banner, a clean-looking report.
+- "Principals seen" in the masthead counted one region beside an agent count
+  taken from all of them, so the ratio was between two populations.
+
+The report now assembles from the latest scan of each region. Fields missing
+in some regions but not others name the ones they are missing in, because that
+is a gap somebody can go and fix in one place. The parse figure is the worst
+region's rather than the last one's and the banner names which region it is
+about. Counts that are counts — failed reads, records dropped for want of a
+direction, the approval scope — add. The principal count is the largest
+region's, a floor, and the limitations say so: summing would count an IAM role
+that runs in two regions twice.
+
+Every one of these was invisible in a single-region account, which is every
+account anyone has run this against. A test reads the report route's source
+and fails if it takes a per-scan figure off the latest scan again, because the
+next figure added to the masthead will be written the same way and nobody will
+think to write the two-region test for it.
+
 ### One region is not an account
 
 **A scan of us-east-1 was reporting on the whole account.** The collector took
