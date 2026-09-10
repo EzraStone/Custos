@@ -24,7 +24,21 @@ const (
 
 // FlowRecord is one aggregated network flow. Byte counts and timings only.
 type FlowRecord struct {
-	AccountID   string    `json:"account_id"`
+	AccountID string `json:"account_id"`
+
+	// Region this record was read in.
+	//
+	// Not decoration, and not for the report. A private address is unique
+	// within a region and nowhere else: 10.0.4.21 is the billing API in
+	// us-east-1 and something entirely different in eu-west-1. A batch
+	// covering both regions that keyed anything on the address alone would
+	// name one of them wrongly, in the scope an operator reads before granting
+	// authority.
+	//
+	// Empty on a single-region batch from an older collector, which is
+	// unambiguous for the same reason.
+	Region string `json:"region,omitempty"`
+
 	InterfaceID string    `json:"interface_id"`
 	SrcAddr     string    `json:"srcaddr"`
 	DstAddr     string    `json:"dstaddr"`
@@ -108,6 +122,11 @@ type Destination struct {
 	Address string `json:"address"`
 	Name    string `json:"name"`
 	Kind    string `json:"kind"`
+
+	// Region the address was resolved in. Same reason as FlowRecord.Region: an
+	// address names a different host in each region, and this is the field
+	// that stops one region's name being shown against another's traffic.
+	Region string `json:"region,omitempty"`
 }
 
 // Collection describes the collection itself rather than the account.

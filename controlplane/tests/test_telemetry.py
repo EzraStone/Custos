@@ -12,6 +12,10 @@ ALLOWED_FLOW_FIELDS = {
     "dstport", "protocol", "packets", "bytes", "start", "end", "action",
     "log_status", "vpc_id", "subnet_id", "direction",
     "src_aws_service", "dst_aws_service", "tcp_flags",
+    # Which region the record was read in. An AWS region name, from a fixed
+    # vocabulary AWS publishes — it describes where we looked, not what the
+    # customer runs, and it holds no payload byte.
+    "region",
 }
 ALLOWED_REQUEST_FIELDS = {"at", "target", "sent_bytes", "received_bytes"}
 

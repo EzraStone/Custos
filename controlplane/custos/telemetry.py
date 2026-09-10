@@ -69,6 +69,14 @@ class FlowRecord:
     subnet_id: str = "subnet-0ab12345"
     action: str = "ACCEPT"
     log_status: str = "OK"
+    region: str = ""
+    """Region this record was read in.
+
+    Not a flow log field — AWS does not write one, and `to_line` does not
+    serialise it. It comes from the collector, which knows which region it read
+    the log in, and it is what keeps a batch covering several regions honest: a
+    private address is unique within a region and nowhere else."""
+
     src_aws_service: str = ""
     dst_aws_service: str = ""
     """The AWS service at each end, when AWS recognises one.

@@ -74,6 +74,7 @@ def _to_telemetry(batch: Batch) -> tuple[list[FlowRecord], dict[str, list[Inboun
             bytes=f.bytes, start=f.start, end=f.end, action=f.action,
             log_status=f.log_status, vpc_id=f.vpc_id, subnet_id=f.subnet_id,
             direction=_DIRECTIONS[f.direction],
+            region=f.region,
             src_aws_service=f.src_aws_service, dst_aws_service=f.dst_aws_service,
             tcp_flags=f.tcp_flags,
         )

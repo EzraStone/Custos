@@ -19,6 +19,7 @@ var allowedFields = map[string]map[string]bool{
 		"Bytes": true, "Start": true, "End": true, "Action": true,
 		"LogStatus": true, "VpcID": true, "SubnetID": true, "Direction": true,
 		"SrcAWSService": true, "DstAWSService": true, "TCPFlags": true,
+		"Region": true,
 	},
 	"InboundRequest": {
 		"At": true, "Target": true, "SentBytes": true, "ReceivedBytes": true,
@@ -32,7 +33,7 @@ var allowedFields = map[string]map[string]bool{
 		"SubnetID": true, "Compute": true,
 	},
 	"Destination": {
-		"Address": true, "Name": true, "Kind": true,
+		"Address": true, "Name": true, "Kind": true, "Region": true,
 	},
 	"Batch": {
 		"AccountID": true, "Region": true, "WindowStart": true, "WindowEnd": true,

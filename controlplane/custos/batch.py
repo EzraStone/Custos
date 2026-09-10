@@ -38,6 +38,14 @@ class FlowRecord(BaseModel):
     model_config = STRICT
 
     account_id: str = ""
+    region: str = ""
+    """Region this record was read in.
+
+    A private address is unique within a region and nowhere else: 10.0.4.21 is
+    the billing API in us-east-1 and something else in eu-west-1. Anything
+    keyed on an address alone would name one of them wrongly, in the scope an
+    operator reads before granting authority."""
+
     interface_id: str = ""
     srcaddr: str = ""
     dstaddr: str = ""
@@ -105,6 +113,8 @@ class Destination(BaseModel):
     address: str
     name: str = ""
     kind: str = ""
+    region: str = ""
+    """Region the address was resolved in. Same reason as FlowRecord.region."""
 
 
 class Collection(BaseModel):
@@ -166,7 +176,7 @@ class Batch(BaseModel):
 
     model_config = STRICT
 
-    account_id: str
+    account_id: str = ""
     region: str = ""
     window_start: datetime
     window_end: datetime
