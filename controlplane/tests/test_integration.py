@@ -513,3 +513,40 @@ def test_a_field_missing_in_one_region_is_reported_as_that_regions_gap(client):
         "the region with no port field was described by the region that has one"
     )
     assert "That is true of us-east-1; eu-west-1 does record it." in page
+
+
+def test_one_region_reading_badly_puts_the_banner_on_the_whole_report(client):
+    """The banner is above everything because a caveat at the bottom is a
+    caveat nobody reads before forming a conclusion. Taking it from the latest
+    scan meant a region that read 40% of its flow log was covered up by a
+    region that read all of its own — the report came out clean, with no
+    banner, over an estate a third of which nobody had seen.
+    """
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+
+    small = corpus.build(corpus.CorpusSpec(days=1))
+    for region, parsed in (("us-east-1", 40), ("eu-west-1", 100)):
+        payload = build_batch(small, region=region).model_dump(mode="json")
+        payload["account_id"] = ACCOUNT
+        payload["collection"] |= {"lines_read": 100, "lines_parsed": parsed}
+        assert client.post("/v1/batches", json=payload, headers=AUTH).status_code == 202
+
+    page = client.get("/v1/report", headers=AUTH).text
+    assert "Incomplete coverage" in page, "the bad region was covered up by the good one"
+    assert "40% of flow log lines parsed in us-east-1" in page
+
+
+def test_failed_reads_are_counted_across_every_region(client):
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+
+    small = corpus.build(corpus.CorpusSpec(days=1))
+    for region, errors in (("us-east-1", 3), ("eu-west-1", 4)):
+        payload = build_batch(small, region=region).model_dump(mode="json")
+        payload["account_id"] = ACCOUNT
+        payload["collection"]["read_errors"] = errors
+        client.post("/v1/batches", json=payload, headers=AUTH)
+
+    page = client.get("/v1/report", headers=AUTH).text
+    assert "7 AWS reads failed" in page, "one region's failures stood for the account's"

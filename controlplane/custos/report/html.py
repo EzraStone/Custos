@@ -436,6 +436,13 @@ class Coverage:
     skipped_records: int = 0
     scope_named: int = 0
     scope_total: int = 0
+    parse_by_region: tuple[tuple[str, float], ...] = ()
+    """How much of each region's flow log parsed, when there is more than one.
+
+    parsed_fraction above is the worst of these. This is what lets the banner
+    name the region it belongs to instead of stating a fraction of an account
+    that no single flow log has."""
+
     missing_in: tuple[tuple[str, tuple[str, ...]], ...] = ()
     """For each missing field, which of the regions covered lack it.
 
@@ -512,6 +519,19 @@ def _scope_banner(coverage: Coverage | None) -> str:
 </div>"""
 
 
+def _parsed_where(coverage: Coverage) -> str:
+    """Which regions read badly, when the report covers more than one.
+
+    The figure is the worst region's. Over a three-region account that is a
+    number about one flow log, and an operator cannot go and look at it until
+    the banner says which.
+    """
+    poor = [region for region, parsed in coverage.parse_by_region if parsed < 0.95]
+    if not poor or len(coverage.parse_by_region) < 2:
+        return ""
+    return f" in {', '.join(_e(region) for region in poor)}"
+
+
 def _coverage_banner(coverage: Coverage | None) -> str:
     """A banner above everything when the scan could not see the whole account.
 
@@ -523,7 +543,10 @@ def _coverage_banner(coverage: Coverage | None) -> str:
 
     reasons = []
     if coverage.parsed_fraction < 0.95:
-        reasons.append(f"only {coverage.parsed_fraction:.0%} of flow log lines parsed")
+        reasons.append(
+            f"only {coverage.parsed_fraction:.0%} of flow log lines parsed"
+            + _parsed_where(coverage)
+        )
     if coverage.truncated:
         reasons.append("the collection window was truncated at its record limit")
     if coverage.skipped_records:

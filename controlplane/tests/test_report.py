@@ -558,3 +558,29 @@ def test_a_field_missing_everywhere_is_not_qualified():
     )
     assert "Destination ports were not recorded" in page
     assert "does record it" not in page
+
+
+def test_a_single_region_banner_does_not_name_it():
+    """It is named in the limitations already, and "in us-east-1" on a report
+    that covers only us-east-1 reads as if somewhere else read cleanly."""
+    page = render(
+        result([agent()]), "acme", T0,
+        coverage=Coverage(
+            parsed_fraction=0.4, regions=("us-east-1",),
+            parse_by_region=(("us-east-1", 0.4),),
+        ),
+    )
+    assert "40% of flow log lines parsed" in page
+    assert "parsed in us-east-1" not in page
+
+
+def test_the_banner_names_the_region_that_read_badly():
+    page = render(
+        result([agent()]), "acme", T0,
+        coverage=Coverage(
+            parsed_fraction=0.4, regions=("eu-west-1", "us-east-1"),
+            parse_by_region=(("eu-west-1", 1.0), ("us-east-1", 0.4)),
+        ),
+    )
+    assert "40% of flow log lines parsed in us-east-1" in page
+    assert "eu-west-1" not in page.split("Incomplete coverage")[1].split("</div>")[0]

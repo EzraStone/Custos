@@ -780,14 +780,21 @@ def create_app(
             prices_revision=RateStore(app.state.db).rates_for(account_id).revision,
         )
         coverage = Coverage(
-            parsed_fraction=latest.coverage if latest else 1.0,
-            truncated=latest.truncated if latest else False,
-            scope_named=latest.scope_named if latest else 0,
-            scope_total=latest.scope_total if latest else 0,
+            # The worst region, not the last one. A region that read 40% of
+            # its flow log is a region nobody has seen, and averaging it
+            # against a region that read all of its own — or taking whichever
+            # shipped most recently — is how that disappears.
+            parsed_fraction=min((s.coverage for s in per_region), default=1.0),
+            truncated=any(s.truncated for s in per_region),
+            parse_by_region=_parse_by_region(per_region),
+            # Counts, so they add. Each region has its own destinations, its
+            # own interfaces, and its own failed reads.
+            scope_named=sum(s.scope_named for s in per_region),
+            scope_total=sum(s.scope_total for s in per_region),
             missing_fields=_missing_fields(per_region),
             missing_in=_missing_in(per_region),
-            direction_undecided=latest.direction_undecided if latest else 0,
-            read_errors=latest.read_errors if latest else 0,
+            direction_undecided=sum(s.direction_undecided for s in per_region),
+            read_errors=sum(s.read_errors for s in per_region),
             # Every region this account has been collected in, not the
             # latest scan's. The register below holds agents from all of
             # them; labelling it with one scan's region tells a reader a
@@ -900,6 +907,18 @@ class StatusRequest(BaseModel):
     status: str
     operator: str = Field(min_length=1)
     reason: str = ""
+
+
+def _parse_by_region(per_region: list) -> tuple[tuple[str, float], ...]:
+    """How much of each region's flow log parsed.
+
+    The banner names the region that read badly. "Only 40% of flow log lines
+    parsed" over a two-region account is a sentence an operator cannot act on
+    until they know which flow log to go and look at.
+    """
+    return tuple(
+        (region, scan.coverage) for scan in per_region for region in scan.regions
+    )
 
 
 def _missing_fields(per_region: list) -> tuple[str, ...]:
