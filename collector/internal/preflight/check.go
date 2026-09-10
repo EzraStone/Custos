@@ -219,8 +219,9 @@ func checkRegions(ctx context.Context, r *Report, cfg Config, regions Regions) {
 	r.add("other regions", Warn,
 		fmt.Sprintf("%s also %s flow logs and will not be scanned",
 			strings.Join(elsewhere, ", "), plural(len(elsewhere), "has", "have")),
-		"run a collector per region, each with its own AWS_REGION; the report "+
-			"names the regions it covered and says nothing about the others")
+		"set CUSTOS_REGIONS to the regions you want covered — this collector "+
+			"reads all of them and ships one batch each; the report names the "+
+			"region it covered and says nothing about the others")
 }
 
 func plural(n int, one, many string) string {

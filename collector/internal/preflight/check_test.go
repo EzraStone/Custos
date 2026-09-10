@@ -758,6 +758,22 @@ func TestNoSurveyWiredIsReportedRatherThanAssumed(t *testing.T) {
 	}
 }
 
+func TestTheRemedyNamesTheVariableThatFixesIt(t *testing.T) {
+	// It used to say "run a collector per region", which was true when one
+	// collector meant one region. Advice that outlives the thing it was
+	// working around sends people the long way round.
+	result := find(t, withRegions(good(), regionsWith{found: []ingest.Region{
+		{Name: "us-east-1", FlowLogs: 1}, {Name: "eu-west-1", FlowLogs: 1},
+	}}), "other regions")
+
+	if !strings.Contains(result.Remedy, "CUSTOS_REGIONS") {
+		t.Fatalf("the remedy does not name the variable: %q", result.Remedy)
+	}
+	if strings.Contains(result.Remedy, "collector per region") {
+		t.Fatalf("stale advice: %q", result.Remedy)
+	}
+}
+
 func TestOtherRegionsDoNotBlockAScan(t *testing.T) {
 	// One region scanned is a real scan of one region. Blocking it would turn
 	// a partial answer into no answer.

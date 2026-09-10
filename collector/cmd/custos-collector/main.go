@@ -432,6 +432,10 @@ CONFIGURATION
   CUSTOS_ENDPOINT      https URL of the control plane   (required to send)
   CUSTOS_TOKEN         credential you hold              (required to send)
   CUSTOS_FLOW_LOGS     log group name, or s3://bucket/prefix   (required)
+  CUSTOS_REGIONS       extra regions to collect, comma separated. AWS_REGION
+                       is always included. One batch is shipped per region,
+                       because a private address means a different host in
+                       each. --check names the regions that have flow logs.
   CUSTOS_FLOW_LOG_FORMAT
                        the format your flow log is written in, if it is not
                        the one our terraform module configures. Only needed

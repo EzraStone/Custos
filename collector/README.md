@@ -76,6 +76,17 @@ from each interface's own address. `--check` lists exactly what your format
 costs before you run a scan, and the report repeats it, so a gap in the log is
 never mistaken for a finding about the account.
 
+**An account is a region-by-region thing.** A workload in eu-west-1 has its own
+flow logs, its own interfaces, and no representation at all in a scan of
+us-east-1 — so a report from one region says nothing about the others, and says
+so. `--check` names which of your regions have flow logs; `CUSTOS_REGIONS` is
+how you cover them.
+
+One batch ships per region rather than one merged batch, because a private
+address is unique within a region and nowhere else. `10.0.4.21` is your billing
+API in one region and something entirely different in another, and a scan
+holding both would print one region's name against the other's traffic.
+
 ## What it sends
 
 Exactly the structures in [`internal/wire/wire.go`](internal/wire/wire.go).
@@ -140,6 +151,7 @@ Every operation the collector attempts is recorded and available to you.
 | `CUSTOS_TOKEN` | to send | Credential you hold |
 | `CUSTOS_FLOW_LOGS` | yes | Log group or S3 prefix |
 | `CUSTOS_FLOW_LOG_FORMAT` | no | Your flow log's format, if not ours. Unnecessary for S3 |
+| `CUSTOS_REGIONS` | no | Extra regions to collect, comma separated. `AWS_REGION` is always included |
 | `CUSTOS_ACCESS_LOGS` | no | ALB access logs; improves recall |
 | `CUSTOS_ACCOUNT_ID` | no | Account being scanned |
 | `CUSTOS_WINDOW` | no | Collection window, default `1h` |
