@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .schema import ADDED_COLUMNS, SCHEMA, SCHEMA_VERSION
+from .schema import ADDED_COLUMNS, BATCHES_TABLE, SCHEMA, SCHEMA_VERSION
 
 
 def now() -> datetime:
@@ -78,6 +78,7 @@ def connect(path: str | Path = ":memory:") -> sqlite3.Connection:
 
 def migrate(conn: sqlite3.Connection) -> int:
     """Apply the schema. Idempotent; returns the resulting version."""
+    _widen_batch_key(conn)
     conn.executescript(SCHEMA)
     _add_missing_columns(conn)
     row = conn.execute("SELECT MAX(version) AS v FROM schema_version").fetchone()
@@ -109,6 +110,62 @@ def _add_missing_columns(conn: sqlite3.Connection) -> None:
         existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
         if column not in existing:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+def _widen_batch_key(conn: sqlite3.Connection) -> None:
+    """Rebuild `batches` when its unique key predates regions.
+
+    The one hand-written migration in this file, and it is here because SQLite
+    cannot alter a constraint: the key was (account, window) and has to become
+    (account, region, window). Everything else the schema has needed since it
+    was written was a column, which `_add_missing_columns` does cheaply.
+
+    Why it cannot wait: with the old key, three regions of one account shipping
+    the same hour produced one row. The second and third were treated as
+    retries of the first, and a region's traffic went in the bin quietly.
+
+    Rows are copied with their ids, so the scans that reference them still do.
+    Foreign keys are off for the swap, because DROP TABLE with them on would
+    take those scans with it — which is the accident this whole function exists
+    to avoid, in a more permanent form.
+    """
+    tables = {
+        row["name"] for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        )
+    }
+    if "batches" not in tables:
+        return  # a fresh database: SCHEMA creates the current shape
+
+    for index in conn.execute("PRAGMA index_list(batches)"):
+        if index["origin"] != "u":
+            continue
+        columns = {
+            row["name"] for row in conn.execute(f"PRAGMA index_info({index['name']!r})")
+        }
+        if "region" in columns:
+            return  # already the current shape
+
+    columns = [row["name"] for row in conn.execute("PRAGMA table_info(batches)")]
+    named = ", ".join(columns)
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        with transaction(conn):
+            # execute, not executescript: executescript commits whatever
+            # transaction is open before it runs, which would end this one
+            # halfway through a table swap.
+            conn.execute(
+                BATCHES_TABLE.replace("IF NOT EXISTS batches", "batches_migrated")
+                .rstrip().rstrip(";")
+            )
+            conn.execute(
+                f"INSERT INTO batches_migrated ({named}) SELECT {named} FROM batches"
+            )
+            conn.execute("DROP TABLE batches")
+            conn.execute("ALTER TABLE batches_migrated RENAME TO batches")
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
 
 
 def open_database(path: str | Path = ":memory:") -> sqlite3.Connection:

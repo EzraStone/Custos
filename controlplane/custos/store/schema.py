@@ -22,7 +22,7 @@ agent's apparent spend and reach.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 # Columns added after a table was first written, applied by ALTER on databases
 # that already exist. The schema below is applied with CREATE TABLE IF NOT
@@ -48,15 +48,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("scans", "regions", "TEXT NOT NULL DEFAULT '[]'"),
 )
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS schema_version (
-    version     INTEGER NOT NULL,
-    applied_at  TEXT    NOT NULL
-);
-
--- One row per shipped collection window. The natural key makes ingestion
--- idempotent: a collector retry updates the row rather than adding traffic.
-CREATE TABLE IF NOT EXISTS batches (
+BATCHES_TABLE = """CREATE TABLE IF NOT EXISTS batches (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     account_id    TEXT    NOT NULL,
     region        TEXT    NOT NULL DEFAULT '',
@@ -67,8 +59,34 @@ CREATE TABLE IF NOT EXISTS batches (
     flow_records  INTEGER NOT NULL DEFAULT 0,
     requests      INTEGER NOT NULL DEFAULT 0,
     have_alb_logs INTEGER NOT NULL DEFAULT 0,
-    UNIQUE (account_id, window_start, window_end)
+    UNIQUE (account_id, region, window_start, window_end)
+);"""
+"""One row per shipped collection window per region.
+
+Kept as its own constant because the one hand-written migration in this store
+recreates this table, and a migration that rebuilds a table from a copy of its
+definition is a migration that drifts from it.
+"""
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS schema_version (
+    version     INTEGER NOT NULL,
+    applied_at  TEXT    NOT NULL
 );
+
+-- One row per shipped collection window per region.
+--
+-- The natural key makes ingestion idempotent: a collector retry updates the row
+-- rather than adding traffic. Region is part of it because an AWS account is a
+-- region-by-region thing and one collector covers one region, so three regions
+-- of one account ship three windows for the same hour and a key without the
+-- region turned two of them into retries of the first.
+--
+-- Region rather than merging into one window, because a private address is
+-- unique within a region and nowhere else. A scan holding both regions' traffic
+-- would key destination names and gateway questions on addresses that mean two
+-- different things.
+""" + BATCHES_TABLE + """
 
 -- One row per scan run over a batch. Kept separate from batches because the
 -- same telemetry can be re-classified by a newer classifier, and comparing

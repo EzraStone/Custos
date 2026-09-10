@@ -149,3 +149,124 @@ def test_added_columns_are_additive_only(tmp_path):
         assert "PRIMARY KEY" not in upper and "UNIQUE" not in upper, (
             f"{table}.{column} adds a constraint; that is a hand-written migration"
         )
+
+
+# --- the one hand-written migration -------------------------------------------
+
+OLD_BATCHES = """
+CREATE TABLE batches (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id    TEXT    NOT NULL,
+    region        TEXT    NOT NULL DEFAULT '',
+    window_start  TEXT    NOT NULL,
+    window_end    TEXT    NOT NULL,
+    collector     TEXT    NOT NULL DEFAULT '',
+    received_at   TEXT    NOT NULL,
+    flow_records  INTEGER NOT NULL DEFAULT 0,
+    requests      INTEGER NOT NULL DEFAULT 0,
+    have_alb_logs INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (account_id, window_start, window_end)
+);
+"""
+
+
+def _old_database(path):
+    """A database written before regions were part of a batch's identity."""
+    import sqlite3
+
+    conn = sqlite3.connect(path)
+    conn.executescript(OLD_BATCHES)
+    conn.execute(
+        "INSERT INTO batches (id, account_id, region, window_start, window_end, "
+        "received_at, flow_records) VALUES (7, '447120043318', 'us-east-1', "
+        "'2026-08-10T12:00:00+00:00', '2026-08-10T13:00:00+00:00', 'then', 41)"
+    )
+    conn.commit()
+    conn.close()
+    return path
+
+
+def _unique_columns(conn, table):
+    for index in conn.execute(f"PRAGMA index_list({table})"):
+        if index["origin"] == "u":
+            return [r["name"] for r in conn.execute(f"PRAGMA index_info('{index['name']}')")]
+    return []
+
+
+def test_an_old_database_gains_the_region_in_its_batch_key(tmp_path):
+    """With the old key, three regions of one account shipping the same hour
+    produced one row: the second and third were treated as retries of the
+    first, and a region's traffic went in the bin quietly."""
+    from custos.store.db import open_database
+
+    conn = open_database(_old_database(tmp_path / "old.db"))
+    assert _unique_columns(conn, "batches") == [
+        "account_id", "region", "window_start", "window_end",
+    ]
+
+
+def test_the_migration_keeps_the_rows_and_their_ids(tmp_path):
+    """Scans reference batches by id. A rebuild that renumbered them would
+    point every historical scan at the wrong window, or at nothing."""
+    from custos.store.db import open_database
+
+    conn = open_database(_old_database(tmp_path / "old.db"))
+    row = conn.execute("SELECT * FROM batches").fetchone()
+
+    assert row["id"] == 7
+    assert row["account_id"] == "447120043318"
+    assert row["region"] == "us-east-1"
+    assert row["flow_records"] == 41
+
+
+def test_the_migration_does_not_take_the_scans_with_it(tmp_path):
+    """DROP TABLE with foreign keys on would cascade to scans — which is the
+    accident this migration exists to prevent, in a more permanent form."""
+    from custos.store.db import open_database
+
+    path = _old_database(tmp_path / "old.db")
+    seeded = open_database(path)
+    seeded.execute(
+        "INSERT INTO scans (batch_id, account_id, started_at, principals_seen, "
+        "agents_found, review_candidates, coverage, truncated, catalogue_revision) "
+        "VALUES (7, '447120043318', 'then', 3, 1, 0, 1.0, 0, 'r')"
+    )
+    seeded.commit()
+    seeded.close()
+
+    conn = open_database(path)
+    assert conn.execute("SELECT COUNT(*) AS n FROM scans").fetchone()["n"] == 1
+    assert conn.execute("SELECT batch_id FROM scans").fetchone()["batch_id"] == 7
+
+
+def test_migrating_twice_changes_nothing(tmp_path):
+    from custos.store.db import open_database
+
+    path = _old_database(tmp_path / "old.db")
+    open_database(path).close()
+    conn = open_database(path)
+
+    assert conn.execute("SELECT COUNT(*) AS n FROM batches").fetchone()["n"] == 1
+    assert _unique_columns(conn, "batches") == [
+        "account_id", "region", "window_start", "window_end",
+    ]
+
+
+def test_a_second_region_fits_after_the_migration(tmp_path):
+    from custos.store.db import open_database
+
+    conn = open_database(_old_database(tmp_path / "old.db"))
+    conn.execute(
+        "INSERT INTO batches (account_id, region, window_start, window_end, "
+        "received_at) VALUES ('447120043318', 'eu-west-1', "
+        "'2026-08-10T12:00:00+00:00', '2026-08-10T13:00:00+00:00', 'now')"
+    )
+    assert conn.execute("SELECT COUNT(*) AS n FROM batches").fetchone()["n"] == 2
+
+
+def test_a_fresh_database_is_already_the_current_shape():
+    from custos.store.db import open_database
+
+    assert _unique_columns(open_database(), "batches") == [
+        "account_id", "region", "window_start", "window_end",
+    ]
