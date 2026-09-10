@@ -401,3 +401,62 @@ def test_a_gateway_candidate_becomes_a_question_and_then_stops_being_one():
     )
     # And the question is not asked again. Somebody answered it.
     assert client.get("/v1/gateway-candidates", headers=headers).json()["candidates"] == []
+
+
+# --- an account that runs in more than one region -----------------------------
+
+def test_two_regions_of_one_account_build_one_register(client):
+    """The shape a real customer has: agents in two regions, one collector
+    covering both, two batches for the same hour.
+
+    Before regions were part of a batch's identity the second was treated as a
+    retry of the first — one row survived, and half the account's agents were
+    never classified at all.
+    """
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+
+    small = corpus.build(corpus.CorpusSpec(days=1))
+    for region in ("us-east-1", "eu-west-1"):
+        payload = build_batch(small, region=region).model_dump(mode="json")
+        payload["account_id"] = ACCOUNT
+        assert client.post("/v1/batches", json=payload, headers=AUTH).status_code == 202
+
+    scans = client.get("/v1/scans", headers=AUTH).json()["scans"]
+    assert len(scans) == 2, "a region was swallowed as a duplicate"
+
+    agents = client.get("/v1/register", headers=AUTH).json()["agents"]
+    assert agents, "the corpus produces agents"
+    for agent in agents:
+        assert sorted(agent["regions"]) == ["eu-west-1", "us-east-1"], (
+            "the same role runs in both regions and the register should say so"
+        )
+
+
+def test_the_report_names_the_region_of_the_scan_it_rendered(client):
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+
+    small = corpus.build(corpus.CorpusSpec(days=1))
+    payload = build_batch(small, region="eu-west-1").model_dump(mode="json")
+    payload["account_id"] = ACCOUNT
+    client.post("/v1/batches", json=payload, headers=AUTH)
+
+    page = client.get("/v1/report", headers=AUTH).text
+    assert "covered eu-west-1 and no other region" in page
+
+
+def test_a_records_region_survives_the_whole_pipeline(client):
+    """It is stamped by the collector, crosses the wire, and has to reach the
+    telemetry the classifier reads — a field dropped in the middle would be
+    invisible until two regions collided over one address."""
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+
+    from custos.pipeline import _to_telemetry
+
+    batch = build_batch(corpus.build(corpus.CorpusSpec(days=1)), region="ap-south-1")
+    records, _ = _to_telemetry(batch)
+
+    assert records
+    assert {r.region for r in records} == {"ap-south-1"}

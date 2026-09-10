@@ -31,6 +31,7 @@ def build_batch(
     interval_seconds: int = 60,
     have_alb_logs: bool = True,
     with_attribution: bool = True,
+    region: str = "us-east-1",
 ) -> Batch:
     """Produce a batch in exactly the shape the collector ships."""
     c = corpus if corpus is not None else corpus_mod.build()
@@ -45,6 +46,7 @@ def build_batch(
             srcaddr=r.srcaddr, dstaddr=r.dstaddr, srcport=r.srcport,
             dstport=r.dstport, protocol=r.protocol, packets=r.packets,
             bytes=r.bytes, start=r.start, end=r.end, action=r.action,
+            region=region,
             log_status=r.log_status, vpc_id=r.vpc_id, subnet_id=r.subnet_id,
             direction=str(r.direction),
             src_aws_service=r.src_aws_service,
@@ -86,14 +88,14 @@ def build_batch(
     # someone tagged, and RDS, which AWS describes itself. The rest arrive as
     # addresses, which is what the register then shows.
     destinations = [
-        Destination(address=ep.ip, name=ep.eni_name, kind=ep.eni_kind)
+        Destination(address=ep.ip, name=ep.eni_name, kind=ep.eni_kind, region=region)
         for ep in endpoints.ALL
         if ep.eni_name
     ]
 
     return Batch(
         account_id=capture.config.account_id,
-        region="us-east-1",
+        region=region,
         window_start=c.start,
         window_end=c.end,
         collector_version="a0-synthetic",
