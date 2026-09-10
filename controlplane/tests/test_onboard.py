@@ -164,3 +164,16 @@ def test_the_tfvars_mention_the_bucket_variable():
 def test_the_message_says_when_the_bucket_variable_matters():
     message = prose(generate(ACCOUNT, ENDPOINT).message)
     assert "name those buckets in `log_buckets`" in message
+
+
+def test_the_message_says_an_account_is_a_region_by_region_thing():
+    """The single most likely reason a first report looks reassuring for the
+    wrong reason."""
+    message = prose(generate(ACCOUNT, ENDPOINT).message)
+
+    assert "region-by-region thing" in message
+    assert "--check" in message
+
+
+def test_the_collector_environment_offers_the_region_list():
+    assert "CUSTOS_REGIONS" in generate(ACCOUNT, ENDPOINT).collector_env

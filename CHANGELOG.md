@@ -4,6 +4,41 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### One region is not an account
+
+**A scan of us-east-1 was reporting on the whole account.** The collector took
+a single AWS_REGION and nothing anywhere said so, so "No unsanctioned agents
+found." was a claim about part of an estate printed as a claim about all of it.
+A workload in eu-west-1 has its own flow logs, its own interfaces, and no
+representation whatsoever in that scan.
+
+`--check` now names which of an account's regions have flow logs — regions
+without one are not mentioned, since AWS enables about seventeen by default and
+a list nobody reads is worse than none. `CUSTOS_REGIONS` covers them in one
+collector run.
+
+**One batch per region, not one merged batch.** A private address is unique
+within a region and nowhere else: 10.0.4.21 is the billing API in us-east-1 and
+something else in eu-west-1, so a scan holding both would print one region's
+service name against the other's traffic — in the approval scope an operator
+reads before granting authority. Every flow record and resolved destination now
+carries the region it came from.
+
+That made region part of a batch's identity, which needed the first
+hand-written migration in the store: the key was (account, window), so a
+customer running one collector per region had every region after the first
+swallowed as a duplicate. Rows keep their ids so historical scans still resolve.
+
+**The register remembers where an agent runs.** Regions accumulate across
+scans, because a scan covers one region and a role running in three is
+discovered three times — the register used to describe an agent as living
+wherever it was most recently looked for.
+
+What it still does not do is add up an agent's spend across regions. Every
+surface that shows the regions says the figures beside them are one region's,
+because a row naming three regions and one spend figure otherwise reads as the
+total.
+
 ### A role that asked for too much and delivered too little
 
 **Thirteen permissions removed.** The policy granted `iam:ListRoles`,

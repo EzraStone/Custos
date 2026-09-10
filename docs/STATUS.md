@@ -18,6 +18,7 @@ custos diff                 →  what changed since last week
 |---|---|
 | Classify agents from flow log metadata | Works. G0 passed, margin 0.26 |
 | Read flow logs from CloudWatch or S3 | Works |
+| Collect several regions | Works. `CUSTOS_REGIONS`, one batch per region, named in the report |
 | Read the flow log format the account already has | Works. Fields located by name; S3 objects name their own |
 | IPv6 model endpoints | **Blind.** The catalogue is IPv4 only. Counted and disclosed, not guessed |
 | Read ALB access logs | Works. Four fields taken, the rest discarded at parse |
@@ -135,6 +136,21 @@ It has the same shape as the gateway problem and gets the same treatment —
 report says a model endpoint among them would not appear at all. It is not
 fixed, it is stated. It matters more each year: AWS began charging for public
 IPv4 addresses in 2024 and dual-stack VPCs are the response.
+
+**A scan covered one region and reported on the account.** The collector took
+a single AWS_REGION, nothing anywhere named it, and "No unsanctioned agents
+found." was a claim about a third of an estate printed as a claim about all of
+it. Worse, the batch key was (account, window), so a customer running one
+collector per region — which is what preflight told them to do — had every
+region after the first swallowed as a duplicate.
+
+Fixed end to end: `--check` names the regions with flow logs, `CUSTOS_REGIONS`
+covers them in one run, a batch is now one region's window, the register
+records every region an agent has been seen in, and the report names the region
+it covered. What is not fixed is that an agent's spend and reach still come
+from the scan that last saw it — one region's traffic — and every surface says
+so rather than presenting a fraction as a total. Doing better needs the latest
+observation per region rather than a merged blob.
 
 **The IAM policy asked for thirteen permissions nothing used, and I nearly
 kept them.** The same test that found the missing S3 grant flagged thirteen

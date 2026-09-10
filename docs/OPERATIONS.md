@@ -17,6 +17,7 @@ export CUSTOS_EXTERNAL_ID=<the value you gave them>
 export AWS_REGION=us-east-1
 export CUSTOS_ACCOUNT_ID=447120043318
 export CUSTOS_FLOW_LOGS=/aws/vpc/flowlogs          # or s3://bucket/prefix
+export CUSTOS_REGIONS=eu-west-1,ap-south-1         # every region they run in
 export CUSTOS_ACCESS_LOGS=s3://their-alb-logs/AWSLogs/...   # worth asking for
 # Only if they pointed us at a log they already had, and only for CloudWatch:
 export CUSTOS_FLOW_LOG_FORMAT="${version} ${account-id} ${interface-id} ..."
@@ -31,6 +32,16 @@ conversation.
 **Ask for the access logs.** Without them recall drops from 100% to 60% on our
 corpus, and the agents missed are the low-volume ones — which are usually the
 ones they most want to know about. The ask is easier with that number attached.
+
+**Ask which regions they run in, and read the `other regions` line from
+`--check`.** An account is a region-by-region thing: a workload in eu-west-1
+has its own flow logs and no representation at all in a scan of us-east-1. One
+collector covers the list, shipping a batch per region, and the report names
+the region it covered.
+
+The failure to avoid is the reassuring one. A first report from one region of a
+three-region estate finds two agents, says nothing alarming, and is correct
+about a third of the account.
 
 **Do not insist on our flow log.** The Terraform module creates one in the
 format Custos was built around, and it is the best case. It is also a second

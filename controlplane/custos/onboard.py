@@ -70,6 +70,9 @@ class Onboarding:
             "CUSTOS_ROLE_ARN=arn:aws:iam::"
             f"{self.account_id}:role/custos-discovery",
             "AWS_REGION=us-east-1",
+            "# Every region you run in, comma separated. AWS_REGION is always",
+            "# included; --check names the ones that have flow logs:",
+            "# CUSTOS_REGIONS=eu-west-1,ap-south-1",
             "CUSTOS_FLOW_LOGS=/aws/vpc/flowlogs",
             "# Or point at flow logs you already keep, in whatever format they",
             "# are. S3 needs nothing else; CloudWatch needs the format string:",
@@ -134,6 +137,16 @@ are the low-volume ones, which are usually the ones you would most want to know
 about. We take four fields from those logs (timestamp, target, and two byte
 counts); the URL, query string, user agent, and client address are discarded at
 parse time and cannot reach us.
+
+One more thing, and it is the one most likely to make a first report look
+reassuring for the wrong reason: an AWS account is a region-by-region thing. A
+workload in eu-west-1 has its own flow logs, its own network interfaces, and no
+representation at all in a scan of us-east-1 — so "no unsanctioned agents" from
+one region is a statement about that region, and our report says so rather than
+implying otherwise.
+
+`./custos-collector --check` names which of your regions have flow logs.
+Whichever they are, list them and we cover them in one run.
 
 One thing worth checking on your side before the first scan: whether the
 network interfaces behind your internal services carry a `Name` tag. We name
