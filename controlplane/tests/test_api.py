@@ -1128,3 +1128,20 @@ def test_an_unnamed_region_is_not_listed_as_one(client):
     reads as a region nobody can find."""
     client.post("/v1/batches", json=batch() | {"region": ""}, headers=AUTH)
     assert client.get("/v1/fleet", headers=AUTH).json()["accounts"][0]["regions"] == []
+
+
+def test_the_report_says_where_a_declaration_was_in_force(client):
+    """A reader deciding whether a finding is explained by a declaration has to
+    know whether that declaration applied where the traffic was."""
+    _declare(client, value="10.0.7.0/24", note="llm-gateway", region="us-east-1")
+    page = client.get("/v1/report", headers=AUTH).text
+
+    assert "10.0.7.0/24 (llm-gateway) in us-east-1" in page
+
+
+def test_a_declaration_with_no_region_says_it_applies_everywhere(client):
+    """Which is a larger claim than the region-scoped one, and reads as such."""
+    _declare(client, value="160.79.104.0/23", note="anthropic", region="")
+    page = client.get("/v1/report", headers=AUTH).text
+
+    assert "in every region" in page

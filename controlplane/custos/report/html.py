@@ -277,7 +277,9 @@ def _limitations(
             "This account declared "
             + _e(", ".join(declared))
             + " as model endpoints. Agents reaching them are visible because "
-            "somebody said so; the catalogue would not have recognised them."
+            "somebody said so; the catalogue would not have recognised them. A "
+            "declaration naming a region applies only there, because a private "
+            "address is a different host in every region."
         )
     else:
         items.append(

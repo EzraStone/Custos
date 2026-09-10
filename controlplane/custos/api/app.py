@@ -819,10 +819,7 @@ def create_app(
         return HTMLResponse(render(
             result, account_label=account_id,
             generated_at=now(), diff=diff, coverage=coverage,
-            declared=[
-                f"{r.value} ({r.note})" if r.note else r.value
-                for r in DeclarationStore(app.state.db).records_for(account_id)
-            ],
+            declared=_declared_labels(DeclarationStore(app.state.db), account_id),
             reviews=candidates,
             questions=questions,
         ))
@@ -894,6 +891,24 @@ class StatusRequest(BaseModel):
     status: str
     operator: str = Field(min_length=1)
     reason: str = ""
+
+
+def _declared_labels(store, account_id: str) -> list[str]:
+    """What this account declared, phrased for the report's limitations list.
+
+    The region is part of the label. A reader deciding whether a finding is
+    explained by a declaration has to know whether that declaration was in
+    force where the traffic was — and one that names no region was in force
+    everywhere, which is a different and larger claim.
+    """
+    labels = []
+    for r in store.records_for(account_id):
+        parts = [r.value]
+        if r.note:
+            parts.append(f"({r.note})")
+        parts.append(f"in {r.region}" if r.region else "in every region")
+        labels.append(" ".join(parts))
+    return labels
 
 
 def _render(agent) -> dict:

@@ -180,10 +180,17 @@ def _declared_labels(conn, account_id: str) -> list[str]:
     """What this account declared, for the report provenance section."""
     from .store.declarations import DeclarationStore
 
-    return [
-        f"{r.value} ({r.note})" if r.note else r.value
-        for r in DeclarationStore(conn).records_for(account_id)
-    ]
+    labels = []
+    for r in DeclarationStore(conn).records_for(account_id):
+        parts = [r.value]
+        if r.note:
+            parts.append(f"({r.note})")
+        # The region is part of the label. A reader deciding whether a finding
+        # is explained by a declaration has to know whether it was in force
+        # where the traffic was.
+        parts.append(f"in {r.region}" if r.region else "in every region")
+        labels.append(" ".join(parts))
+    return labels
 
 
 def cmd_register(args: argparse.Namespace) -> int:
