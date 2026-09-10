@@ -4,6 +4,31 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### A declaration could invent agents in a region nobody asked about
+
+**SEC-24.** Declaring an endpoint is one of two decisions in this system that
+change what counts as an agent, and it is the one that widens the set: a
+declared address becomes model traffic, and every workload reaching it becomes
+an agent with an estimated monthly cost beside its name.
+
+Declarations were scoped to the account. A customer answering "yes, 10.0.7.40
+is our model gateway" was answering for every region they run in — and in
+eu-west-1 that address is a database proxy, a build cache, an internal API
+nobody has thought about in a year. All of that traffic becomes model traffic
+and all of those workloads become agents.
+
+A private range now needs the region the question was asked about and is
+refused without one. A public provider range needs none: it means the same
+thing everywhere and cannot collide with a customer's own addressing. Gateway
+questions carry their region, the console sends it back when answering, and the
+report says where each declaration was in force rather than only that it
+existed.
+
+Written up as an invariant because of the direction. Every other failure in
+this system hides an agent, and a hidden agent is a gap somebody can be told
+about. This one invents them, in a document whose whole value is that a
+security team believes it.
+
 ### One region is not an account
 
 **A scan of us-east-1 was reporting on the whole account.** The collector took

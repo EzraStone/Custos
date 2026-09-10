@@ -41,7 +41,7 @@ custos diff                 →  what changed since last week
 | Customer-supplied pricing | Works. Per account, dated, superseded rather than overwritten |
 | Gateway questions in the report | Works. Their own section, with the workloads reaching each address |
 | Review band, kept and readable | Works. In the console, the CLI, and both reports, with evidence and recurrence |
-| Model gateway declaration | Works. Detected as questions, declared per account, effective next scan |
+| Model gateway declaration | Works. Private ranges scoped to a region (SEC-24) |
 | Fleet view across accounts | Works. One line per account, unscanned and destructive first |
 | Scope readability, measured | Works. Reported by `--check`, the report, the console, and `custos history` |
 
