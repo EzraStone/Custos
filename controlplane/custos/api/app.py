@@ -904,11 +904,15 @@ def _render(agent) -> dict:
         "blast_radius": str(agent.reach.blast_radius),
         "tools": sorted(agent.reach.tools),
         "data_stores": sorted(agent.reach.data_stores),
-        "est_monthly_spend_usd": agent.model.est_monthly_spend_usd,
+        # Summed across every region this agent runs in. A scan covers one
+        # region, so the scan's own figure is a fraction of the cost whenever
+        # the agent runs in more than one.
+        "est_monthly_spend_usd": agent.monthly_spend_usd,
         # Every region this agent has been seen in. The figures above come from
         # the scan that last saw it, which is one region's traffic — so a
-        # caller showing both has to say which, and one showing only the
-        # figures is showing a fraction without saying so.
+        # tools, data_stores and blast_radius above come from the scan that
+        # last saw this agent, which is one region's. Spend is not: it is
+        # summed.
         "regions": sorted(agent.regions),
         "unsanctioned": agent.unsanctioned,
         "imprimatur": None if agent.imprimatur is None else {

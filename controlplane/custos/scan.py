@@ -188,6 +188,10 @@ def run(inp: ScanInput, register: Register | None = None) -> ScanResult:
                 identity=_identity(verdict.principal, attribution, inp, compute),
                 model=_model_use(t, inp),
                 regions={inp.region} if inp.region else set(),
+                region_spend=(
+                    {inp.region: _model_use(t, inp).est_monthly_spend_usd}
+                    if inp.region else {}
+                ),
                 reach=reach_report.reach,
             )
         )

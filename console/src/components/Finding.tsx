@@ -102,16 +102,16 @@ export function Finding({
           Shown only when there is more than one. One region is the ordinary
           case and a column of the same word is not information.
 
-          The note matters as much as the list: spend and reach come from the
-          scan that last saw this agent, which is one region's traffic, and a
-          row naming three regions beside one figure reads as the total.
+          The note is about reach, not spend. Spend is summed across regions
+          by the control plane; the tools and data stores listed are the ones
+          the scan that last saw this agent observed, which is one region's.
         */}
         {agent.regions.length > 1 ? (
           <div>
             <dt>Regions</dt>
             <dd>
               {agent.regions.join(", ")}
-              <span className="muted"> (figures from one)</span>
+              <span className="muted"> (reach from one)</span>
             </dd>
           </div>
         ) : null}

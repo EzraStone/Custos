@@ -504,12 +504,12 @@ def test_an_agent_seen_in_several_regions_says_where():
     assert "eu-west-1, us-east-1" in page
 
 
-def test_the_figures_beside_it_are_marked_as_one_region_s():
-    """Spend and reach come from the scan that last saw the agent, which is one
-    region's traffic. A row listing three regions and one spend figure would
-    read as the total."""
+def test_the_reach_beside_it_is_marked_as_one_region_s():
+    """Spend is summed across regions now. Reach is not: the tools and data
+    stores listed are the ones the scan that last saw this agent observed, in
+    one region."""
     page = render(result([_multi_region(agent())]), "acme", T0)
-    assert "figures from one" in page
+    assert "reach from one" in page
 
 
 def test_an_agent_in_one_region_does_not_get_a_regions_row(page):

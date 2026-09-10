@@ -137,6 +137,15 @@ class Agent:
     reach: Reach = field(default_factory=Reach)
     imprimatur: Imprimatur | None = None
     baseline: Baseline = field(default_factory=Baseline)
+    region_spend: dict[str, float] = field(default_factory=dict)
+    """Estimated monthly spend per region, from the last scan of each.
+
+    A scan covers one region, so an agent running in three was showing a third
+    of its cost — and spend is the number people act on. Kept per region rather
+    than accumulated into a total, because the next scan of us-east-1 replaces
+    us-east-1's figure and must not add to it.
+    """
+
     regions: set[str] = field(default_factory=set)
     """Regions this agent has been seen in, across every scan.
 
@@ -148,6 +157,18 @@ class Agent:
     It is also the caveat on every figure beside it: spend, endpoints and reach
     come from the scan that last saw this agent, which is one region's traffic.
     """
+
+    @property
+    def monthly_spend_usd(self) -> float:
+        """What this agent costs across every region it runs in.
+
+        Falls back to the scan's own figure when nothing per-region is
+        recorded, which is every agent discovered before regions existed and
+        every batch from a collector that does not send one.
+        """
+        if self.region_spend:
+            return sum(self.region_spend.values())
+        return self.model.est_monthly_spend_usd
 
     @property
     def unsanctioned(self) -> bool:

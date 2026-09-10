@@ -244,10 +244,10 @@ describe("an agent in more than one region", () => {
     expect(screen.getByText(/eu-west-1, us-east-1/)).toBeInTheDocument();
   });
 
-  it("says the figures beside them are one region's", () => {
-    // A row naming three regions beside one spend figure reads as the total.
+  it("says the reach beside them is one region's", () => {
+    // Spend is summed across regions. Reach is not.
     inRegions(["eu-west-1", "us-east-1"]);
-    expect(screen.getByText(/figures from one/)).toBeInTheDocument();
+    expect(screen.getByText(/reach from one/)).toBeInTheDocument();
   });
 
   it("says nothing about regions when there is only one", () => {

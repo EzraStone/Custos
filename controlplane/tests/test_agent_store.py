@@ -263,3 +263,60 @@ def test_regions_survive_a_round_trip_through_the_database():
     written = store.upsert(_agent_in("ap-south-1"))
 
     assert store.get(written.id).regions == {"ap-south-1"}
+
+
+def test_spend_is_summed_across_the_regions_an_agent_runs_in():
+    """A scan covers one region, so an agent running in three was showing a
+    third of its cost — and spend is the number people act on."""
+    from custos.store.agents import AgentStore
+    from custos.store.db import open_database
+
+    store = AgentStore(open_database())
+    east = _agent_in("us-east-1")
+    east.region_spend = {"us-east-1": 100.0}
+    store.upsert(east)
+
+    west = _agent_in("eu-west-1")
+    west.region_spend = {"eu-west-1": 40.0}
+    stored = store.upsert(west)
+
+    assert stored.monthly_spend_usd == 140.0
+
+
+def test_rescanning_a_region_replaces_its_figure_rather_than_adding_to_it():
+    from custos.store.agents import AgentStore
+    from custos.store.db import open_database
+
+    store = AgentStore(open_database())
+    first = _agent_in("us-east-1")
+    first.region_spend = {"us-east-1": 100.0}
+    store.upsert(first)
+
+    cheaper = _agent_in("us-east-1")
+    cheaper.region_spend = {"us-east-1": 60.0}
+    stored = store.upsert(cheaper)
+
+    assert stored.monthly_spend_usd == 60.0
+
+
+def test_an_agent_with_no_per_region_figures_falls_back_to_the_scan_s():
+    """Every agent discovered before regions existed, and every batch from a
+    collector that does not send one."""
+    agent = _agent_in("us-east-1")
+    agent.regions = set()
+    agent.region_spend = {}
+    agent.model.est_monthly_spend_usd = 77.0
+
+    assert agent.monthly_spend_usd == 77.0
+
+
+def test_per_region_spend_survives_a_round_trip():
+    from custos.store.agents import AgentStore
+    from custos.store.db import open_database
+
+    store = AgentStore(open_database())
+    agent = _agent_in("ap-south-1")
+    agent.region_spend = {"ap-south-1": 12.5}
+    written = store.upsert(agent)
+
+    assert store.get(written.id).region_spend == {"ap-south-1": 12.5}

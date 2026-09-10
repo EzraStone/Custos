@@ -56,16 +56,17 @@ def _regions_row(agent: Agent) -> str:
     """Where this agent has been seen, when it is more than one place.
 
     One region is the ordinary case and printing it on every row would be a
-    column of the same word. Several is the interesting case, and it is also
-    the caveat on the figures beside it: they come from the scan that last saw
-    this agent, which is one region's traffic.
+    column of the same word. Several is the interesting case, and it carries
+    the caveat that still applies: spend is now summed across regions, and
+    reach is not — the tools and data stores listed are the ones the scan that
+    last saw this agent observed, in one region.
     """
     if len(agent.regions) < 2:
         return ""
     named = ", ".join(_e(r) for r in sorted(agent.regions))
     return (
         f'<div><dt>Regions</dt><dd>{named} '
-        f'<span class="muted">(figures from one)</span></dd></div>'
+        f'<span class="muted">(reach from one)</span></dd></div>'
     )
 
 
@@ -95,7 +96,7 @@ def _agent_row(agent: Agent) -> str:
         <div><dt>Principal</dt><dd class="mono">{_e(agent.identity.principal)}</dd></div>
         <div><dt>Compute</dt><dd>{_e(agent.identity.compute or "unknown")}</dd></div>
         <div><dt>Confidence</dt><dd>{agent.provenance.confidence:.2f}</dd></div>
-        <div><dt>Est. spend</dt><dd>{_money(agent.model.est_monthly_spend_usd)}/mo</dd></div>
+        <div><dt>Est. spend</dt><dd>{_money(agent.monthly_spend_usd)}/mo</dd></div>
         <div><dt>Status</dt><dd>{_e(agent.status)}</dd></div>
         {_regions_row(agent)}
       </dl>
@@ -528,9 +529,7 @@ def render(
     degraded = sorted({s for v in result.verdicts for s in v.unavailable})
 
     writers = [a for a in result.register.unsanctioned if a.reach.blast_radius.rank > 0]
-    total_spend = sum(
-        a.model.est_monthly_spend_usd for a in result.register.unsanctioned
-    )
+    total_spend = sum(a.monthly_spend_usd for a in result.register.unsanctioned)
 
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">

@@ -31,9 +31,28 @@ _COLUMNS = """
     id, account_id, principal, status, imprimatur_by, imprimatur_at,
     approved_tools, approved_data, key_id, first_seen, last_seen, source,
     confidence, evidence, owner_team, owner_human, compute, providers,
-    endpoints, est_monthly_spend, regions, credentials, tools, data_stores,
-    blast_radius
+    endpoints, est_monthly_spend, regions, region_spend, credentials, tools,
+    data_stores, blast_radius
 """
+
+
+def _json(value: dict) -> str:
+    """Serialise a mapping, key-sorted so a stored row is stable to diff."""
+    import json
+
+    return json.dumps(value, sort_keys=True)
+
+
+def _json_loads(value: str | None) -> dict:
+    import json
+
+    if not value:
+        return {}
+    try:
+        loaded = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
 
 
 def _row_to_agent(row: sqlite3.Row) -> Agent:
@@ -65,6 +84,7 @@ def _row_to_agent(row: sqlite3.Row) -> Agent:
             account_id=row["account_id"],
         ),
         regions=set(loads(row["regions"])),
+        region_spend=_json_loads(row["region_spend"]),
         model=ModelUse(
             providers=set(loads(row["providers"])),
             endpoints=set(loads(row["endpoints"])),
@@ -106,7 +126,7 @@ class AgentStore:
         if existing is None:
             self.conn.execute(
                 f"INSERT INTO agents ({_COLUMNS}) VALUES ("
-                "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     agent.id, agent.identity.account_id, agent.identity.principal,
                     str(agent.status), None, None, None, None, None,
@@ -117,6 +137,7 @@ class AgentStore:
                     agent.identity.compute,
                     dumps(agent.model.providers), dumps(agent.model.endpoints),
                     agent.model.est_monthly_spend_usd, dumps(agent.regions),
+                    _json(existing.region_spend | agent.region_spend),
                     dumps(agent.reach.credentials), dumps(agent.reach.tools),
                     dumps(agent.reach.data_stores), str(agent.reach.blast_radius),
                 ),
@@ -139,6 +160,7 @@ class AgentStore:
                 confidence = ?, evidence = ?,
                 owner_team = ?, owner_human = ?, compute = ?,
                 providers = ?, endpoints = ?, est_monthly_spend = ?, regions = ?,
+                region_spend = ?,
                 credentials = ?, tools = ?, data_stores = ?, blast_radius = ?
             WHERE id = ?
             """,
@@ -153,6 +175,10 @@ class AgentStore:
                 # correction of the first, and treating it as one would make an
                 # agent appear to move between regions as it was rescanned.
                 dumps(agent.regions | existing.regions),
+                # Per region, replaced per region. A rescan of us-east-1 is a
+                # fresher figure for us-east-1 and must not add to it; a scan
+                # of eu-west-1 is a figure this agent did not have.
+                _json(existing.region_spend | agent.region_spend),
                 dumps(agent.reach.credentials), dumps(agent.reach.tools),
                 dumps(agent.reach.data_stores), str(agent.reach.blast_radius),
                 agent.id,
