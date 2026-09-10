@@ -294,6 +294,20 @@ func collectRegion(
 
 	var source ingest.FlowSource
 	if bucket, prefix, ok := cfg.S3Source(); ok {
+		// A prefix that names a region names one region. Reading it while
+		// collecting another would file us-east-1's traffic under eu-west-1,
+		// and the register would then claim every one of those agents runs in
+		// a region it has never been near.
+		//
+		// An empty prefix is the good case: S3Reader derives
+		// AWSLogs/<account>/vpcflowlogs/<region> itself.
+		if prefix != "" && region != cfg.Region {
+			return Collection{}, fmt.Errorf(
+				"CUSTOS_FLOW_LOGS names one prefix and flow logs are delivered "+
+					"per region, so %s cannot be read from it. Point it at the "+
+					"bucket alone (s3://bucket) and the per-region path is derived",
+				region)
+		}
 		source = &ingest.S3Reader{
 			API: clients.Objects, Bucket: bucket, Prefix: prefix,
 			AccountID: cfg.AccountID, Region: region, Format: format,
