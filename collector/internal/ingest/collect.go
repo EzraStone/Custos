@@ -224,6 +224,15 @@ func (c *Collector) collect(ctx context.Context, w awsread.Window) (wire.Batch, 
 		// worth shipping.
 		report.Errors = append(report.Errors, err.Error())
 	}
+
+	// Stamped before anything else can return early. The parser cannot know
+	// the region — a flow log line carries none — and the reader that fetched
+	// it does. Doing it after attribution meant a batch from an account with
+	// no resolvable interfaces shipped records with no region at all, which is
+	// ambiguous for exactly the reason the field exists.
+	for i := range records {
+		records[i].Region = c.Region
+	}
 	batch.Flows = records
 
 	if c.Requests != nil {
@@ -290,6 +299,9 @@ func (c *Collector) collect(ctx context.Context, w awsread.Window) (wire.Batch, 
 	named, err := destinations.Resolve(ctx, peers)
 	if err != nil {
 		report.Errors = append(report.Errors, err.Error())
+	}
+	for i := range named {
+		named[i].Region = c.Region
 	}
 	batch.Destinations = named
 	report.Destinations = len(named)

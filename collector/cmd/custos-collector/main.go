@@ -99,72 +99,97 @@ func serve(ctx context.Context, cfg *config.Config, stdout, stderr *os.File) err
 		State:    schedule.Store{Path: cfg.StatePath},
 		Log:      stderr,
 	}, func(ctx context.Context, w awsread.Window) error {
-		batch, report, err := fromAWSWindow(ctx, cfg, w)
+		collections, err := fromAWSWindow(ctx, cfg, w)
 		if err != nil {
 			return err
 		}
-		batch.Collector = Version
 
-		fmt.Fprint(stderr, report.Summary())
-		return ship.New(cfg.Endpoint, cfg.Token, Version).Send(ctx, batch)
+		shipper := ship.New(cfg.Endpoint, cfg.Token, Version)
+		for _, c := range collections {
+			c.Batch.Collector = Version
+			if len(collections) > 1 {
+				fmt.Fprintf(stderr, "\n%s\n", c.Region)
+			}
+			fmt.Fprint(stderr, c.Report.Summary())
+			// Any region failing to ship holds the cursor, so the whole window
+			// is retried. Advancing past a region whose batch never arrived
+			// would lose it silently, which is the one thing the cursor exists
+			// to prevent.
+			if err := shipper.Send(ctx, c.Batch); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 
 func collect(ctx context.Context, cfg *config.Config, path string, stdout, stderr *os.File) error {
-	batch, report, err := build(ctx, cfg, path)
+	collections, err := build(ctx, cfg, path)
 	if err != nil {
 		return err
 	}
-	// Stamped here rather than only in the shipper, so a dry run shows the
-	// same bytes that would actually be sent.
-	batch.Collector = Version
 
-	fmt.Fprint(stderr, report.Summary())
-	if !report.Trustworthy() {
-		// Said plainly rather than buried. A scan with poor coverage that finds
-		// nothing is not the same as a clean account, and the difference is the
-		// whole meaning of the result.
-		fmt.Fprintln(stderr,
-			"NOTE: coverage was incomplete — an absence of findings means less than usual")
+	shipper := ship.New(cfg.Endpoint, cfg.Token, Version)
+	for _, c := range collections {
+		// Stamped here rather than only in the shipper, so a dry run shows the
+		// same bytes that would actually be sent.
+		c.Batch.Collector = Version
+
+		if len(collections) > 1 {
+			fmt.Fprintf(stderr, "\n%s\n", c.Region)
+		}
+		fmt.Fprint(stderr, c.Report.Summary())
+		if !c.Report.Trustworthy() {
+			// Said plainly rather than buried. A scan with poor coverage that
+			// finds nothing is not the same as a clean account, and the
+			// difference is the whole meaning of the result.
+			fmt.Fprintln(stderr,
+				"NOTE: coverage was incomplete — an absence of findings means less than usual")
+		}
+
+		if !cfg.WillSend() {
+			out, err := ship.Describe(c.Batch)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(stdout, out)
+			continue
+		}
+		if err := shipper.Send(ctx, c.Batch); err != nil {
+			return err
+		}
 	}
 
 	if !cfg.WillSend() {
-		out, err := ship.Describe(batch)
-		if err != nil {
-			return err
-		}
-		fmt.Fprintln(stdout, out)
 		fmt.Fprintln(stderr, "dry run: nothing was sent")
-		return nil
 	}
-
-	return ship.New(cfg.Endpoint, cfg.Token, Version).Send(ctx, batch)
+	return nil
 }
 
 // build assembles a batch, from a local file when one is given and from AWS
 // otherwise. The file path exists so a customer can hand us an export without
 // granting any access at all, which is a useful first step in a review.
-func build(ctx context.Context, cfg *config.Config, path string) (wire.Batch, ingest.Report, error) {
+func build(ctx context.Context, cfg *config.Config, path string) ([]Collection, error) {
 	if path != "" {
 		return fromFile(cfg, path)
 	}
 	return fromAWS(ctx, cfg)
 }
 
-func fromFile(cfg *config.Config, path string) (wire.Batch, ingest.Report, error) {
+func fromFile(cfg *config.Config, path string) ([]Collection, error) {
 	fh, err := os.Open(path)
 	if err != nil {
-		return wire.Batch{}, ingest.Report{}, err
+		return nil, err
 	}
 	defer fh.Close()
 
 	format, err := cfg.Format()
 	if err != nil {
-		return wire.Batch{}, ingest.Report{}, err
+		return nil, err
 	}
 	records, stats, err := flowlogs.ParseFormatted(fh, format)
 	if err != nil {
-		return wire.Batch{}, ingest.Report{}, fmt.Errorf("parsing flow logs: %w", err)
+		return nil, fmt.Errorf("parsing flow logs: %w", err)
 	}
 
 	// No attribution on this path, so direction inference has only the records
@@ -174,7 +199,7 @@ func fromFile(cfg *config.Config, path string) (wire.Batch, ingest.Report, error
 	records, direction := flowlogs.InferDirection(records, nil)
 
 	end := time.Now().UTC()
-	return wire.Batch{
+	batch := wire.Batch{
 		AccountID:   cfg.AccountID,
 		Region:      cfg.Region,
 		WindowStart: end.Add(-cfg.Window),
@@ -190,35 +215,88 @@ func fromFile(cfg *config.Config, path string) (wire.Batch, ingest.Report, error
 			DirectionInferred:  int64(direction.Inferred),
 			DirectionUndecided: int64(direction.Undecided),
 		},
-	}, ingest.Report{Stats: stats, Interfaces: interfaces, Direction: direction}, nil
+	}
+	return []Collection{{
+		Region: cfg.Region,
+		Batch:  batch,
+		Report: ingest.Report{Stats: stats, Interfaces: interfaces, Direction: direction},
+	}}, nil
 }
 
-func fromAWS(ctx context.Context, cfg *config.Config) (wire.Batch, ingest.Report, error) {
+// Collection is one region's batch and the report on collecting it.
+type Collection struct {
+	Region string
+	Batch  wire.Batch
+	Report ingest.Report
+}
+
+func fromAWS(ctx context.Context, cfg *config.Config) ([]Collection, error) {
 	return fromAWSWindow(ctx, cfg, ingest.Window(cfg.Window))
 }
 
+// fromAWSWindow collects every configured region for one window.
+//
+// One batch per region rather than one merged batch. A private address is
+// unique within a region and nowhere else, so a batch holding two regions'
+// traffic would key destination names and gateway questions on addresses that
+// mean two different things — and the control plane keys a batch on
+// (account, region, window) for exactly that reason.
+//
+// A region that fails does not take the others with it. A role that cannot
+// read eu-west-1 is a reason to say so about eu-west-1, not a reason to lose
+// us-east-1 as well.
 func fromAWSWindow(
 	ctx context.Context, cfg *config.Config, w awsread.Window,
-) (wire.Batch, ingest.Report, error) {
+) ([]Collection, error) {
+	regions := cfg.RegionList()
+	var (
+		out      []Collection
+		failures []string
+	)
+	for _, region := range regions {
+		collected, err := collectRegion(ctx, cfg, region, w)
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", region, err))
+			continue
+		}
+		out = append(out, collected)
+	}
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no region could be collected: %s",
+			strings.Join(failures, "; "))
+	}
+	for i := range out {
+		// Carried on every collection so the caller can print them once
+		// without threading a second return value through the daemon loop.
+		out[i].Report.Errors = append(out[i].Report.Errors, failures...)
+		failures = nil
+	}
+	return out, nil
+}
+
+func collectRegion(
+	ctx context.Context, cfg *config.Config, region string, w awsread.Window,
+) (Collection, error) {
 	clients, err := awsclient.New(ctx, awsclient.Options{
-		Region:     cfg.Region,
+		Region:     region,
 		RoleARN:    cfg.RoleARN,
 		ExternalID: cfg.ExternalID,
 	})
 	if err != nil {
-		return wire.Batch{}, ingest.Report{}, err
+		return Collection{}, err
 	}
 
 	format, err := cfg.Format()
 	if err != nil {
-		return wire.Batch{}, ingest.Report{}, err
+		return Collection{}, err
 	}
 
 	var source ingest.FlowSource
 	if bucket, prefix, ok := cfg.S3Source(); ok {
 		source = &ingest.S3Reader{
 			API: clients.Objects, Bucket: bucket, Prefix: prefix,
-			AccountID: cfg.AccountID, Region: cfg.Region, Format: format,
+			AccountID: cfg.AccountID, Region: region, Format: format,
 		}
 	} else {
 		source = &ingest.CloudWatchReader{
@@ -235,9 +313,10 @@ func fromAWSWindow(
 		Serverless: clients.Serverless,
 		Trail:      clients.Trail,
 		AccountID:  cfg.AccountID,
-		Region:     cfg.Region,
+		Region:     region,
 	}
-	return collector.Collect(ctx, w)
+	batch, report, err := collector.Collect(ctx, w)
+	return Collection{Region: region, Batch: batch, Report: report}, err
 }
 
 // accessLogSource returns a reader for load balancer access logs, or nil when

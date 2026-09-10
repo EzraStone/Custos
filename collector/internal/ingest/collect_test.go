@@ -399,3 +399,46 @@ func TestTheErrorMessagesThemselvesDoNotShip(t *testing.T) {
 		t.Fatal("an AWS error message reached the wire")
 	}
 }
+
+// --- which region a record came from ------------------------------------------
+
+// A flow log line carries no region and the reader that fetched it does. A
+// private address in a batch covering two regions is ambiguous without this.
+func TestEveryRecordIsStampedWithItsRegion(t *testing.T) {
+	c := collector(stubFlows{
+		records: []wire.FlowRecord{flow("eni-1"), flow("eni-2")},
+		stats:   flowlogs.Stats{Lines: 2, Parsed: 2},
+	}, nil, nil)
+	c.Region = "eu-west-1"
+
+	batch, _, err := c.Collect(context.Background(), s3Window())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(batch.Flows) == 0 {
+		t.Fatal("nothing to check")
+	}
+	for _, r := range batch.Flows {
+		if r.Region != "eu-west-1" {
+			t.Fatalf("record from %q, want eu-west-1: %+v", r.Region, r)
+		}
+	}
+}
+
+func TestTheBatchAndItsRecordsAgreeOnTheRegion(t *testing.T) {
+	c := collector(stubFlows{
+		records: []wire.FlowRecord{flow("eni-1")},
+		stats:   flowlogs.Stats{Lines: 1, Parsed: 1},
+	}, nil, nil)
+	c.Region = "ap-south-1"
+
+	batch, _, _ := c.Collect(context.Background(), s3Window())
+	if batch.Region != "ap-south-1" {
+		t.Fatalf("batch region %q", batch.Region)
+	}
+	for _, r := range batch.Flows {
+		if r.Region != batch.Region {
+			t.Fatalf("record says %q, batch says %q", r.Region, batch.Region)
+		}
+	}
+}
