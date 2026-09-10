@@ -103,6 +103,16 @@ Each agent carries its `evidence`: the sentences the classifier produced. A
 finding without them is a score, and a score is what the workload's owner will
 argue with instead of the facts.
 
+`regions` is every region this agent has been seen in. It accumulates across
+scans, because one scan covers one region and a role running in three is
+discovered three times.
+
+**The other figures are one region's.** `est_monthly_spend_usd`, `tools`,
+`data_stores` and `blast_radius` come from the scan that last saw the agent. An
+agent listing three regions and one spend figure is not showing you the total,
+and a caller that renders the regions without saying so is worse than one that
+renders neither.
+
 ## `GET /v1/accounts`
 
 The accounts this credential covers.
