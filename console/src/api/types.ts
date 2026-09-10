@@ -205,6 +205,13 @@ export interface FleetRow {
   last_scan: string | null;
   coverage: number | null;
   scope_readable: number | null;
+  /**
+   * Regions this account has ever been collected in.
+   *
+   * The column that tells a one-region view of a three-region account apart
+   * from a clean account: every other number here would be identical.
+   */
+  regions: string[];
   reviews: number;
   gateway_questions: number;
   rates_verified: boolean;

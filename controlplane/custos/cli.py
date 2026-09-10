@@ -253,6 +253,10 @@ def cmd_accounts(args: argparse.Namespace) -> int:
             "unsanctioned": row["agents"] - (row["sanctioned"] or 0),
             "destructive": row["destructive"] or 0,
             "last_scan": latest.started_at if latest else None,
+            # Which regions this account is collected in. Without it a
+            # one-region view of a three-region account reads identically to a
+            # clean account in every other column here.
+            "regions": scans.regions_scanned(row["account_id"]),
         })
 
     # Never-scanned first, then by what can do the most damage. An account
@@ -263,12 +267,19 @@ def cmd_accounts(args: argparse.Namespace) -> int:
     ))
 
     print(f"{'account':<18}{'agents':>8}{'sanctioned':>12}{'unsanctioned':>14}"
-          f"{'destructive':>13}{'last scan':>14}")
-    print("-" * 79)
+          f"{'destructive':>13}{'last scan':>14}{'regions':>9}")
+    print("-" * 88)
     for a in summary:
         when = f"{a['last_scan']:%Y-%m-%d}" if a["last_scan"] else "never"
+        regions = str(len(a["regions"])) if a["regions"] else "-"
         print(f"{a['account_id']:<18}{a['agents']:>8}{a['sanctioned']:>12}"
-              f"{a['unsanctioned']:>14}{a['destructive']:>13}{when:>14}")
+              f"{a['unsanctioned']:>14}{a['destructive']:>13}{when:>14}{regions:>9}")
+
+    multi = [a for a in summary if len(a["regions"]) > 1]
+    if multi:
+        print()
+        for a in multi:
+            print(f"{a['account_id']}  {', '.join(a['regions'])}")
     return 0
 
 

@@ -68,7 +68,7 @@ describe("choosing between accounts", () => {
       agents: 12, unsanctioned: 5, destructive: 1,
       last_scan: "2026-09-08T09:00:00+00:00",
       coverage: 1, scope_readable: 0.75,
-      reviews: 2, gateway_questions: 0, rates_verified: true,
+      reviews: 2, gateway_questions: 0, rates_verified: true, regions: [],
       ...overrides,
     };
   }
@@ -148,5 +148,42 @@ describe("choosing between accounts", () => {
       />,
     );
     expect(screen.getByRole("button", { name: "111111111111" })).toBeInTheDocument();
+  });
+});
+
+describe("an account collected in more than one region", () => {
+  function row(overrides: Partial<FleetRow> = {}): FleetRow {
+    return {
+      account_id: "447120043318", agents: 4, unsanctioned: 2, destructive: 0,
+      last_scan: "2026-08-10T12:00:00Z", coverage: 1, scope_readable: 1,
+      reviews: 0, gateway_questions: 0, rates_verified: true, regions: [],
+      ...overrides,
+    };
+  }
+
+  it("says how many regions", () => {
+    render(
+      <AccountPicker
+        fleet={[row({ regions: ["eu-west-1", "us-east-1"] })]}
+        accounts={[]}
+        current=""
+        onChoose={() => {}}
+      />,
+    );
+    expect(screen.getByText(/2 regions/)).toBeInTheDocument();
+  });
+
+  it("says nothing when there is one", () => {
+    // Saying so on every row would push the numbers somebody is actually
+    // reading off the end of the line.
+    render(
+      <AccountPicker
+        fleet={[row({ regions: ["us-east-1"] })]}
+        accounts={[]}
+        current=""
+        onChoose={() => {}}
+      />,
+    );
+    expect(screen.queryByText(/regions/)).toBeNull();
   });
 });

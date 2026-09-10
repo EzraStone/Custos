@@ -98,6 +98,12 @@ function summary(row: FleetRow): string {
   if (row.coverage !== null && row.coverage < 0.95) {
     parts.push(`${Math.round(row.coverage * 100)}% coverage`);
   }
+  // Only when there is more than one. An account collected in one region is
+  // the ordinary case, and saying so on every row would push the numbers
+  // somebody is actually reading off the end of the line.
+  if (row.regions.length > 1) {
+    parts.push(`${row.regions.length} regions`);
+  }
   parts.push(`scanned ${day(row.last_scan)}`);
   return parts.join(" · ");
 }
