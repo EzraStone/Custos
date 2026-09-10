@@ -111,6 +111,11 @@ no model traffic we can see, so it is not a low-confidence finding, it is
 absent. Custos looks for the addresses that behave like one and asks, with the
 numbers a person can check.
 
+The question names its region, and answering declares the address for that
+region alone. A private address is a different host in every region an account
+runs in, and declaring one everywhere would turn an unrelated internal service
+into a model endpoint — which does not hide agents, it invents them (SEC-24).
+
 ![The console asking whether an internal address is a model gateway](docs/images/gateway.png)
 
 That image comes from the stress corpus, which contains a workload behind an
