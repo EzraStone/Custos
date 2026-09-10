@@ -392,6 +392,11 @@ def create_app(
                 "last_scan": _iso(latest.started_at) if latest else None,
                 "coverage": latest.coverage if latest else None,
                 "scope_readable": latest.scope_readable if latest else None,
+                # Which regions this account has ever been collected in. The
+                # question a fleet view has to answer is whether an account is
+                # covered, and one region of a three-region account looks
+                # identical to a clean account from every other column here.
+                "regions": scans.regions_scanned(account_id),
                 "reviews": len(reviews.latest_for(account_id)),
                 "gateway_questions": len(open_questions),
                 "rates_verified": rates.rates_for(account_id).verified,

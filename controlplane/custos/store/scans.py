@@ -199,6 +199,23 @@ class ScanStore:
             )
         ]
 
+    def regions_scanned(self, account_id: str) -> list[str]:
+        """Every region this account has ever had a batch from.
+
+        From batches rather than from the latest scan, because coverage is a
+        question about the account and not about the most recent hour. An
+        account collected in three regions that only shipped one this hour is
+        still an account we cover in three.
+        """
+        return [
+            row["region"]
+            for row in self.conn.execute(
+                "SELECT DISTINCT region FROM batches WHERE account_id = ? "
+                "AND region != '' ORDER BY region",
+                (account_id,),
+            )
+        ]
+
     def latest_scan(self, account_id: str) -> ScanRecord | None:
         scans = self.scans_for(account_id, limit=1)
         return scans[0] if scans else None

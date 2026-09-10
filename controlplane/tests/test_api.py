@@ -1092,3 +1092,36 @@ def test_different_windows_from_different_regions_are_both_kept(client):
     assert client.post("/v1/batches", json=east, headers=AUTH).status_code == 202
     assert client.post("/v1/batches", json=west, headers=AUTH).status_code == 202
     assert len(client.get("/v1/scans", headers=AUTH).json()["scans"]) == 2
+
+
+def test_the_fleet_says_which_regions_each_account_is_collected_in(client):
+    """One region of a three-region account looks identical to a clean account
+    in every other column of a fleet view."""
+    client.post("/v1/batches", json=batch() | {"region": "us-east-1"}, headers=AUTH)
+    client.post("/v1/batches", json=batch() | {"region": "eu-west-1"}, headers=AUTH)
+
+    row = client.get("/v1/fleet", headers=AUTH).json()["accounts"][0]
+    assert row["regions"] == ["eu-west-1", "us-east-1"]
+
+
+def test_regions_cover_the_account_rather_than_the_latest_hour(client):
+    """An account collected in three regions that only shipped one this hour is
+    still an account we cover in three."""
+    from datetime import timedelta as _td
+
+    client.post("/v1/batches", json=batch() | {"region": "eu-west-1"}, headers=AUTH)
+    client.post(
+        "/v1/batches",
+        json=batch(start=W0 + _td(hours=1)) | {"region": "us-east-1"},
+        headers=AUTH,
+    )
+
+    row = client.get("/v1/fleet", headers=AUTH).json()["accounts"][0]
+    assert row["regions"] == ["eu-west-1", "us-east-1"]
+
+
+def test_an_unnamed_region_is_not_listed_as_one(client):
+    """An older collector never sent one, and an empty string in a region list
+    reads as a region nobody can find."""
+    client.post("/v1/batches", json=batch() | {"region": ""}, headers=AUTH)
+    assert client.get("/v1/fleet", headers=AUTH).json()["accounts"][0]["regions"] == []
