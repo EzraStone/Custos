@@ -771,6 +771,7 @@ def create_app(
             missing_fields=latest.missing_fields if latest else (),
             direction_undecided=latest.direction_undecided if latest else 0,
             read_errors=latest.read_errors if latest else 0,
+            regions=latest.regions if latest else (),
         ) if latest else None
 
         diff = ScanDiff()

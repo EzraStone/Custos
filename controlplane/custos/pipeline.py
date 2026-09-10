@@ -179,6 +179,15 @@ def to_scan_input(
     )
 
 
+def _regions(batch: Batch) -> tuple[str, ...]:
+    """Regions this batch covered.
+
+    From the batch rather than from configuration: what the report must say is
+    where these records came from, not what somebody meant to collect.
+    """
+    return (batch.region,) if batch.region else ()
+
+
 def _coverage(batch: Batch, scope: tuple[int, int] = (0, 0), ipv6: int = 0) -> Coverage:
     """Build the report's coverage summary from what the collector reported.
 
@@ -193,7 +202,8 @@ def _coverage(batch: Batch, scope: tuple[int, int] = (0, 0), ipv6: int = 0) -> C
         # from what the flow logs contained, not from what the collector said
         # about its own reading.
         return Coverage(
-            scope_named=scope[0], scope_total=scope[1], ipv6_destinations=ipv6
+            scope_named=scope[0], scope_total=scope[1], ipv6_destinations=ipv6,
+            regions=_regions(batch),
         )
     return Coverage(
         parsed_fraction=stats.parsed_fraction,
@@ -205,6 +215,7 @@ def _coverage(batch: Batch, scope: tuple[int, int] = (0, 0), ipv6: int = 0) -> C
         direction_undecided=stats.direction_undecided,
         read_errors=stats.read_errors,
         ipv6_destinations=ipv6,
+        regions=_regions(batch),
     )
 
 
@@ -283,6 +294,7 @@ def ingest(
             missing_fields=tuple(batch.collection.missing_fields),
             direction_undecided=batch.collection.direction_undecided,
             read_errors=batch.collection.read_errors,
+            regions=_regions(batch),
         )
 
         # Questions to put to the customer, from this scan's traffic. Recorded

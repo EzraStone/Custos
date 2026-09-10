@@ -139,6 +139,30 @@ def test_records_dropped_for_want_of_a_direction_are_disclosed():
     assert "Their bytes are in no figure above" in page
 
 
+def test_the_report_names_the_region_it_covered():
+    """Otherwise "no unsanctioned agents found" reads as a claim about the
+    account when it is a claim about one region of it."""
+    page = render(
+        result([agent()]), "acme", T0, coverage=Coverage(regions=("us-east-1",))
+    )
+    assert "covered us-east-1 and no other region" in page
+    assert "not about the account" in page
+
+
+def test_several_regions_are_all_named():
+    page = render(
+        result([agent()]), "acme", T0,
+        coverage=Coverage(regions=("eu-west-1", "us-east-1")),
+    )
+    assert "eu-west-1, us-east-1" in page
+
+
+def test_a_scan_with_no_stated_region_claims_nothing_about_regions(page):
+    """An older collector never sent one. Saying "covered  and no other region"
+    would be worse than saying nothing."""
+    assert "no other region" not in page
+
+
 def test_failed_aws_reads_are_disclosed_beside_the_unattributed_findings():
     """An interface nobody could describe produces a finding with no owner,
     which is exactly what an account with no resource tags produces. Without

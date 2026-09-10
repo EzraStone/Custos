@@ -197,6 +197,15 @@ def _format_limits(coverage: Coverage | None) -> list[str]:
     items = [
         _FIELD_COSTS[name] for name in coverage.missing_fields if name in _FIELD_COSTS
     ]
+    if coverage.regions:
+        named = ", ".join(_e(r) for r in coverage.regions)
+        items.append(
+            f"This scan covered {named} and no other region. An AWS account is "
+            "a region-by-region thing: a workload in another region has its own "
+            "flow logs, its own interfaces, and no representation here at all. "
+            "Everything above is a statement about the regions named, not about "
+            "the account."
+        )
     if coverage.read_errors:
         items.append(
             f"{coverage.read_errors:,} AWS read{'s' if coverage.read_errors != 1 else ''} "
@@ -386,6 +395,15 @@ class Coverage:
     direction_undecided: int = 0
     """Records dropped because their direction could not be established.
     Coverage the parse counters do not show, because the lines parsed."""
+    regions: tuple[str, ...] = ()
+    """Which AWS regions this scan covered.
+
+    An AWS account is a region-by-region thing. A workload in eu-west-1 has its
+    own flow logs, its own interfaces, and no representation whatsoever in a
+    scan of us-east-1 — so "no unsanctioned agents found" is a claim about one
+    region, and a report that does not name it is making a claim about the
+    account that nobody checked."""
+
     read_errors: int = 0
     """AWS reads that failed after retries while this scan was collected.
 
