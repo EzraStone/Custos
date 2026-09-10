@@ -122,3 +122,31 @@ never forwarded whole.
 
 **Enforced by:** `TestFreeTextIsNotForwarded`, `TestKnownAWSShapesAreParsed`,
 `TestPublicAddressesAreNotAskedAbout`.
+
+## SEC-24 — A declaration cannot manufacture agents where it was not made
+
+Declaring an endpoint is one of two decisions in this system that changes what
+counts as an agent. The other is granting imprimatur, and that one only ever
+narrows the unsanctioned set. This one widens it: an address a customer
+declares becomes model traffic, and every workload reaching it becomes an
+agent with an estimated monthly cost beside its name.
+
+A private address is unique within a region and nowhere else. 10.0.7.40 is the
+model gateway in us-east-1 and, in eu-west-1, whatever that account happens to
+run at that address — a database proxy, a build cache, an internal API nobody
+has thought about in a year. Declaring it account-wide makes all of that
+traffic model traffic and every workload touching it an agent, in a region
+nobody was asked about.
+
+So a private range is refused without a region, and a declaration naming a
+region is in force only there. A public provider range needs no region: it
+means the same thing everywhere, and it cannot collide with a customer's own
+addressing.
+
+The direction matters. Every other failure in this system hides an agent, and
+a hidden agent is a gap somebody can be told about. This one invents them, in a
+document whose whole value is that a security team believes it.
+
+**Enforced by:** `test_a_private_range_declared_everywhere_is_refused`,
+`test_a_region_scoped_declaration_applies_only_there`,
+`test_asking_without_a_region_returns_only_the_everywhere_ones`.
