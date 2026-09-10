@@ -137,7 +137,7 @@ class AgentStore:
                     agent.identity.compute,
                     dumps(agent.model.providers), dumps(agent.model.endpoints),
                     agent.model.est_monthly_spend_usd, dumps(agent.regions),
-                    _json(existing.region_spend | agent.region_spend),
+                    _json(agent.region_spend),
                     dumps(agent.reach.credentials), dumps(agent.reach.tools),
                     dumps(agent.reach.data_stores), str(agent.reach.blast_radius),
                 ),
