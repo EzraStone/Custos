@@ -270,7 +270,10 @@ def ingest(
         # refreshes records rather than creating duplicates.
         # Loaded before classification, because a declaration that arrives
         # after it has already run explains nothing about this scan.
-        declared = DeclarationStore(conn).declared_for(batch.account_id)
+        # Scoped to this batch's region. A declaration with no region applies
+        # everywhere; a private one is pinned to the region it was asked about,
+        # because the same address elsewhere is a different host.
+        declared = DeclarationStore(conn).declared_for(batch.account_id, batch.region)
         rates = RateStore(conn).rates_for(batch.account_id)
         scan_input = to_scan_input(batch, interval, declared, rates)
         result = run_scan(scan_input)
@@ -308,7 +311,8 @@ def ingest(
         ReviewStore(conn).record(scan_id, batch.account_id, result.review_candidates)
 
         CandidateStore(conn).record(
-            scan_id, batch.account_id, gateway_candidates(result.telemetry)
+            scan_id, batch.account_id, gateway_candidates(result.telemetry),
+            region=batch.region,
         )
 
         # Captured before this scan's observations are written, so the

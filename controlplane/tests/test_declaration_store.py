@@ -23,21 +23,29 @@ def test_a_declaration_comes_back_ready_to_classify(store):
     from custos.catalog import DestinationClass
     from custos.declared import classify_with
 
-    store.declare(ACCOUNT, "10.0.7.0/24", "range", "ezra@custos.dev", "llm-gateway", at=AT)
-    declared = store.declared_for(ACCOUNT)
+    store.declare(
+        ACCOUNT,
+        "10.0.7.0/24",
+        "range",
+        "ezra@custos.dev",
+        "llm-gateway",
+        region="us-east-1",
+        at=AT,
+    )
+    declared = store.declared_for(ACCOUNT, "us-east-1")
     assert classify_with(declared, "10.0.7.9", 443) is DestinationClass.MODEL
 
 
 def test_declarations_do_not_cross_accounts(store):
-    store.declare(ACCOUNT, "10.0.7.0/24", "range", "ezra@custos.dev", at=AT)
-    assert store.declared_for(OTHER).empty
+    store.declare(ACCOUNT, "10.0.7.0/24", "range", "ezra@custos.dev", region="us-east-1", at=AT)
+    assert store.declared_for(OTHER, "us-east-1").empty
 
 
 def test_declaring_needs_a_person(store):
     """It changes what counts as an agent, which makes it the second decision
     in this system with that property. The first already requires a name."""
     with pytest.raises(ValueError, match="needs a person's name"):
-        store.declare(ACCOUNT, "10.0.7.0/24", "range", "   ", at=AT)
+        store.declare(ACCOUNT, "10.0.7.0/24", "range", "   ", region="us-east-1", at=AT)
 
 
 def test_an_invalid_range_is_rejected_at_write_time(store):
@@ -45,21 +53,35 @@ def test_an_invalid_range_is_rejected_at_write_time(store):
     customer believes is in effect while their agents stay invisible, and
     finding out at the next scan is too late."""
     with pytest.raises(ValueError, match="not a valid network"):
-        store.declare(ACCOUNT, "10.0.7.0/99", "range", "ezra@custos.dev", at=AT)
+        store.declare(ACCOUNT, "10.0.7.0/99", "range", "ezra@custos.dev", region="us-east-1", at=AT)
     assert store.records_for(ACCOUNT) == []
 
 
 def test_withdrawing_takes_it_out_of_effect(store):
-    record = store.declare(ACCOUNT, "10.0.7.0/24", "range", "ezra@custos.dev", at=AT)
+    record = store.declare(
+        ACCOUNT,
+        "10.0.7.0/24",
+        "range",
+        "ezra@custos.dev",
+        region="us-east-1",
+        at=AT,
+    )
     assert store.withdraw(record.id, ACCOUNT, "priya@custos.dev", at=AT) is True
-    assert store.declared_for(ACCOUNT).empty
+    assert store.declared_for(ACCOUNT, "us-east-1").empty
 
 
 def test_a_withdrawn_declaration_is_still_on_the_record(store):
     """Withdrawing narrows what counts as a model endpoint, so unlike
     declaring it can make a finding disappear — which is exactly why the
     record of it has to survive."""
-    record = store.declare(ACCOUNT, "10.0.7.0/24", "range", "ezra@custos.dev", at=AT)
+    record = store.declare(
+        ACCOUNT,
+        "10.0.7.0/24",
+        "range",
+        "ezra@custos.dev",
+        region="us-east-1",
+        at=AT,
+    )
     store.withdraw(record.id, ACCOUNT, "priya@custos.dev", at=AT)
 
     assert store.records_for(ACCOUNT) == []
@@ -70,13 +92,27 @@ def test_a_withdrawn_declaration_is_still_on_the_record(store):
 
 
 def test_withdrawing_someone_elses_declaration_does_nothing(store):
-    record = store.declare(ACCOUNT, "10.0.7.0/24", "range", "ezra@custos.dev", at=AT)
+    record = store.declare(
+        ACCOUNT,
+        "10.0.7.0/24",
+        "range",
+        "ezra@custos.dev",
+        region="us-east-1",
+        at=AT,
+    )
     assert store.withdraw(record.id, OTHER, "attacker", at=AT) is False
-    assert not store.declared_for(ACCOUNT).empty
+    assert not store.declared_for(ACCOUNT, "us-east-1").empty
 
 
 def test_withdrawing_twice_is_reported_as_no_change(store):
-    record = store.declare(ACCOUNT, "10.0.7.0/24", "range", "ezra@custos.dev", at=AT)
+    record = store.declare(
+        ACCOUNT,
+        "10.0.7.0/24",
+        "range",
+        "ezra@custos.dev",
+        region="us-east-1",
+        at=AT,
+    )
     assert store.withdraw(record.id, ACCOUNT, "priya@custos.dev", at=AT) is True
     assert store.withdraw(record.id, ACCOUNT, "someone-else", at=AT) is False
     # And the first withdrawal is the one on the record.
@@ -84,14 +120,97 @@ def test_withdrawing_twice_is_reported_as_no_change(store):
 
 
 def test_withdrawing_needs_a_person_too(store):
-    record = store.declare(ACCOUNT, "10.0.7.0/24", "range", "ezra@custos.dev", at=AT)
+    record = store.declare(
+        ACCOUNT,
+        "10.0.7.0/24",
+        "range",
+        "ezra@custos.dev",
+        region="us-east-1",
+        at=AT,
+    )
     with pytest.raises(ValueError, match="needs a person's name"):
         store.withdraw(record.id, ACCOUNT, "", at=AT)
 
 
 def test_who_declared_it_is_kept(store):
-    store.declare(ACCOUNT, "10.0.7.0/24", "range", "ezra@custos.dev", "llm-gateway", at=AT)
+    store.declare(
+        ACCOUNT,
+        "10.0.7.0/24",
+        "range",
+        "ezra@custos.dev",
+        "llm-gateway",
+        region="us-east-1",
+        at=AT,
+    )
     record = store.records_for(ACCOUNT)[0]
     assert record.declared_by == "ezra@custos.dev"
     assert record.note == "llm-gateway"
     assert record.declared_at == AT
+
+
+# --- a private address means a different host in every region ------------------
+
+
+def test_a_private_range_declared_everywhere_is_refused(store):
+    """The one shape this must refuse. 10.0.7.40 is the model gateway in
+    us-east-1 and, in every other region the account runs in, whatever happens
+    to live at that address — so declaring it everywhere turns ordinary
+    internal traffic into model traffic.
+
+    That does not hide agents, it invents them, which is the direction this
+    system is least able to recover from.
+    """
+    with pytest.raises(ValueError, match="different things in different regions"):
+        store.declare(ACCOUNT, "10.0.7.0/24", "range", "ezra@custos.dev", at=AT)
+
+    assert store.records_for(ACCOUNT) == []
+
+
+def test_a_public_range_needs_no_region(store):
+    """A published provider range means the same thing everywhere."""
+    record = store.declare(
+        ACCOUNT, "160.79.104.0/23", "range", "ezra@custos.dev", at=AT
+    )
+    assert record.region == ""
+
+
+def test_an_aws_service_needs_no_region(store):
+    """A service name is a service name in every region."""
+    record = store.declare(ACCOUNT, "BEDROCK", "aws_service", "ezra@custos.dev", at=AT)
+    assert record.region == ""
+
+
+def test_a_region_scoped_declaration_applies_only_there(store):
+    from custos.catalog import DestinationClass
+    from custos.declared import classify_with
+
+    store.declare(
+        ACCOUNT, "10.0.7.0/24", "range", "ezra@custos.dev", region="us-east-1", at=AT
+    )
+
+    here = store.declared_for(ACCOUNT, "us-east-1")
+    assert classify_with(here, "10.0.7.9", 443) is DestinationClass.MODEL
+
+    elsewhere = store.declared_for(ACCOUNT, "eu-west-1")
+    assert classify_with(elsewhere, "10.0.7.9", 443) is not DestinationClass.MODEL
+
+
+def test_an_everywhere_declaration_applies_in_every_region(store):
+    from custos.catalog import DestinationClass
+    from custos.declared import classify_with
+
+    store.declare(ACCOUNT, "160.79.104.0/23", "range", "ezra@custos.dev", at=AT)
+
+    for region in ("us-east-1", "eu-west-1", ""):
+        declared = store.declared_for(ACCOUNT, region)
+        assert classify_with(declared, "160.79.104.10", 443) is DestinationClass.MODEL
+
+
+def test_asking_without_a_region_returns_only_the_everywhere_ones(store):
+    """The safe reading. A caller that does not know which region it is
+    classifying must not be handed a private address that means something
+    different in each."""
+    store.declare(
+        ACCOUNT, "10.0.7.0/24", "range", "ezra@custos.dev", region="us-east-1", at=AT
+    )
+    assert store.declared_for(ACCOUNT).empty

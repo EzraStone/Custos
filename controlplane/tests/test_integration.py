@@ -305,7 +305,10 @@ def test_declaring_a_gateway_makes_its_agents_visible_on_the_next_scan():
     assert client.get("/v1/register", headers=headers).json()["agents"] == []
 
     DeclarationStore(conn).declare(
-        account, "10.0.7.0/24", "range", "ezra@custos.dev", "llm-gateway"
+        account, "10.0.7.0/24", "range", "ezra@custos.dev", "llm-gateway",
+        # A private range needs the region it was asked about: 10.0.7.9 is the
+        # gateway here and something else in every other region.
+        region="us-east-1",
     )
     conn.commit()
 
@@ -383,7 +386,8 @@ def test_a_gateway_candidate_becomes_a_question_and_then_stops_being_one():
     declared = client.post(
         "/v1/endpoints",
         json={"value": "10.0.7.0/24", "kind": "range",
-              "operator": "ezra@custos.dev", "note": "llm-gateway"},
+              "operator": "ezra@custos.dev", "note": "llm-gateway",
+              "region": "us-east-1"},
         headers=headers,
     )
     assert declared.status_code == 200

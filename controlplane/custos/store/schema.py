@@ -22,7 +22,7 @@ agent's apparent spend and reach.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 14
 
 # Columns added after a table was first written, applied by ALTER on databases
 # that already exist. The schema below is applied with CREATE TABLE IF NOT
@@ -53,6 +53,14 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     # Spend per region, from the last scan of each. A scan covers one region,
     # so an agent running in three was showing a third of its cost.
     ("agents", "region_spend", "TEXT NOT NULL DEFAULT '{}'"),
+    # Which region a declaration applies to. Empty means every region, which
+    # is right for a public provider range and dangerous for a private one:
+    # 10.0.7.40 is a different host in every region an account runs in.
+    ("declared_endpoints", "region", "TEXT NOT NULL DEFAULT ''"),
+    # Which region a gateway question was asked about. A declaration answers it
+    # only in the region it applies to, and the same address elsewhere is a
+    # different host and still an open question.
+    ("gateway_candidates", "region", "TEXT NOT NULL DEFAULT ''"),
 )
 
 BATCHES_TABLE = """CREATE TABLE IF NOT EXISTS batches (
@@ -178,6 +186,7 @@ CREATE TABLE IF NOT EXISTS gateway_candidates (
     ingress       INTEGER NOT NULL,
     principals    TEXT    NOT NULL,
     blind         TEXT    NOT NULL,
+    region        TEXT    NOT NULL DEFAULT '',
     question      TEXT    NOT NULL,
     PRIMARY KEY (scan_id, address)
 );
@@ -200,6 +209,7 @@ CREATE TABLE IF NOT EXISTS declared_endpoints (
     value         TEXT    NOT NULL,
     kind          TEXT    NOT NULL,
     note          TEXT    NOT NULL DEFAULT '',
+    region        TEXT    NOT NULL DEFAULT '',
     declared_by   TEXT    NOT NULL,
     declared_at   TEXT    NOT NULL,
     withdrawn_by  TEXT,

@@ -730,7 +730,10 @@ def test_drift_on_an_unknown_agent_is_404(client):
 
 
 def _declare(client, **kw):
-    body = {"value": "10.0.7.0/24", "kind": "range", "operator": "ezra@custos.dev"}
+    body = {
+        "value": "10.0.7.0/24", "kind": "range",
+        "operator": "ezra@custos.dev", "region": "us-east-1",
+    }
     body.update(kw)
     return client.post("/v1/endpoints", json=body, headers=AUTH)
 
@@ -754,7 +757,7 @@ def test_a_declaration_says_it_takes_effect_next_scan(client):
 def test_declaring_needs_an_operator(client):
     r = client.post(
         "/v1/endpoints",
-        json={"value": "10.0.7.0/24", "kind": "range", "operator": ""},
+        json={"value": "10.0.7.0/24", "kind": "range", "operator": "", "region": "us-east-1"},
         headers=AUTH,
     )
     assert r.status_code == 422
@@ -878,7 +881,7 @@ def test_a_declared_address_leaves_the_report(client, stress_payload):
     client.post(
         "/v1/endpoints",
         json={"value": "10.0.7.40/32", "kind": "range", "note": "llm-gateway",
-              "operator": "ezra@custos.dev"},
+              "operator": "ezra@custos.dev", "region": "us-east-1"},
         headers=AUTH,
     )
     page = client.get("/v1/report", headers=AUTH).text

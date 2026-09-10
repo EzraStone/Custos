@@ -57,6 +57,16 @@ class Declared:
     notes: dict[str, str] = field(default_factory=dict)
 
     @property
+    def private(self) -> bool:
+        """Whether any declared network is a private range.
+
+        The question a caller asks before deciding whether a declaration may
+        apply account-wide. A private address means a different host in every
+        region; a public one means the same host everywhere.
+        """
+        return any(net.is_private for net in self.nets)
+
+    @property
     def empty(self) -> bool:
         return not self.nets and not self.services
 

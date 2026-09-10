@@ -492,10 +492,13 @@ def create_app(
         customer who declared a gateway last week should not be asked about it
         again on every scan.
         """
-        declared = DeclarationStore(app.state.db).declared_for(account_id)
+        store = DeclarationStore(app.state.db)
         return [
             c for c in CandidateStore(app.state.db).latest_for(account_id)
-            if not declared.covers(c["address"])
+            # Per candidate: a question asked about us-east-1 is answered only
+            # by a declaration in force there. The same address in eu-west-1 is
+            # a different host and still an open question.
+            if not store.declared_for(account_id, c.get("region", "")).covers(c["address"])
         ]
 
     @app.get("/v1/gateway-candidates")
@@ -541,6 +544,7 @@ def create_app(
                     "value": r.value,
                     "kind": r.kind,
                     "note": r.note,
+                    "region": r.region,
                     "declared_by": r.declared_by,
                     "declared_at": _iso(r.declared_at),
                     "active": r.active,
@@ -567,7 +571,8 @@ def create_app(
         store = DeclarationStore(app.state.db)
         try:
             record = store.declare(
-                account_id, body.value, body.kind, body.operator, body.note, at=now()
+                account_id, body.value, body.kind, body.operator, body.note,
+                region=body.region, at=now(),
             )
         except ValueError as exc:
             raise HTTPException(
@@ -578,13 +583,15 @@ def create_app(
         # the other decision that changes what counts as an agent.
         event(
             log, "endpoint.declared", account_id=account_id,
-            value=record.value, kind=record.kind, operator=record.declared_by,
+            value=record.value, kind=record.kind, region=record.region,
+            operator=record.declared_by,
         )
         return {
             "id": record.id,
             "value": record.value,
             "kind": record.kind,
             "note": record.note,
+            "region": record.region,
             "declared_by": record.declared_by,
             "declared_at": _iso(record.declared_at),
             "active": True,
@@ -868,6 +875,13 @@ class DeclareRequest(BaseModel):
     kind: str = Field(default="range", pattern="^(range|aws_service)$")
     operator: str = Field(min_length=1, description="Human identity making the declaration")
     note: str = Field(default="", description="What the customer calls this endpoint")
+    region: str = Field(
+        default="",
+        description=(
+            "Region this applies to. Required for a private range, because a "
+            "private address means a different host in every region"
+        ),
+    )
 
 
 class GrantRequest(BaseModel):

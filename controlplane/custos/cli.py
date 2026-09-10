@@ -165,11 +165,14 @@ def _open_questions(conn, account_id: str) -> list:
     from .gateway import Candidate
     from .store.declarations import CandidateStore, DeclarationStore
 
-    declared = DeclarationStore(conn).declared_for(account_id)
+    store = DeclarationStore(conn)
     return [
         Candidate.from_row(c)
         for c in CandidateStore(conn).latest_for(account_id)
-        if not declared.covers(c["address"])
+        # Per candidate, because a question asked about us-east-1 is answered
+        # only by a declaration in force there. The same address in eu-west-1
+        # is a different host and still an open question.
+        if not store.declared_for(account_id, c.get("region", "")).covers(c["address"])
     ]
 
 
@@ -420,14 +423,16 @@ def cmd_declare(args: argparse.Namespace) -> int:
     conn = open_database(args.db)
     try:
         record = DeclarationStore(conn).declare(
-            args.account, args.value, args.kind, args.operator, args.note
+            args.account, args.value, args.kind, args.operator, args.note,
+            region=args.region,
         )
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     conn.commit()
 
-    print(f"declared {record.value} as a model endpoint for {args.account}")
+    where = f" in {record.region}" if record.region else " in every region"
+    print(f"declared {record.value} as a model endpoint for {args.account}{where}")
     print(f"recorded against {record.declared_by}")
     print("takes effect on the next scan; existing findings are not reclassified")
     return 0
@@ -669,6 +674,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--operator", required=True, help="the human making the declaration")
     p.add_argument("--note", default="", help="what you call this endpoint")
     p.add_argument("--kind", default="range", choices=["range", "aws_service"])
+    p.add_argument(
+        "--region", default="",
+        help="region this applies to; required for a private range, because a "
+             "private address means a different host in every region",
+    )
     p.set_defaults(func=cmd_declare)
 
     p = sub.add_parser("gateways", help="internal addresses that look like model endpoints")

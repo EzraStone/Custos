@@ -33,6 +33,16 @@ class DeclarationRecord:
     note: str
     declared_by: str
     declared_at: datetime
+    region: str = ""
+    """Region this applies to. Empty means every region.
+
+    Empty is right for a published provider range, which means the same thing
+    everywhere. It is dangerous for a private one: 10.0.7.40 is the model
+    gateway in us-east-1 and, in eu-west-1, whatever that account happens to
+    run at that address — and declaring it there turns ordinary internal
+    traffic into model traffic, which manufactures agents out of nothing.
+    """
+
     withdrawn_by: str = ""
     withdrawn_at: datetime | None = None
 
@@ -52,6 +62,7 @@ class DeclarationStore:
         kind: str,
         operator: str,
         note: str = "",
+        region: str = "",
         at: datetime | None = None,
     ) -> DeclarationRecord:
         """Record a declaration, after checking it parses.
@@ -66,18 +77,35 @@ class DeclarationStore:
                 "declaring an endpoint changes what counts as an agent; it needs "
                 "a person's name, like granting imprimatur does"
             )
-        build([Declaration(value=value, kind=kind, note=note)])
+        declared = build([Declaration(value=value, kind=kind, note=note)])
+
+        # A private range with no region is the one shape this must refuse.
+        # 10.0.7.40 is the model gateway in us-east-1 and, in every other
+        # region the account runs in, whatever happens to live at that address
+        # — so declaring it everywhere turns ordinary internal traffic into
+        # model traffic. That does not hide agents, it invents them, which is
+        # the direction this system is least able to recover from.
+        #
+        # A public range means the same thing everywhere and needs no region.
+        if not region.strip() and declared.private:
+            raise ValueError(
+                f"{value} is a private range and private addresses mean "
+                "different things in different regions. Declare it for the "
+                "region the question was asked about, or an unrelated service "
+                "at that address elsewhere becomes a model endpoint."
+            )
 
         stamp = at or now()
         cursor = self.conn.execute(
             "INSERT INTO declared_endpoints "
-            "(account_id, value, kind, note, declared_by, declared_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (account_id, value, kind, note, operator.strip(), iso(stamp)),
+            "(account_id, value, kind, note, region, declared_by, declared_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (account_id, value, kind, note, region.strip(), operator.strip(), iso(stamp)),
         )
         return DeclarationRecord(
             id=cursor.lastrowid, account_id=account_id, value=value, kind=kind,
-            note=note, declared_by=operator.strip(), declared_at=stamp,
+            note=note, region=region.strip(), declared_by=operator.strip(),
+            declared_at=stamp,
         )
 
     def withdraw(
@@ -105,7 +133,8 @@ class DeclarationStore:
         return [
             DeclarationRecord(
                 id=row["id"], account_id=row["account_id"], value=row["value"],
-                kind=row["kind"], note=row["note"], declared_by=row["declared_by"],
+                kind=row["kind"], note=row["note"], region=row["region"],
+                declared_by=row["declared_by"],
                 declared_at=parse(row["declared_at"]),
                 withdrawn_by=row["withdrawn_by"] or "",
                 withdrawn_at=parse(row["withdrawn_at"]) if row["withdrawn_at"] else None,
@@ -117,11 +146,19 @@ class DeclarationStore:
             )
         ]
 
-    def declared_for(self, account_id: str) -> Declared:
-        """What is in effect for this account right now, ready to classify."""
+    def declared_for(self, account_id: str, region: str = "") -> Declared:
+        """What is in effect for this account and region, ready to classify.
+
+        A declaration with no region applies everywhere; one with a region
+        applies only there. Asking without a region returns only the
+        everywhere ones, which is the safe reading: a caller that does not know
+        which region it is classifying must not be handed a private address
+        that means something different in each.
+        """
         return build([
             Declaration(value=r.value, kind=r.kind, note=r.note)
             for r in self.records_for(account_id)
+            if r.region == "" or r.region == region
         ])
 
 
@@ -138,14 +175,18 @@ class CandidateStore:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self.conn = conn
 
-    def record(self, scan_id: int, account_id: str, found: list) -> None:
+    def record(
+        self, scan_id: int, account_id: str, found: list, region: str = ""
+    ) -> None:
         self.conn.executemany(
             "INSERT OR REPLACE INTO gateway_candidates "
-            "(scan_id, account_id, address, egress, ingress, principals, blind, question) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "(scan_id, account_id, address, egress, ingress, principals, blind, "
+            "question, region) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (scan_id, account_id, c.address, c.egress, c.ingress,
-                 dumps(list(c.principals)), dumps(list(c.blind_principals)), c.question)
+                 dumps(list(c.principals)), dumps(list(c.blind_principals)),
+                 c.question, region)
                 for c in found
             ],
         )
@@ -173,6 +214,7 @@ class CandidateStore:
                 "principals": loads(r["principals"]),
                 "blind_principals": loads(r["blind"]),
                 "question": r["question"],
+                "region": r["region"],
                 "scan_id": r["scan_id"],
             }
             for r in self.conn.execute(

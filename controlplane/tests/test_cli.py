@@ -390,6 +390,7 @@ def test_declare_says_it_takes_effect_next_scan(tmp_path, capsys):
     assert main([
         "--db", str(db), "declare", "10.0.7.0/24",
         "--account", "1", "--operator", "ezra@custos.dev", "--note", "llm-gateway",
+        "--region", "us-east-1",
     ]) == 0
     out = capsys.readouterr().out
     assert "takes effect on the next scan" in out
@@ -408,7 +409,9 @@ def test_declare_refuses_an_unparseable_range(tmp_path, capsys):
 def test_endpoints_lists_what_was_declared(tmp_path, capsys):
     db = tmp_path / "d3.db"
     main(["--db", str(db), "declare", "10.0.7.0/24", "--account", "1",
-          "--operator", "ezra@custos.dev", "--note", "llm-gateway"])
+          "--region", "us-east-1",
+          "--operator", "ezra@custos.dev", "--note", "llm-gateway",
+          "--region", "us-east-1"])
     capsys.readouterr()
 
     assert main(["--db", str(db), "endpoints", "--account", "1"]) == 0
@@ -501,7 +504,8 @@ def test_gateways_stops_asking_once_the_address_is_declared(
     assert "10.0.7.40" in capsys.readouterr().out
 
     main(["--db", str(db), "declare", "10.0.7.40/32", "--account", ACCOUNT,
-          "--operator", "ezra@custos.dev", "--note", "llm-gateway"])
+          "--operator", "ezra@custos.dev", "--note", "llm-gateway",
+          "--region", "us-east-1"])
     capsys.readouterr()
 
     main(["--db", str(db), "gateways", "--account", ACCOUNT])
