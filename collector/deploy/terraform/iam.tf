@@ -31,6 +31,11 @@ data "aws_iam_policy_document" "read_only" {
     actions = [
       "ec2:DescribeNetworkInterfaces",
       "ec2:DescribeInstances",
+      # Which regions this account has enabled, and which of them have flow
+      # logs. The collector reads one region at a time and reports "no agents"
+      # about the others just as confidently, so preflight asks.
+      "ec2:DescribeRegions",
+      "ec2:DescribeFlowLogs",
     ]
     resources = ["*"] # these Describe calls do not support resource scoping
   }

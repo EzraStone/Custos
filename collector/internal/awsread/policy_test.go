@@ -89,6 +89,7 @@ var iamActions = map[string]string{
 var service = map[string]string{
 	"FilterLogEvents": "logs", "DescribeLogGroups": "logs",
 	"DescribeNetworkInterfaces": "ec2", "DescribeInstances": "ec2",
+	"DescribeRegions": "ec2", "DescribeFlowLogs": "ec2",
 	"GetRole": "iam", "ListRoleTags": "iam", "ListAttachedRolePolicies": "iam",
 	"ListRolePolicies": "iam", "GetRolePolicy": "iam", "GetPolicy": "iam",
 	"GetPolicyVersion":         "iam",

@@ -42,6 +42,28 @@ type ObjectAPI interface {
 		...func(*s3.Options)) (*s3.GetObjectOutput, error)
 }
 
+// RegionAPI lists the regions this account has enabled.
+//
+// One call, and it answers a question nothing else can: an AWS account is a
+// region-by-region thing, the collector reads one region at a time, and a scan
+// of one region reports "no agents" about the other sixteen just as
+// confidently.
+type RegionAPI interface {
+	DescribeRegions(context.Context, *ec2.DescribeRegionsInput,
+		...func(*ec2.Options)) (*ec2.DescribeRegionsOutput, error)
+}
+
+// FlowLogAPI asks whether a region has flow logs at all.
+//
+// Enabled regions are the wrong signal on their own — AWS enables about
+// seventeen by default and almost every account uses two or three. A region
+// with a flow log is a region somebody set up on purpose, which is the one
+// worth asking a customer about.
+type FlowLogAPI interface {
+	DescribeFlowLogs(context.Context, *ec2.DescribeFlowLogsInput,
+		...func(*ec2.Options)) (*ec2.DescribeFlowLogsOutput, error)
+}
+
 // NetworkAPI resolves interfaces to the compute behind them.
 type NetworkAPI interface {
 	DescribeNetworkInterfaces(context.Context, *ec2.DescribeNetworkInterfacesInput,
@@ -112,6 +134,8 @@ var (
 	_ LogsAPI     = (*cloudwatchlogs.Client)(nil)
 	_ ObjectAPI   = (*s3.Client)(nil)
 	_ NetworkAPI  = (*ec2.Client)(nil)
+	_ RegionAPI   = (*ec2.Client)(nil)
+	_ FlowLogAPI  = (*ec2.Client)(nil)
 	_ IdentityAPI = (*iam.Client)(nil)
 	_ TrailAPI    = (*cloudtrail.Client)(nil)
 )
