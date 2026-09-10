@@ -20,6 +20,7 @@ function agent(overrides: Partial<Agent> = {}): Agent {
     tools: ["billing-api 10.0.4.21"],
     data_stores: ["rds 10.0.9.45"],
     est_monthly_spend_usd: 12,
+    regions: [],
     unsanctioned: true,
     imprimatur: null,
     ...overrides,

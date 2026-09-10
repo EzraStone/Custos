@@ -25,6 +25,7 @@ function agent(overrides: Partial<Agent> = {}): Agent {
     tools: ["billing-api"],
     data_stores: ["billing-db"],
     est_monthly_spend_usd: 1420,
+    regions: [],
     unsanctioned: true,
     imprimatur: null,
     ...overrides,
@@ -224,5 +225,34 @@ describe("an agent that is not awaiting a decision", () => {
       />,
     );
     expect(screen.getByText(/no grant is recorded/i)).toBeInTheDocument();
+  });
+});
+
+describe("an agent in more than one region", () => {
+  const inRegions = (regions: string[]) =>
+    render(
+      <Finding
+        agent={agent({ regions })}
+        operator="ezra@custos.dev"
+        onGrant={vi.fn()}
+        onTransition={vi.fn()}
+      />,
+    );
+
+  it("names the regions it runs in", () => {
+    inRegions(["eu-west-1", "us-east-1"]);
+    expect(screen.getByText(/eu-west-1, us-east-1/)).toBeInTheDocument();
+  });
+
+  it("says the figures beside them are one region's", () => {
+    // A row naming three regions beside one spend figure reads as the total.
+    inRegions(["eu-west-1", "us-east-1"]);
+    expect(screen.getByText(/figures from one/)).toBeInTheDocument();
+  });
+
+  it("says nothing about regions when there is only one", () => {
+    // A column of the same word is not information.
+    inRegions(["us-east-1"]);
+    expect(screen.queryByText("Regions")).toBeNull();
   });
 });

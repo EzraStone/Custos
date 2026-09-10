@@ -98,6 +98,23 @@ export function Finding({
           <dt>Status</dt>
           <dd>{agent.status}</dd>
         </div>
+        {/*
+          Shown only when there is more than one. One region is the ordinary
+          case and a column of the same word is not information.
+
+          The note matters as much as the list: spend and reach come from the
+          scan that last saw this agent, which is one region's traffic, and a
+          row naming three regions beside one figure reads as the total.
+        */}
+        {agent.regions.length > 1 ? (
+          <div>
+            <dt>Regions</dt>
+            <dd>
+              {agent.regions.join(", ")}
+              <span className="muted"> (figures from one)</span>
+            </dd>
+          </div>
+        ) : null}
       </dl>
 
       <p className="reach">

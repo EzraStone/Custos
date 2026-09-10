@@ -48,6 +48,14 @@ export interface Agent {
   tools: string[];
   data_stores: string[];
   est_monthly_spend_usd: number;
+  /**
+   * Every region this agent has been seen in.
+   *
+   * The figures above come from the scan that last saw it, which is one
+   * region's traffic. A view showing several regions and one spend figure
+   * reads as the total, so it has to say which.
+   */
+  regions: string[];
 
   unsanctioned: boolean;
   imprimatur: Imprimatur | null;

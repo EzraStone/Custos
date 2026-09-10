@@ -900,6 +900,11 @@ def _render(agent) -> dict:
         "tools": sorted(agent.reach.tools),
         "data_stores": sorted(agent.reach.data_stores),
         "est_monthly_spend_usd": agent.model.est_monthly_spend_usd,
+        # Every region this agent has been seen in. The figures above come from
+        # the scan that last saw it, which is one region's traffic — so a
+        # caller showing both has to say which, and one showing only the
+        # figures is showing a fraction without saying so.
+        "regions": sorted(agent.regions),
         "unsanctioned": agent.unsanctioned,
         "imprimatur": None if agent.imprimatur is None else {
             "granted_by": agent.imprimatur.granted_by,

@@ -162,7 +162,8 @@ describe("ordering", () => {
       id: "a", principal: "role/x", status: "discovered", confidence: 0.9,
       evidence: [], owner_team: "", owner_human: "", compute: "", attributed: false,
       first_seen: "", last_seen: "", blast_radius: "read", tools: [], data_stores: [],
-      est_monthly_spend_usd: 0, unsanctioned: true, imprimatur: null,
+      est_monthly_spend_usd: 0,
+      regions: [], unsanctioned: true, imprimatur: null,
       ...overrides,
     };
   }

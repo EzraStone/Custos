@@ -23,6 +23,7 @@ function agent(overrides: Partial<Agent> = {}): Agent {
     tools: ["billing-api"],
     data_stores: [],
     est_monthly_spend_usd: 1420,
+    regions: [],
     unsanctioned: true,
     imprimatur: null,
     ...overrides,
