@@ -16,6 +16,8 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -37,6 +39,17 @@ type Config struct {
 	AccessLogs string // optional: ALB access log prefix
 	Window     time.Duration
 	DryRun     bool // read and print, never send
+
+	// Regions to collect, beyond the one AWS_REGION names.
+	//
+	// An AWS account is a region-by-region thing. A scan of us-east-1 reports
+	// "no unsanctioned agents" about eu-west-1 with exactly the confidence it
+	// reports it about the region it read, and `--check` now says which other
+	// regions have flow logs. This is how a customer answers that.
+	//
+	// Empty means the one region in AWS_REGION, which is the right default: an
+	// account that runs in one region should not pay for sixteen surveys.
+	Regions string
 
 	// FlowLogFormat is the format the account's flow log is written in.
 	//
@@ -87,6 +100,12 @@ var (
 
 const DefaultWindow = time.Hour
 
+// regionName is deliberately loose: AWS adds regions and a collector that
+// refused a new one would be wrong in a way nobody could work around. It
+// rejects the things that are clearly not regions — a log group path, an ARN,
+// a bucket URL — which is what a mistyped variable actually looks like.
+var regionName = regexp.MustCompile(`^[a-z]{2}(-[a-z]+)+-[0-9]$`)
+
 // Load reads configuration from the environment.
 func Load(getenv func(string) string) (*Config, error) {
 	c := &Config{
@@ -97,6 +116,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		FlowLogs:      strings.TrimSpace(getenv("CUSTOS_FLOW_LOGS")),
 		AccessLogs:    strings.TrimSpace(getenv("CUSTOS_ACCESS_LOGS")),
 		FlowLogFormat: strings.TrimSpace(getenv("CUSTOS_FLOW_LOG_FORMAT")),
+		Regions:       strings.TrimSpace(getenv("CUSTOS_REGIONS")),
 		Window:        DefaultWindow,
 		DryRun:        getenv("CUSTOS_DRY_RUN") == "1",
 		RoleARN:       strings.TrimSpace(getenv("CUSTOS_ROLE_ARN")),
@@ -161,6 +181,16 @@ func (c *Config) Validate() error {
 		// account with nothing running in it.
 		return fmt.Errorf("CUSTOS_FLOW_LOG_FORMAT: %w", err)
 	}
+	if c.Regions != "" && c.Region == "" {
+		// Without it there is no region to assume the role in, and the list
+		// would be collected under credentials from nowhere.
+		return errors.New("AWS_REGION is required when CUSTOS_REGIONS is set")
+	}
+	for _, name := range c.RegionList() {
+		if !regionName.MatchString(name) {
+			return fmt.Errorf("CUSTOS_REGIONS: %q is not an AWS region name", name)
+		}
+	}
 	if c.Daemon && c.DryRun {
 		// A dry-run daemon would loop forever printing batches and advancing
 		// its cursor over windows nothing received. Refusing is clearer than
@@ -187,6 +217,30 @@ func (c *Config) Format() (flowlogs.Format, error) {
 		)
 	}
 	return f, nil
+}
+
+// RegionList is every region to collect, in a stable order.
+//
+// AWS_REGION is always included. It is where the role is assumed and where a
+// single-region account's traffic is, and a configuration that collected
+// somewhere else instead of there would be a surprise nobody asked for.
+//
+// Sorted and de-duplicated, so that two spellings of the same list produce the
+// same batch. The order reaches the report, and a report whose region list
+// reshuffles between scans reads as though something changed.
+func (c *Config) RegionList() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, name := range append([]string{c.Region}, strings.Split(c.Regions, ",")...) {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // WillSend reports whether this configuration permits network egress at all.

@@ -240,3 +240,91 @@ func TestTheFormatIsLoadedFromTheEnvironment(t *testing.T) {
 		t.Fatalf("format %v err %v", f.Fields(), err)
 	}
 }
+
+// --- more than one region -----------------------------------------------------
+
+func TestOneRegionIsTheDefault(t *testing.T) {
+	// An account that runs in one region should not pay for sixteen surveys.
+	c := &Config{
+		Endpoint: "https://api.custos.dev", Token: "t",
+		FlowLogs: "g", Window: time.Hour, Region: "us-east-1",
+	}
+	if got := c.RegionList(); strings.Join(got, ",") != "us-east-1" {
+		t.Fatalf("regions: %v", got)
+	}
+}
+
+func TestTheCredentialRegionIsAlwaysIncluded(t *testing.T) {
+	// It is where the role is assumed and where a single-region account's
+	// traffic is. Collecting somewhere else instead of there would be a
+	// surprise nobody asked for.
+	c := &Config{Region: "us-east-1", Regions: "eu-west-1"}
+	if got := strings.Join(c.RegionList(), ","); got != "eu-west-1,us-east-1" {
+		t.Fatalf("regions: %v", got)
+	}
+}
+
+func TestTheListIsSortedAndDeduplicated(t *testing.T) {
+	// The order reaches the report, and a region list that reshuffles between
+	// scans reads as though something changed.
+	c := &Config{Region: "us-east-1", Regions: " eu-west-1, us-east-1 ,ap-south-1, "}
+	if got := strings.Join(c.RegionList(), ","); got != "ap-south-1,eu-west-1,us-east-1" {
+		t.Fatalf("regions: %v", got)
+	}
+}
+
+func TestSomethingThatIsNotARegionIsRefused(t *testing.T) {
+	// What a mistyped variable actually looks like: a log group path, an ARN,
+	// a bucket URL.
+	for _, bad := range []string{
+		"/aws/vpc/flowlogs", "s3://bucket/prefix",
+		"arn:aws:iam::447120043318:role/x", "US-EAST-1",
+	} {
+		c := &Config{
+			Endpoint: "https://api.custos.dev", Token: "t", FlowLogs: "g",
+			Window: time.Hour, Region: "us-east-1", Regions: bad,
+		}
+		if err := c.Validate(); err == nil {
+			t.Fatalf("accepted %q as a region", bad)
+		}
+	}
+}
+
+func TestARegionNameWeHaveNeverSeenIsAccepted(t *testing.T) {
+	// AWS adds regions. A collector that refused a new one would be wrong in a
+	// way nobody could work around.
+	c := &Config{
+		Endpoint: "https://api.custos.dev", Token: "t", FlowLogs: "g",
+		Window: time.Hour, Region: "us-east-1", Regions: "xx-nowhere-1",
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("refused a plausible future region: %v", err)
+	}
+}
+
+func TestRegionsWithoutACredentialRegionIsRefused(t *testing.T) {
+	c := &Config{
+		Endpoint: "https://api.custos.dev", Token: "t", FlowLogs: "g",
+		Window: time.Hour, Regions: "eu-west-1",
+	}
+	if err := c.Validate(); err == nil {
+		t.Fatal("a region list with nowhere to assume the role was accepted")
+	}
+}
+
+func TestTheRegionListIsLoadedFromTheEnvironment(t *testing.T) {
+	vars := map[string]string{
+		"CUSTOS_ENDPOINT":  "https://api.custos.dev",
+		"CUSTOS_TOKEN":     "t",
+		"CUSTOS_FLOW_LOGS": "g",
+		"AWS_REGION":       "us-east-1",
+		"CUSTOS_REGIONS":   "eu-west-1,ap-south-1",
+	}
+	c, err := Load(env(vars))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(c.RegionList(), ","); got != "ap-south-1,eu-west-1,us-east-1" {
+		t.Fatalf("regions: %v", got)
+	}
+}
