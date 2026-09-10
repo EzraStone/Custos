@@ -1021,3 +1021,63 @@ def test_fleet_does_not_show_accounts_the_credential_does_not_cover():
 
 def test_fleet_needs_a_credential(client):
     assert client.get("/v1/fleet").status_code == 401
+
+
+# --- two regions, one window --------------------------------------------------
+
+# The collector reads one region. A customer with agents in three regions
+# therefore runs three collectors, which is what preflight tells them to do —
+# and all three ship the same account and the same hour.
+#
+# The batch key is (account, window), so the second arrival was treated as a
+# retry: the row was overwritten, the stored region became whichever landed
+# last, and the report went on to name that region while the register held
+# agents from both.
+def test_a_second_region_for_the_same_window_is_refused_not_deduplicated(client):
+    east = batch() | {"region": "us-east-1"}
+    west = batch() | {"region": "eu-west-1"}
+
+    assert client.post("/v1/batches", json=east, headers=AUTH).status_code == 202
+
+    response = client.post("/v1/batches", json=west, headers=AUTH)
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert "us-east-1" in detail and "eu-west-1" in detail
+    assert "one collector covering both regions" in detail.lower()
+
+
+def test_a_genuine_retry_of_the_same_region_is_still_a_duplicate(client):
+    """The collector retries with bounded backoff, so the same window really
+    does arrive twice. Refusing that would turn a flaky network into lost
+    telemetry."""
+    east = batch() | {"region": "us-east-1"}
+
+    assert client.post("/v1/batches", json=east, headers=AUTH).status_code == 202
+    again = client.post("/v1/batches", json=east, headers=AUTH)
+
+    assert again.status_code == 202
+    assert again.json()["duplicate"] is True
+
+
+def test_a_batch_with_no_region_does_not_conflict_with_anything(client):
+    """An older collector never sent one. Refusing it would break the upgrade
+    path over a field it has no way to populate."""
+    assert client.post(
+        "/v1/batches", json=batch() | {"region": ""}, headers=AUTH
+    ).status_code == 202
+    assert client.post(
+        "/v1/batches", json=batch() | {"region": "us-east-1"}, headers=AUTH
+    ).status_code == 202
+
+
+def test_different_windows_from_different_regions_are_both_kept(client):
+    """The conflict is about one window, not about the account. A customer
+    scanning two regions on offset schedules is doing something reasonable."""
+    from datetime import timedelta as _td
+
+    east = batch(start=W0) | {"region": "us-east-1"}
+    west = batch(start=W0 + _td(hours=1)) | {"region": "eu-west-1"}
+
+    assert client.post("/v1/batches", json=east, headers=AUTH).status_code == 202
+    assert client.post("/v1/batches", json=west, headers=AUTH).status_code == 202
+    assert len(client.get("/v1/scans", headers=AUTH).json()["scans"]) == 2
