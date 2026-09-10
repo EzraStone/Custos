@@ -871,6 +871,7 @@ describe("answering a gateway question", () => {
     principals: ["arn:aws:iam::1:role/agent-via-gateway"],
     blind_principals: ["arn:aws:iam::1:role/agent-via-gateway"],
     question: "10.0.7.40 received 54.4MB. Is it a model gateway?",
+    region: "us-east-1",
     scan_id: 12,
   };
 
@@ -902,6 +903,10 @@ describe("answering a gateway question", () => {
       const call = stub.calls.find((c) => c.url.startsWith("/v1/endpoints") && c.init?.method);
       expect(JSON.parse(String(call?.init?.body))).toEqual({
         value: "10.0.7.40", kind: "range", operator: "ezra@custos.dev", note: "vllm",
+        // The region the question was asked about. Declaring the address
+        // everywhere would make an unrelated service at that address in
+        // another region a model endpoint.
+        region: "us-east-1",
       });
     });
     // Leaving the question on screen after answering reads as though it had

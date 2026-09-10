@@ -171,6 +171,14 @@ export interface GatewayCandidate {
   blind_principals: string[];
   /** The phrasing to show. It carries the numbers somebody would check. */
   question: string;
+  /**
+   * Region this question was asked about.
+   *
+   * Answering it declares the address for that region only — the same address
+   * elsewhere is a different host, and declaring it everywhere would turn an
+   * unrelated internal service into a model endpoint.
+   */
+  region: string;
   scan_id: number;
 }
 

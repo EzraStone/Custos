@@ -161,17 +161,30 @@ export class Client {
    * The second call in this client that changes what the classifier considers
    * an agent, and like the first it requires a person's name.
    */
+  /**
+   * Declare a model endpoint.
+   *
+   * `region` is not optional in practice for a private address: the control
+   * plane refuses one without it, because 10.0.7.40 is the model gateway in
+   * one region and whatever the account runs at that address in every other.
+   * Declaring it everywhere would turn ordinary internal traffic into model
+   * traffic and manufacture agents out of it.
+   *
+   * The caller passes the region of the question being answered, which the
+   * gateway candidate carries.
+   */
   declareEndpoint(
     value: string,
     operator: string,
     note: string,
     account?: string,
     kind: "range" | "aws_service" = "range",
+    region = "",
   ): Promise<DeclaredEndpoint> {
     const query = account ? `?account=${encodeURIComponent(account)}` : "";
     return this.request<DeclaredEndpoint>(`/v1/endpoints${query}`, {
       method: "POST",
-      body: JSON.stringify({ value, kind, operator, note }),
+      body: JSON.stringify({ value, kind, operator, note, region }),
     });
   }
 

@@ -221,6 +221,11 @@ export function App() {
     try {
       await client.declareEndpoint(
         candidate.address, auth.operator, note, auth.account || undefined,
+        "range",
+        // The region the question was asked about. Declaring the address
+        // everywhere would make an unrelated service at that address in
+        // another region a model endpoint, and manufacture agents out of it.
+        candidate.region,
       );
       setCandidates((current) => current.filter((c) => c.address !== candidate.address));
     } catch (caught) {

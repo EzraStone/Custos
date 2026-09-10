@@ -16,6 +16,7 @@ function candidate(overrides: Partial<GatewayCandidate> = {}): GatewayCandidate 
       "10.0.7.40 received 54.4MB from a workload that never reaches a model "
       + "provider we recognise, and returned 12.8MB — a ratio of 4.3:1. Is it a "
       + "model gateway?",
+    region: "us-east-1",
     scan_id: 12,
     ...overrides,
   };
