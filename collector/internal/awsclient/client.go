@@ -48,6 +48,14 @@ type Clients struct {
 	Identity *iam.Client
 	Trail    *cloudtrail.Client
 
+	// FlowLogsIn returns an EC2 client bound to one region.
+	//
+	// DescribeFlowLogs is answered by the region it is sent to, so a survey of
+	// what an account runs where cannot be done from a single client. This is
+	// the only place in the collector that talks to a region other than the
+	// configured one, and it does one read.
+	FlowLogsIn func(region string) awsread.FlowLogAPI
+
 	// Serverless composes the Lambda and ECS clients behind one interface,
 	// because resolving a role needs both and no single SDK client provides
 	// them.
@@ -148,6 +156,9 @@ func New(ctx context.Context, opts Options) (*Clients, error) {
 	}
 
 	return &Clients{
+		FlowLogsIn: func(region string) awsread.FlowLogAPI {
+			return ec2.NewFromConfig(cfg, func(o *ec2.Options) { o.Region = region })
+		},
 		Logs:     cloudwatchlogs.NewFromConfig(cfg),
 		Objects:  s3.NewFromConfig(cfg),
 		Network:  ec2.NewFromConfig(cfg),

@@ -9,6 +9,7 @@ import (
 
 	"github.com/EzraStone/Custos/collector/internal/awsread"
 	"github.com/EzraStone/Custos/collector/internal/flowlogs"
+	"github.com/EzraStone/Custos/collector/internal/ingest"
 	"github.com/EzraStone/Custos/collector/internal/wire"
 )
 
@@ -43,7 +44,15 @@ func good() Config {
 }
 
 func run(cfg Config, flows FlowSource) Report {
-	return Run(context.Background(), cfg, flows, nil)
+	return RunWith(context.Background(), cfg, flows, nil, oneRegion{})
+}
+
+// oneRegion is an account that runs in the region being scanned and nowhere
+// else, which is the uninteresting case and therefore the right default.
+type oneRegion struct{}
+
+func (oneRegion) Run(context.Context) ([]ingest.Region, error) {
+	return []ingest.Region{{Name: "us-east-1", FlowLogs: 1}}, nil
 }
 
 func find(t *testing.T, report Report, name string) Result {
@@ -661,4 +670,101 @@ func defaultFormatConfig() Config {
 	cfg := good()
 	cfg.Format = flowlogs.MustParseFormat(defaultAWSFormat)
 	return cfg
+}
+
+// --- the rest of the account --------------------------------------------------
+
+type regionsWith struct {
+	found []ingest.Region
+	err   error
+}
+
+func (r regionsWith) Run(context.Context) ([]ingest.Region, error) {
+	return r.found, r.err
+}
+
+func withRegions(cfg Config, regions Regions) Report {
+	return RunWith(context.Background(), cfg, stubFlows{
+		records: modelTraffic(60), stats: flowlogs.Stats{Lines: 60, Parsed: 60},
+	}, nil, regions)
+}
+
+// A scan of us-east-1 reports "no unsanctioned agents" about eu-west-1 with
+// exactly the confidence it reports it about the region it read.
+func TestOtherRegionsWithFlowLogsAreNamed(t *testing.T) {
+	result := find(t, withRegions(good(), regionsWith{found: []ingest.Region{
+		{Name: "us-east-1", FlowLogs: 2},
+		{Name: "eu-west-1", FlowLogs: 1},
+		{Name: "ap-south-1", FlowLogs: 3},
+	}}), "other regions")
+
+	if result.Status != Warn {
+		t.Fatalf("status %v", result.Status)
+	}
+	if !strings.Contains(result.Detail, "ap-south-1") ||
+		!strings.Contains(result.Detail, "eu-west-1") {
+		t.Fatalf("the other regions are not named: %q", result.Detail)
+	}
+	if strings.Contains(result.Detail, "us-east-1") {
+		t.Fatalf("the region being scanned was listed as unscanned: %q", result.Detail)
+	}
+}
+
+func TestARegionWithNoFlowLogsIsNotWorthMentioning(t *testing.T) {
+	// AWS enables about seventeen regions by default. Naming every empty one
+	// would make this the noisiest line in the report and the first ignored.
+	result := find(t, withRegions(good(), regionsWith{found: []ingest.Region{
+		{Name: "us-east-1", FlowLogs: 1},
+		{Name: "sa-east-1"}, {Name: "af-south-1"}, {Name: "me-central-1"},
+	}}), "other regions")
+
+	if result.Status != Pass {
+		t.Fatalf("status %v: %q", result.Status, result.Detail)
+	}
+}
+
+func TestARegionThatCouldNotBeCheckedIsNotSilence(t *testing.T) {
+	result := find(t, withRegions(good(), regionsWith{found: []ingest.Region{
+		{Name: "us-east-1", FlowLogs: 1},
+		{Name: "eu-west-1", Err: errors.New("UnauthorizedOperation")},
+	}}), "other regions")
+
+	if result.Status != Warn {
+		t.Fatalf("status %v", result.Status)
+	}
+	if !strings.Contains(result.Detail, "eu-west-1") {
+		t.Fatalf("detail: %q", result.Detail)
+	}
+}
+
+func TestAnAccountThatCannotBeEnumeratedIsNotOneRegion(t *testing.T) {
+	result := find(t, withRegions(good(), regionsWith{
+		err: errors.New("UnauthorizedOperation: ec2:DescribeRegions"),
+	}), "other regions")
+
+	if result.Status != Warn {
+		t.Fatalf("status %v", result.Status)
+	}
+	if !strings.Contains(result.Remedy, "DescribeRegions") {
+		t.Fatalf("the remedy does not name the grant: %q", result.Remedy)
+	}
+}
+
+func TestNoSurveyWiredIsReportedRatherThanAssumed(t *testing.T) {
+	result := find(t, withRegions(good(), nil), "other regions")
+	if result.Status != Warn {
+		t.Fatalf("a scan with no idea how many regions this account uses passed: %v",
+			result.Status)
+	}
+}
+
+func TestOtherRegionsDoNotBlockAScan(t *testing.T) {
+	// One region scanned is a real scan of one region. Blocking it would turn
+	// a partial answer into no answer.
+	report := withRegions(good(), regionsWith{found: []ingest.Region{
+		{Name: "us-east-1", FlowLogs: 1}, {Name: "eu-west-1", FlowLogs: 1},
+	}})
+	if !report.Ready() {
+		t.Fatal("a multi-region account was refused a scan")
+	}
 }

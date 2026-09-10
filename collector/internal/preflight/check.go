@@ -22,6 +22,7 @@ import (
 
 	"github.com/EzraStone/Custos/collector/internal/awsread"
 	"github.com/EzraStone/Custos/collector/internal/flowlogs"
+	"github.com/EzraStone/Custos/collector/internal/ingest"
 	"github.com/EzraStone/Custos/collector/internal/wire"
 )
 
@@ -111,6 +112,12 @@ type Config struct {
 	Format flowlogs.Format
 }
 
+// Regions answers which regions this account uses. Optional: preflight works
+// without it and says so, rather than reporting a single-region account.
+type Regions interface {
+	Run(ctx context.Context) ([]ingest.Region, error)
+}
+
 // Namer resolves destination names, so preflight can say how much of the
 // register's scope will be readable before the customer finds out from a
 // report full of IP addresses.
@@ -128,6 +135,13 @@ type Namer interface {
 // reported as skipped. A configuration check that requires credentials is
 // useless in the situation where someone most wants to run one.
 func Run(ctx context.Context, cfg Config, flows FlowSource, names Namer) Report {
+	return RunWith(ctx, cfg, flows, names, nil)
+}
+
+// RunWith is Run plus the region survey, which needs its own client.
+func RunWith(
+	ctx context.Context, cfg Config, flows FlowSource, names Namer, regions Regions,
+) Report {
 	var report Report
 
 	checkConfiguration(&report, cfg)
@@ -141,11 +155,79 @@ func Run(ctx context.Context, cfg Config, flows FlowSource, names Namer) Report 
 		return report
 	}
 
+	// After the credentials gate: without them "aws reachability" has already
+	// said why nothing could be asked, and a second line saying the same thing
+	// is noise in the report someone reads when nothing works yet.
+	checkRegions(ctx, &report, cfg, regions)
+
 	records := checkFlowLogs(ctx, &report, cfg, flows)
 	checkDestinationNames(ctx, &report, names, records)
 	checkForGateway(&report, records)
 	checkForIPv6(&report, records)
 	return report
+}
+
+// checkRegions says which other regions this account runs things in.
+//
+// The collector reads one region at a time, and a scan of us-east-1 reports "no
+// unsanctioned agents" about eu-west-1 with exactly the confidence it reports
+// it about the region it read. Nothing else in this binary can notice that.
+//
+// A warning rather than a failure: one region scanned is a real scan of one
+// region, and blocking it would turn a partial answer into no answer. What it
+// must not do is stay quiet.
+func checkRegions(ctx context.Context, r *Report, cfg Config, regions Regions) {
+	if regions == nil {
+		r.add("other regions", Warn, "not checked",
+			"re-run with credentials so this can say whether other regions of "+
+				"this account have flow logs; a scan of one region says nothing "+
+				"about the rest")
+		return
+	}
+
+	found, err := regions.Run(ctx)
+	if err != nil {
+		r.add("other regions", Warn, err.Error(),
+			"the account could not be enumerated, so this scan's coverage of "+
+				"the account is unknown; grant ec2:DescribeRegions or say which "+
+				"regions to scan")
+		return
+	}
+
+	configured := ingest.Configured(found)
+	var elsewhere []string
+	for _, name := range configured {
+		if name != cfg.Region {
+			elsewhere = append(elsewhere, name)
+		}
+	}
+
+	if unreachable := ingest.Unreachable(found); len(unreachable) > 0 {
+		r.add("other regions", Warn,
+			fmt.Sprintf("could not check %s", strings.Join(unreachable, ", ")),
+			"a region we cannot ask about is not a region without agents; "+
+				"grant ec2:DescribeFlowLogs there or scan it separately")
+		return
+	}
+
+	if len(elsewhere) == 0 {
+		r.add("other regions", Pass,
+			fmt.Sprintf("%s is the only region with flow logs", cfg.Region), "")
+		return
+	}
+
+	r.add("other regions", Warn,
+		fmt.Sprintf("%s also %s flow logs and will not be scanned",
+			strings.Join(elsewhere, ", "), plural(len(elsewhere), "has", "have")),
+		"run a collector per region, each with its own AWS_REGION; the report "+
+			"names the regions it covered and says nothing about the others")
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 // checkForIPv6 counts public IPv6 destinations, which the catalogue cannot

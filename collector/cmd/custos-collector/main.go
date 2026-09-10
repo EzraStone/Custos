@@ -281,13 +281,18 @@ func preflightCheck(ctx context.Context, cfg *config.Config, stdout *os.File) er
 	}
 
 	var (
-		source preflight.FlowSource
-		namer  preflight.Namer
+		source  preflight.FlowSource
+		namer   preflight.Namer
+		regions preflight.Regions
 	)
 	if clients, err := awsclient.New(ctx, awsclient.Options{
 		Region: cfg.Region, RoleARN: cfg.RoleARN, ExternalID: cfg.ExternalID,
 	}); err == nil {
 		namer = &ingest.DestinationResolver{API: clients.Network}
+		// The one place the collector looks outside the configured region, and
+		// it does one read per region. Without it --check cannot say whether
+		// this scan covers the account or a sixteenth of it.
+		regions = &ingest.Survey{Regions: clients.Network, FlowLogsIn: clients.FlowLogsIn}
 		format, err := cfg.Format()
 		if err != nil {
 			return fmt.Errorf("flow log format: %w", err)
@@ -304,7 +309,7 @@ func preflightCheck(ctx context.Context, cfg *config.Config, stdout *os.File) er
 		}
 	}
 
-	report := preflight.Run(ctx, pf, source, namer)
+	report := preflight.RunWith(ctx, pf, source, namer, regions)
 	fmt.Fprint(stdout, report.String())
 	if !report.Ready() {
 		return errors.New("preflight checks did not pass")
