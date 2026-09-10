@@ -65,6 +65,28 @@ class ScanRecord:
         return self.scope_named / self.scope_total
 
 
+def _scan(row: sqlite3.Row) -> ScanRecord:
+    """One scans row as a record.
+
+    Written once because a field added to ScanRecord has to be read in every
+    place a scan is loaded. Three copies of this expression is three chances
+    to update two of them, and the one that got missed would return a scan
+    with an empty region — which the report prints as a coverage claim.
+    """
+    return ScanRecord(
+        id=row["id"], batch_id=row["batch_id"], account_id=row["account_id"],
+        started_at=parse(row["started_at"]),
+        principals_seen=row["principals_seen"], agents_found=row["agents_found"],
+        review_candidates=row["review_candidates"],
+        coverage=row["coverage"], truncated=bool(row["truncated"]),
+        scope_named=row["scope_named"], scope_total=row["scope_total"],
+        missing_fields=tuple(loads(row["missing_fields"])),
+        direction_undecided=row["direction_undecided"],
+        read_errors=row["read_errors"],
+        regions=tuple(loads(row["regions"])),
+    )
+
+
 class ScanStore:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self.conn = conn
@@ -179,19 +201,7 @@ class ScanStore:
 
     def scans_for(self, account_id: str, limit: int = 20) -> list[ScanRecord]:
         return [
-            ScanRecord(
-                id=row["id"], batch_id=row["batch_id"], account_id=row["account_id"],
-                started_at=parse(row["started_at"]),
-                principals_seen=row["principals_seen"],
-                agents_found=row["agents_found"],
-                review_candidates=row["review_candidates"],
-                coverage=row["coverage"], truncated=bool(row["truncated"]),
-                scope_named=row["scope_named"], scope_total=row["scope_total"],
-                missing_fields=tuple(loads(row["missing_fields"])),
-                direction_undecided=row["direction_undecided"],
-                read_errors=row["read_errors"],
-                regions=tuple(loads(row["regions"])),
-            )
+            _scan(row)
             for row in self.conn.execute(
                 "SELECT * FROM scans WHERE account_id = ? ORDER BY started_at DESC, id DESC "
                 "LIMIT ?",
@@ -216,6 +226,28 @@ class ScanStore:
             )
         ]
 
+    def latest_scan_per_region(self, account_id: str) -> list[ScanRecord]:
+        """The most recent scan of each region this account is collected in.
+
+        The served report shows the whole register, and the register spans
+        every region. Anything the report says about how the telemetry was
+        read — which fields the flow log carried, how much of it parsed — is
+        a statement about all of them, and the latest scan alone is one
+        region's answer to a question asked about several.
+
+        Ordered by region so the answer is stable between calls.
+        """
+        rows = self.conn.execute(
+            "SELECT s.* FROM scans s JOIN batches b ON b.id = s.batch_id "
+            "WHERE s.account_id = ? AND s.id = ("
+            "  SELECT s2.id FROM scans s2 JOIN batches b2 ON b2.id = s2.batch_id "
+            "  WHERE s2.account_id = s.account_id AND b2.region = b.region "
+            "  ORDER BY s2.started_at DESC, s2.id DESC LIMIT 1"
+            ") ORDER BY b.region",
+            (account_id,),
+        )
+        return [_scan(row) for row in rows]
+
     def latest_scan(self, account_id: str) -> ScanRecord | None:
         scans = self.scans_for(account_id, limit=1)
         return scans[0] if scans else None
@@ -234,18 +266,7 @@ class ScanStore:
         ).fetchone()
         if row is None:
             return None
-        return ScanRecord(
-            id=row["id"], batch_id=row["batch_id"], account_id=row["account_id"],
-            started_at=parse(row["started_at"]),
-            principals_seen=row["principals_seen"], agents_found=row["agents_found"],
-            review_candidates=row["review_candidates"],
-            coverage=row["coverage"], truncated=bool(row["truncated"]),
-            scope_named=row["scope_named"], scope_total=row["scope_total"],
-            missing_fields=tuple(loads(row["missing_fields"])),
-            direction_undecided=row["direction_undecided"],
-            read_errors=row["read_errors"],
-            regions=tuple(loads(row["regions"])),
-        )
+        return _scan(row)
 
     def observations_for_scan(self, scan_id: int) -> dict[str, dict]:
         """Observations from one scan, keyed by agent id."""

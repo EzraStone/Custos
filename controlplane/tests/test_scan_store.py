@@ -159,3 +159,71 @@ def test_scan_coverage_and_truncation_are_persisted(scans):
     latest = scans.latest_scan(ACCOUNT)
     assert latest.coverage == 0.62
     assert latest.truncated is True
+
+
+# --- the latest scan of each region -------------------------------------------
+#
+# One scan is one region's window. Anything the served report says about how
+# the telemetry was read is a claim about the whole register, which spans every
+# region, so it has to be assembled from the latest scan of each of them.
+
+def _region_batch(scans, region, start=W0):
+    return scans.record_batch(
+        account_id=ACCOUNT, region=region, window_start=start,
+        window_end=start + timedelta(hours=1), collector="v1",
+        received_at=start + timedelta(hours=1), flow_records=10, requests=1,
+        have_alb_logs=True,
+    )
+
+
+def _region_scan(scans, region, start=W0, **kwargs):
+    batch = _region_batch(scans, region, start)
+    kwargs.setdefault("missing_fields", ())
+    return scans.record_scan(
+        batch_id=batch.id, account_id=ACCOUNT, started_at=start,
+        principals_seen=1, agents_found=1, review_candidates=0,
+        coverage=1.0, truncated=False, catalogue_revision="r",
+        regions=(region,), **kwargs,
+    )
+
+
+def test_each_region_contributes_its_own_latest_scan(scans):
+    _region_scan(scans, "us-east-1")
+    _region_scan(scans, "eu-west-1")
+
+    latest = scans.latest_scan_per_region(ACCOUNT)
+    assert [s.regions for s in latest] == [("eu-west-1",), ("us-east-1",)]
+
+
+def test_a_regions_older_scan_is_not_the_one_returned(scans):
+    _region_scan(scans, "us-east-1", start=W0, missing_fields=("dstport",))
+    _region_scan(scans, "us-east-1", start=W0 + timedelta(hours=3))
+
+    latest = scans.latest_scan_per_region(ACCOUNT)
+    assert len(latest) == 1
+    assert latest[0].missing_fields == (), "an older scan of the region won"
+
+
+def test_a_region_that_stopped_shipping_is_still_covered(scans):
+    """The point of asking per region rather than taking the newest scan: an
+    account collected in three regions that only shipped one this hour is
+    still an account whose report describes three."""
+    _region_scan(scans, "eu-west-1", start=W0)
+    _region_scan(scans, "us-east-1", start=W0 + timedelta(hours=5))
+
+    latest = scans.latest_scan_per_region(ACCOUNT)
+    assert {s.regions[0] for s in latest} == {"eu-west-1", "us-east-1"}
+
+
+def test_another_accounts_scans_are_not_borrowed(scans):
+    _region_scan(scans, "us-east-1")
+    scans.record_batch(
+        account_id="000000000000", region="ap-south-1", window_start=W0,
+        window_end=W1, collector="v1", received_at=W1, flow_records=1,
+        requests=0, have_alb_logs=False,
+    )
+    assert [s.regions for s in scans.latest_scan_per_region(ACCOUNT)] == [("us-east-1",)]
+
+
+def test_an_account_with_no_scans_has_no_regions(scans):
+    assert scans.latest_scan_per_region("000000000000") == []
