@@ -59,10 +59,16 @@ scans, because a scan covers one region and a role running in three is
 discovered three times — the register used to describe an agent as living
 wherever it was most recently looked for.
 
-What it still does not do is add up an agent's spend across regions. Every
-surface that shows the regions says the figures beside them are one region's,
-because a row naming three regions and one spend figure otherwise reads as the
-total.
+**Spend adds up across regions; reach does not.** An agent's cost is now the
+sum of what it spends in each region it was seen in, kept per region so a
+re-scan of one replaces that region's figure rather than the whole total —
+before this, a role running in three regions was billed at whichever region
+was looked at last, which understates by however many regions were not.
+
+Reach is still one region's: the tools and data stores listed beside an agent
+are what the scan that last saw it observed. Every surface that names more
+than one region says so, because a row listing three regions and one set of
+tools otherwise reads as the whole of what that agent can touch.
 
 ### A role that asked for too much and delivered too little
 

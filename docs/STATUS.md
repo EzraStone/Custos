@@ -147,10 +147,15 @@ region after the first swallowed as a duplicate.
 Fixed end to end: `--check` names the regions with flow logs, `CUSTOS_REGIONS`
 covers them in one run, a batch is now one region's window, the register
 records every region an agent has been seen in, and the report names the region
-it covered. What is not fixed is that an agent's spend and reach still come
-from the scan that last saw it — one region's traffic — and every surface says
-so rather than presenting a fraction as a total. Doing better needs the latest
-observation per region rather than a merged blob.
+it covered, and spend is summed across the regions an agent runs in — kept
+per region, so re-scanning one replaces that region's figure instead of the
+whole total.
+
+What is not fixed is reach: the tools and data stores beside an agent are the
+ones the scan that last saw it observed, in one region. Every surface that
+names more than one region says so rather than presenting a fraction as a
+total. Doing better needs the latest observation per region rather than a
+merged blob.
 
 **The IAM policy asked for thirteen permissions nothing used, and I nearly
 kept them.** The same test that found the missing S3 grant flagged thirteen
