@@ -36,7 +36,7 @@ from ..store.agents import AgentStore
 from ..store.db import now, open_database
 from ..store.declarations import CandidateStore, DeclarationStore
 from ..store.rates import RateStore
-from ..store.scans import RegionConflict, ReviewStore, ScanStore
+from ..store.scans import ReviewStore, ScanStore
 from .auth import Principal, TokenStore, parse_bearer
 from .compression import GzipRequestMiddleware
 
@@ -202,15 +202,7 @@ def create_app(
                 detail="window_end must be after window_start",
             )
 
-        try:
-            outcome = ingest(app.state.db, batch)
-        except RegionConflict as conflict:
-            # 409 rather than 202-with-duplicate. A duplicate is a retry and is
-            # safely ignored; this is a region about to be dropped, and the
-            # collector must not log it as "already ingested" and move on.
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT, detail=str(conflict)
-            ) from conflict
+        outcome = ingest(app.state.db, batch)
 
         # Delivery happens here rather than in the pipeline, because ingestion
         # runs inside a transaction and a webhook has no business holding one

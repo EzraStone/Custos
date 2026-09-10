@@ -65,15 +65,6 @@ class ScanRecord:
         return self.scope_named / self.scope_total
 
 
-class RegionConflict(Exception):
-    """Two regions shipped the same account's window.
-
-    Their own exception because the caller has to be able to answer with
-    something other than "duplicate": a duplicate is a retry and is safely
-    ignored, and this is a region about to be dropped.
-    """
-
-
 class ScanStore:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self.conn = conn
@@ -92,33 +83,20 @@ class ScanStore:
     ) -> BatchRecord:
         """Store a batch, replacing any earlier delivery of the same window.
 
-        Idempotent on (account, window). The collector retries with bounded
-        backoff, so the same window genuinely does arrive twice, and counting it
-        twice would inflate every byte total downstream — which means every
-        spend estimate and every egress ratio the classifier reads.
+        Idempotent on (account, region, window). The collector retries with
+        bounded backoff, so the same window genuinely does arrive twice, and
+        counting it twice would inflate every byte total downstream — which
+        means every spend estimate and every egress ratio the classifier reads.
+
+        Region is in the key because a collector covers one region: three
+        regions of one account ship three windows for the same hour, and they
+        are three collections rather than one retried three times.
         """
         existing = self.conn.execute(
-            "SELECT id, region FROM batches WHERE account_id = ? AND window_start = ? "
-            "AND window_end = ?",
-            (account_id, iso(window_start), iso(window_end)),
+            "SELECT id FROM batches WHERE account_id = ? AND region = ? "
+            "AND window_start = ? AND window_end = ?",
+            (account_id, region, iso(window_start), iso(window_end)),
         ).fetchone()
-
-        if existing is not None and existing["region"] not in ("", region):
-            # Two regions of one account, same window. This is not a retry, and
-            # treating it as one loses a region: the row is overwritten, the
-            # stored region becomes whichever arrived last, and the report goes
-            # on to name that region while holding agents from both.
-            #
-            # Refused loudly rather than merged, because merging here would be
-            # guessing at what the collector meant. One collector covering
-            # several regions ships one batch; two collectors racing for one
-            # window is a configuration to fix, not a shape to support.
-            raise RegionConflict(
-                f"a batch for {account_id} {iso(window_start)}..{iso(window_end)} "
-                f"already arrived from {existing['region']}, and this one is from "
-                f"{region}. Run one collector covering both regions rather than "
-                "one per region, or give each region its own collection window."
-            )
 
         if existing is not None:
             self.conn.execute(

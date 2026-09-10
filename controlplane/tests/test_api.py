@@ -1025,25 +1025,35 @@ def test_fleet_needs_a_credential(client):
 
 # --- two regions, one window --------------------------------------------------
 
-# The collector reads one region. A customer with agents in three regions
-# therefore runs three collectors, which is what preflight tells them to do —
-# and all three ship the same account and the same hour.
+# The collector reads one region. A customer with agents in three regions runs
+# three collectors, and all three ship the same account and the same hour.
 #
-# The batch key is (account, window), so the second arrival was treated as a
-# retry: the row was overwritten, the stored region became whichever landed
+# The batch key used to be (account, window), so the second arrival was treated
+# as a retry: the row was overwritten, the stored region became whichever landed
 # last, and the report went on to name that region while the register held
 # agents from both.
-def test_a_second_region_for_the_same_window_is_refused_not_deduplicated(client):
+def test_two_regions_of_one_account_are_two_batches(client):
     east = batch() | {"region": "us-east-1"}
     west = batch() | {"region": "eu-west-1"}
 
-    assert client.post("/v1/batches", json=east, headers=AUTH).status_code == 202
+    assert client.post("/v1/batches", json=east, headers=AUTH).json()["duplicate"] is False
+    second = client.post("/v1/batches", json=west, headers=AUTH)
 
-    response = client.post("/v1/batches", json=west, headers=AUTH)
-    assert response.status_code == 409
-    detail = response.json()["detail"]
-    assert "us-east-1" in detail and "eu-west-1" in detail
-    assert "one collector covering both regions" in detail.lower()
+    assert second.status_code == 202
+    assert second.json()["duplicate"] is False, "a region was treated as a retry"
+    assert len(client.get("/v1/scans", headers=AUTH).json()["scans"]) == 2
+
+
+def test_each_region_keeps_its_own_region_on_its_own_row(client):
+    """The row used to be overwritten, so the report named whichever region
+    landed last while showing agents from both."""
+    client.post("/v1/batches", json=batch() | {"region": "us-east-1"}, headers=AUTH)
+    client.post("/v1/batches", json=batch() | {"region": "eu-west-1"}, headers=AUTH)
+
+    rows = client.app.state.db.execute(
+        "SELECT region FROM batches ORDER BY region"
+    ).fetchall()
+    assert [r["region"] for r in rows] == ["eu-west-1", "us-east-1"]
 
 
 def test_a_genuine_retry_of_the_same_region_is_still_a_duplicate(client):
@@ -1059,15 +1069,16 @@ def test_a_genuine_retry_of_the_same_region_is_still_a_duplicate(client):
     assert again.json()["duplicate"] is True
 
 
-def test_a_batch_with_no_region_does_not_conflict_with_anything(client):
-    """An older collector never sent one. Refusing it would break the upgrade
-    path over a field it has no way to populate."""
+def test_a_batch_with_no_region_is_its_own_collection(client):
+    """An older collector never sent one, and an unnamed region is not the same
+    collection as a named one — treating them as one would silently merge an
+    upgraded collector's window with the one it replaced."""
     assert client.post(
         "/v1/batches", json=batch() | {"region": ""}, headers=AUTH
-    ).status_code == 202
+    ).json()["duplicate"] is False
     assert client.post(
         "/v1/batches", json=batch() | {"region": "us-east-1"}, headers=AUTH
-    ).status_code == 202
+    ).json()["duplicate"] is False
 
 
 def test_different_windows_from_different_regions_are_both_kept(client):
