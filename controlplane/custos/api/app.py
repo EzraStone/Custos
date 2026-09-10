@@ -768,6 +768,10 @@ def create_app(
             register.agents[agent.id] = agent
 
         latest = scans.latest_scan(account_id)
+        # The register below spans every region. What the report says about
+        # how the telemetry was read has to span them too, or one region's
+        # flow log format gets described as the account's.
+        per_region = scans.latest_scan_per_region(account_id)
         result = ScanResult(
             register=register, verdicts=[], telemetry=[],
             principals_seen=latest.principals_seen if latest else 0,
@@ -780,7 +784,8 @@ def create_app(
             truncated=latest.truncated if latest else False,
             scope_named=latest.scope_named if latest else 0,
             scope_total=latest.scope_total if latest else 0,
-            missing_fields=latest.missing_fields if latest else (),
+            missing_fields=_missing_fields(per_region),
+            missing_in=_missing_in(per_region),
             direction_undecided=latest.direction_undecided if latest else 0,
             read_errors=latest.read_errors if latest else 0,
             # Every region this account has been collected in, not the
@@ -895,6 +900,37 @@ class StatusRequest(BaseModel):
     status: str
     operator: str = Field(min_length=1)
     reason: str = ""
+
+
+def _missing_fields(per_region: list) -> tuple[str, ...]:
+    """Every flow log field absent from any region covered.
+
+    A union rather than the latest scan's list. A field missing in one region
+    is missing from everything that region contributed, and the report's job
+    is to say what it could not look for — silence on a field half the estate
+    never recorded reads as "we looked and found none".
+    """
+    fields: set[str] = set()
+    for scan in per_region:
+        fields |= set(scan.missing_fields)
+    return tuple(sorted(fields))
+
+
+def _missing_in(per_region: list) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """For each of those fields, which regions lack it.
+
+    The union above says what the report may not claim; this says where to go
+    and fix it. Scans with no region contribute nothing: an older collector
+    sent none, and an unnamed region is not somewhere anyone can look.
+    """
+    where: dict[str, set[str]] = {}
+    for scan in per_region:
+        for region in scan.regions:
+            for field in scan.missing_fields:
+                where.setdefault(field, set()).add(region)
+    return tuple(
+        (field, tuple(sorted(regions))) for field, regions in sorted(where.items())
+    )
 
 
 def _declared_labels(store, account_id: str) -> list[str]:

@@ -208,13 +208,43 @@ _FIELD_COSTS = {
 }
 
 
+def _where_missing(
+    field: str,
+    missing_in: dict[str, tuple[str, ...]],
+    covered: tuple[str, ...],
+) -> str:
+    """Which regions lack this field, when that is fewer than all of them.
+
+    A flow log format is set per flow log, and an account with three regions
+    has three of them. A field absent in one is a gap somebody can go and fix
+    in one place; describing it as a property of the account hides both where
+    it is and that the rest of the estate is fine.
+
+    Silent when the field is missing everywhere: the regions covered are named
+    two sentences below, and repeating them here would read as if somewhere
+    still had the field.
+    """
+    regions = tuple(missing_in.get(field, ()))
+    if not regions or len(covered) < 2 or set(regions) >= set(covered):
+        return ""
+    rest = [r for r in covered if r not in regions]
+    return (
+        f" That is true of {', '.join(_e(r) for r in regions)}; "
+        f"{', '.join(_e(r) for r in rest)} "
+        f"{'do' if len(rest) > 1 else 'does'} record it."
+    )
+
+
 def _format_limits(coverage: Coverage | None) -> list[str]:
     """What the account's flow log format prevents this report from saying."""
     if coverage is None:
         return []
 
+    missing_in = dict(coverage.missing_in)
     items = [
-        _FIELD_COSTS[name] for name in coverage.missing_fields if name in _FIELD_COSTS
+        _FIELD_COSTS[name] + _where_missing(name, missing_in, coverage.regions)
+        for name in coverage.missing_fields
+        if name in _FIELD_COSTS
     ]
     if coverage.regions:
         named = ", ".join(_e(r) for r in coverage.regions)
@@ -406,6 +436,13 @@ class Coverage:
     skipped_records: int = 0
     scope_named: int = 0
     scope_total: int = 0
+    missing_in: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    """For each missing field, which of the regions covered lack it.
+
+    Pairs rather than a mapping because Coverage is frozen and a report is
+    passed around. Empty for a single-region report, where the answer is
+    always "the region this covers"."""
+
     missing_fields: tuple[str, ...] = ()
     """Flow log fields this account's format does not carry.
 

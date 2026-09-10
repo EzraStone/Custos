@@ -489,3 +489,27 @@ def test_the_served_report_names_every_region_it_shows_agents_from(client):
     assert "eu-west-1, us-east-1 and no other region" in page, (
         "the report named one region while listing agents from two"
     )
+
+
+def test_a_field_missing_in_one_region_is_reported_as_that_regions_gap(client):
+    """The flow log format is set per flow log, and a two-region account has
+    two of them. The report used to take the latest scan's format and describe
+    it as the account's — so a port field switched on in one region and off in
+    the other read as "this account records no ports", which is a gap nobody
+    can locate and a claim that is false about half the estate.
+    """
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+
+    small = corpus.build(corpus.CorpusSpec(days=1))
+    for region, missing in (("us-east-1", ["dstport"]), ("eu-west-1", [])):
+        payload = build_batch(small, region=region).model_dump(mode="json")
+        payload["account_id"] = ACCOUNT
+        payload["collection"]["missing_fields"] = missing
+        assert client.post("/v1/batches", json=payload, headers=AUTH).status_code == 202
+
+    page = client.get("/v1/report", headers=AUTH).text
+    assert "Destination ports were not recorded" in page, (
+        "the region with no port field was described by the region that has one"
+    )
+    assert "That is true of us-east-1; eu-west-1 does record it." in page

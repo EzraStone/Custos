@@ -522,3 +522,39 @@ def test_a_region_name_is_escaped():
     hostile = agent()
     hostile.regions = {"<script>alert(1)</script>", "us-east-1"}
     assert "<script>alert" not in render(result([hostile]), "acme", T0)
+
+
+# --- a field missing in one region of several ---------------------------------
+#
+# The flow log format is set per flow log, and a customer with three regions
+# has three of them. A field absent in one is not absent from the account, and
+# saying it is turns a fixable gap in one region into a property of the whole
+# estate that nobody knows where to fix.
+
+def _multi(missing_in):
+    return Coverage(
+        regions=("eu-west-1", "us-east-1"),
+        missing_fields=tuple(sorted({f for f, _ in missing_in})),
+        missing_in=missing_in,
+    )
+
+
+def test_a_field_missing_in_one_region_says_which():
+    page = render(
+        result([agent()]), "acme", T0,
+        coverage=_multi((("dstport", ("us-east-1",)),)),
+    )
+    assert "Destination ports were not recorded" in page
+    assert "us-east-1" in page
+    assert "eu-west-1 does record it" in page or "the other region" in page
+
+
+def test_a_field_missing_everywhere_is_not_qualified():
+    """Naming every region covered would be a list of the regions already named
+    two sentences up, and it would read as if somewhere still had the field."""
+    page = render(
+        result([agent()]), "acme", T0,
+        coverage=_multi((("dstport", ("eu-west-1", "us-east-1")),)),
+    )
+    assert "Destination ports were not recorded" in page
+    assert "does record it" not in page
