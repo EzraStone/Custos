@@ -306,7 +306,8 @@ Model endpoints this account has declared.
   "account_id": "447120043318",
   "endpoints": [
     { "id": 1, "value": "10.0.7.0/24", "kind": "range", "note": "llm-gateway",
-      "declared_by": "ezra@custos.dev", "declared_at": "2026-09-02T10:00:00+00:00",
+      "region": "us-east-1", "declared_by": "ezra@custos.dev",
+      "declared_at": "2026-09-02T10:00:00+00:00",
       "active": true, "withdrawn_by": "", "withdrawn_at": null }
   ]
 }
@@ -325,7 +326,7 @@ Declare a model endpoint.
 
 ```json
 { "value": "10.0.7.0/24", "kind": "range", "operator": "ezra@custos.dev",
-  "note": "llm-gateway" }
+  "note": "llm-gateway", "region": "us-east-1" }
 ```
 
 `kind` is `range` — a CIDR or a single address — or `aws_service`. `operator`
@@ -342,6 +343,16 @@ why the list did not move.
 Declarations are scoped to the account. 10.0.0.0/8 is where every customer's
 internal services live, and one that leaked between accounts would manufacture
 agents out of unrelated traffic on a coincidental collision.
+
+**A private range is scoped to a region as well, and is refused without one.**
+The same collision happens inside a single account: 10.0.7.40 is the model
+gateway in us-east-1 and, in eu-west-1, whatever that account runs at that
+address. Declaring it everywhere turns ordinary internal traffic into model
+traffic — which does not hide agents, it invents them.
+
+A public provider range needs no region and applies everywhere, because it
+means the same thing everywhere. A gateway candidate carries the region it was
+asked about, which is what a caller answering one should send back.
 
 Returns `400` for an unparseable range or a missing operator. Validated on the
 way in rather than at the next scan, because a declaration a customer believes
