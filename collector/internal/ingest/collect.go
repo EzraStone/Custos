@@ -90,6 +90,12 @@ type Report struct {
 
 	Degraded []Attribution
 	Errors   []string
+
+	// Notes are things a person should know that are not failures — a source
+	// deliberately skipped, a degradation accepted on purpose. Separate from
+	// Errors because an error in this report means something went wrong, and a
+	// choice we made on purpose is not that.
+	Notes []string
 }
 
 // Trustworthy reports whether the scan covered enough to make an absence of
@@ -124,6 +130,10 @@ func (r Report) Summary() string {
 		fmt.Fprintf(&b, "inferred direction for %d records; %d could not be "+
 			"decided and were dropped (%.1f%% decided)\n",
 			r.Direction.Inferred, r.Direction.Undecided, r.Direction.Decided()*100)
+	}
+
+	for _, note := range r.Notes {
+		fmt.Fprintf(&b, "NOTE: %s\n", note)
 	}
 
 	if r.Stats.SkipData > 0 {

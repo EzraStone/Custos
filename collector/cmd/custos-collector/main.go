@@ -304,10 +304,11 @@ func collectRegion(
 		}
 	}
 
+	requests, note := accessLogSource(cfg, clients, region)
 	collector := &ingest.Collector{
 		Format:     format,
 		Flows:      source,
-		Requests:   accessLogSource(cfg, clients),
+		Requests:   requests,
 		Network:    clients.Network,
 		Identity:   clients.Identity,
 		Serverless: clients.Serverless,
@@ -316,25 +317,53 @@ func collectRegion(
 		Region:     region,
 	}
 	batch, report, err := collector.Collect(ctx, w)
+	if note != "" {
+		report.Notes = append(report.Notes, note)
+	}
 	return Collection{Region: region, Batch: batch, Report: report}, err
 }
 
 // accessLogSource returns a reader for load balancer access logs, or nil when
 // the customer has not pointed us at any. Nil is a supported state, not a
 // failure: the classifier reports reduced recall rather than guessing.
-func accessLogSource(cfg *config.Config, clients *awsclient.Clients) ingest.RequestSource {
+func accessLogSource(
+	cfg *config.Config, clients *awsclient.Clients, region string,
+) (ingest.RequestSource, string) {
 	if cfg.AccessLogs == "" {
-		return nil
+		return nil, ""
 	}
 	rest, found := strings.CutPrefix(cfg.AccessLogs, "s3://")
 	if !found {
-		return nil
+		return nil, ""
 	}
 	bucket, prefix, _ := strings.Cut(rest, "/")
 	if bucket == "" {
-		return nil
+		return nil, ""
 	}
-	return &ingest.AccessLogReader{API: clients.Objects, Bucket: bucket, Prefix: prefix}
+
+	// Access logs are region-specific. AWS writes them under
+	// AWSLogs/<account>/elasticloadbalancing/<region>/, so a prefix that names
+	// one region names one region — and reading it while classifying another
+	// region's traffic is worse than reading nothing. Every model call that
+	// happened to line up with an unrelated inbound request would look
+	// coupled, which is the shape of a chatbot: the agents this product exists
+	// to find would be classified as not agents.
+	if prefix == "" {
+		return &ingest.AccessLogReader{
+			API: clients.Objects, Bucket: bucket,
+			Prefix: fmt.Sprintf("AWSLogs/%s/elasticloadbalancing/%s",
+				cfg.AccountID, region),
+		}, ""
+	}
+
+	if region != cfg.Region {
+		return nil, fmt.Sprintf(
+			"%s: no access logs — CUSTOS_ACCESS_LOGS names one prefix and "+
+				"access logs are per region. Point it at the bucket alone "+
+				"(s3://bucket) and the per-region path is derived; recall in "+
+				"%s is reduced until then", region, region)
+	}
+	return &ingest.AccessLogReader{API: clients.Objects, Bucket: bucket, Prefix: prefix}, ""
 }
 
 // preflightCheck answers "why did the scan find nothing" before the scan.
