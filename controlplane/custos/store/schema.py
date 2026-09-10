@@ -22,7 +22,7 @@ agent's apparent spend and reach.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 # Columns added after a table was first written, applied by ALTER on databases
 # that already exist. The schema below is applied with CREATE TABLE IF NOT
@@ -46,6 +46,10 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     # a region-by-region thing and a scan of one of them is a scan of part of
     # the account, which the report has to be able to say.
     ("scans", "regions", "TEXT NOT NULL DEFAULT '[]'"),
+    # Regions this agent has been seen in. Accumulated across scans, because a
+    # scan covers one region and a role running in three is discovered three
+    # times.
+    ("agents", "regions", "TEXT NOT NULL DEFAULT '[]'"),
 )
 
 BATCHES_TABLE = """CREATE TABLE IF NOT EXISTS batches (
@@ -229,6 +233,7 @@ CREATE TABLE IF NOT EXISTS agents (
     providers           TEXT    NOT NULL DEFAULT '[]',
     endpoints           TEXT    NOT NULL DEFAULT '[]',
     est_monthly_spend   REAL    NOT NULL DEFAULT 0.0,
+    regions             TEXT    NOT NULL DEFAULT '[]',
 
     credentials         TEXT    NOT NULL DEFAULT '[]',
     tools               TEXT    NOT NULL DEFAULT '[]',

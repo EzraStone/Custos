@@ -137,6 +137,17 @@ class Agent:
     reach: Reach = field(default_factory=Reach)
     imprimatur: Imprimatur | None = None
     baseline: Baseline = field(default_factory=Baseline)
+    regions: set[str] = field(default_factory=set)
+    """Regions this agent has been seen in, across every scan.
+
+    Accumulated rather than replaced. A scan covers one region, so a role
+    running in three of them is discovered three times — and a register that
+    kept only the last region would describe an agent as living wherever it was
+    most recently looked for.
+
+    It is also the caveat on every figure beside it: spend, endpoints and reach
+    come from the scan that last saw this agent, which is one region's traffic.
+    """
 
     @property
     def unsanctioned(self) -> bool:

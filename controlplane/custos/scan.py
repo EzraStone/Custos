@@ -61,6 +61,14 @@ class ScanInput:
     belongs to one account and the catalogue is shared by every account in the
     process.
     """
+    region: str = ""
+    """Region this scan's telemetry was collected in.
+
+    One scan covers one region. Recorded on every agent it discovers, because a
+    role running in three regions is discovered three times and the register
+    would otherwise describe it as living wherever it was most recently looked
+    for.
+    """
     interval: timedelta = timedelta(seconds=60)
     inbound_logs_available: bool = True
 
@@ -179,6 +187,7 @@ def run(inp: ScanInput, register: Register | None = None) -> ScanResult:
                 ),
                 identity=_identity(verdict.principal, attribution, inp, compute),
                 model=_model_use(t, inp),
+                regions={inp.region} if inp.region else set(),
                 reach=reach_report.reach,
             )
         )

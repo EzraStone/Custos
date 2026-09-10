@@ -75,6 +75,11 @@ class Register:
             )
             return agent
 
+        # Regions accumulate. Everything below replaces, because a re-scan of a
+        # region is a fresher measurement of it — but a scan of a second region
+        # is not a correction of the first, and treating it as one would make an
+        # agent appear to move.
+        existing.regions |= agent.regions
         existing.last_seen = max(existing.last_seen, agent.last_seen)
         existing.first_seen = min(existing.first_seen, agent.first_seen)
         existing.model = agent.model

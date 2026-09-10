@@ -177,6 +177,7 @@ def to_scan_input(
         },
         interval=interval,
         inbound_logs_available=batch.have_alb_logs,
+        region=batch.region,
     )
 
 

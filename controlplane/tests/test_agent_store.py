@@ -185,3 +185,81 @@ def test_accounts_are_isolated(store):
 
     assert len(store.list_for_account(ACCOUNT)) == 1
     assert len(store.list_for_account("999999999999")) == 1
+
+
+# --- an agent that runs in more than one region -------------------------------
+
+def _agent_in(region: str, principal: str = "role/finance-close"):
+    from datetime import UTC, datetime
+
+    from custos.register.model import (
+        Agent,
+        Identity,
+        ModelUse,
+        Provenance,
+        Source,
+        Status,
+    )
+    from custos.register.store import agent_id
+
+    at = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+    return Agent(
+        id=agent_id("447120043318", principal),
+        first_seen=at, last_seen=at, status=Status.DISCOVERED,
+        provenance=Provenance(source=Source.DISCOVERED, confidence=0.9,
+                              observed_principal=principal),
+        identity=Identity(principal=principal, account_id="447120043318"),
+        model=ModelUse(est_monthly_spend_usd=100.0),
+        regions={region},
+    )
+
+
+def test_a_second_region_is_added_rather_than_replacing_the_first():
+    """A scan covers one region, so a role running in three is discovered three
+    times. A register that kept only the last would describe an agent as living
+    wherever it was most recently looked for."""
+    from custos.store.agents import AgentStore
+    from custos.store.db import open_database
+
+    store = AgentStore(open_database())
+    store.upsert(_agent_in("us-east-1"))
+    stored = store.upsert(_agent_in("eu-west-1"))
+
+    assert stored.regions == {"us-east-1", "eu-west-1"}
+
+
+def test_rescanning_the_same_region_does_not_multiply_it():
+    from custos.store.agents import AgentStore
+    from custos.store.db import open_database
+
+    store = AgentStore(open_database())
+    store.upsert(_agent_in("us-east-1"))
+    stored = store.upsert(_agent_in("us-east-1"))
+
+    assert stored.regions == {"us-east-1"}
+
+
+def test_a_scan_that_names_no_region_does_not_erase_the_ones_known():
+    """An older collector never sent one, and an upgrade must not blank the
+    history of where an agent has been seen."""
+    from custos.store.agents import AgentStore
+    from custos.store.db import open_database
+
+    store = AgentStore(open_database())
+    store.upsert(_agent_in("us-east-1"))
+
+    unnamed = _agent_in("us-east-1")
+    unnamed.regions = set()
+    stored = store.upsert(unnamed)
+
+    assert stored.regions == {"us-east-1"}
+
+
+def test_regions_survive_a_round_trip_through_the_database():
+    from custos.store.agents import AgentStore
+    from custos.store.db import open_database
+
+    store = AgentStore(open_database())
+    written = store.upsert(_agent_in("ap-south-1"))
+
+    assert store.get(written.id).regions == {"ap-south-1"}

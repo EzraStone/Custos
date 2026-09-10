@@ -31,7 +31,8 @@ _COLUMNS = """
     id, account_id, principal, status, imprimatur_by, imprimatur_at,
     approved_tools, approved_data, key_id, first_seen, last_seen, source,
     confidence, evidence, owner_team, owner_human, compute, providers,
-    endpoints, est_monthly_spend, credentials, tools, data_stores, blast_radius
+    endpoints, est_monthly_spend, regions, credentials, tools, data_stores,
+    blast_radius
 """
 
 
@@ -63,6 +64,7 @@ def _row_to_agent(row: sqlite3.Row) -> Agent:
             compute=row["compute"],
             account_id=row["account_id"],
         ),
+        regions=set(loads(row["regions"])),
         model=ModelUse(
             providers=set(loads(row["providers"])),
             endpoints=set(loads(row["endpoints"])),
@@ -104,7 +106,7 @@ class AgentStore:
         if existing is None:
             self.conn.execute(
                 f"INSERT INTO agents ({_COLUMNS}) VALUES ("
-                "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     agent.id, agent.identity.account_id, agent.identity.principal,
                     str(agent.status), None, None, None, None, None,
@@ -114,7 +116,7 @@ class AgentStore:
                     agent.identity.owner_team, agent.identity.owner_human,
                     agent.identity.compute,
                     dumps(agent.model.providers), dumps(agent.model.endpoints),
-                    agent.model.est_monthly_spend_usd,
+                    agent.model.est_monthly_spend_usd, dumps(agent.regions),
                     dumps(agent.reach.credentials), dumps(agent.reach.tools),
                     dumps(agent.reach.data_stores), str(agent.reach.blast_radius),
                 ),
@@ -136,7 +138,7 @@ class AgentStore:
                 last_seen = MAX(last_seen, ?),
                 confidence = ?, evidence = ?,
                 owner_team = ?, owner_human = ?, compute = ?,
-                providers = ?, endpoints = ?, est_monthly_spend = ?,
+                providers = ?, endpoints = ?, est_monthly_spend = ?, regions = ?,
                 credentials = ?, tools = ?, data_stores = ?, blast_radius = ?
             WHERE id = ?
             """,
@@ -147,6 +149,10 @@ class AgentStore:
                 agent.identity.compute or existing.identity.compute,
                 dumps(agent.model.providers), dumps(agent.model.endpoints),
                 agent.model.est_monthly_spend_usd,
+                # Accumulated, not replaced. A scan of a second region is not a
+                # correction of the first, and treating it as one would make an
+                # agent appear to move between regions as it was rescanned.
+                dumps(agent.regions | existing.regions),
                 dumps(agent.reach.credentials), dumps(agent.reach.tools),
                 dumps(agent.reach.data_stores), str(agent.reach.blast_radius),
                 agent.id,
