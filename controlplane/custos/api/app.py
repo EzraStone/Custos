@@ -774,7 +774,13 @@ def create_app(
         per_region = scans.latest_scan_per_region(account_id)
         result = ScanResult(
             register=register, verdicts=[], telemetry=[],
-            principals_seen=latest.principals_seen if latest else 0,
+            # The largest region rather than the sum. An IAM role is
+            # account-wide, so a role running in two regions is one principal
+            # and adding the regions would count it twice. What this leaves
+            # out — a region with fewer principals of its own — the report
+            # says out loud, because the figure sits beside a count of agents
+            # taken across every region.
+            principals_seen=max((s.principals_seen for s in per_region), default=0),
             # Whose rates the figures below were computed at. The register
             # rows already hold the numbers; this is what labels them.
             prices_revision=RateStore(app.state.db).rates_for(account_id).revision,

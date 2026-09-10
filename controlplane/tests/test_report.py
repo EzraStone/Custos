@@ -584,3 +584,13 @@ def test_the_banner_names_the_region_that_read_badly():
     )
     assert "40% of flow log lines parsed in us-east-1" in page
     assert "eu-west-1" not in page.split("Incomplete coverage")[1].split("</div>")[0]
+
+
+def test_a_single_region_report_does_not_explain_the_principal_count():
+    """There is nothing to explain: the figure and the register cover the same
+    region, and a caveat about a discrepancy that does not exist is noise in
+    the section a reader consults to find the ones that do."""
+    page = render(
+        result([agent()]), "acme", T0, coverage=Coverage(regions=("us-east-1",))
+    )
+    assert "counts one region" not in page

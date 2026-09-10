@@ -246,6 +246,15 @@ def _format_limits(coverage: Coverage | None) -> list[str]:
         for name in coverage.missing_fields
         if name in _FIELD_COSTS
     ]
+    if len(coverage.regions) > 1:
+        items.append(
+            "\"Principals seen\" above counts one region — the largest of "
+            "those covered. An IAM role is account-wide, so adding the regions "
+            "up would count a role that runs in two of them twice, and a "
+            "region with fewer principals of its own is not represented in "
+            "that figure at all. \"Agents found\" beside it is a count across "
+            "every region."
+        )
     if coverage.regions:
         named = ", ".join(_e(r) for r in coverage.regions)
         items.append(

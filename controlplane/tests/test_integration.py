@@ -550,3 +550,25 @@ def test_failed_reads_are_counted_across_every_region(client):
 
     page = client.get("/v1/report", headers=AUTH).text
     assert "7 AWS reads failed" in page, "one region's failures stood for the account's"
+
+
+def test_principals_seen_is_not_one_regions_count_beside_every_regions_agents(client):
+    """The masthead prints "Principals seen" next to "Agents found". The
+    second is the whole register; the first was the latest scan's, which is
+    one region — so the ratio a reader takes from the header was between two
+    different populations.
+
+    Summing them would be worse: an IAM role is account-wide, so a role
+    running in two regions would be counted twice.
+    """
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+
+    small = corpus.build(corpus.CorpusSpec(days=1))
+    for region in ("us-east-1", "eu-west-1"):
+        payload = build_batch(small, region=region).model_dump(mode="json")
+        payload["account_id"] = ACCOUNT
+        client.post("/v1/batches", json=payload, headers=AUTH)
+
+    page = client.get("/v1/report", headers=AUTH).text
+    assert "counts one region" in page, "the header ratio was left unexplained"
