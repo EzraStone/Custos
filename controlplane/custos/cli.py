@@ -410,11 +410,14 @@ def cmd_endpoints(args: argparse.Namespace) -> int:
         print("No declared endpoints. Run `custos gateways` to see what to ask about.")
         return 0
 
-    print(f"{'value':<24}{'kind':<14}{'declared by':<24}{'note'}")
-    print("-" * 78)
+    print(f"{'value':<24}{'kind':<14}{'region':<16}{'declared by':<24}{'note'}")
+    print("-" * 94)
     for r in records:
         mark = "" if r.active else "  (withdrawn)"
-        print(f"{r.value:<24}{r.kind:<14}{r.declared_by:<24}{r.note}{mark}")
+        # "everywhere" rather than a blank. A declaration in force in every
+        # region is the larger claim, and a blank column reads as missing data.
+        where = r.region or "everywhere"
+        print(f"{r.value:<24}{r.kind:<14}{where:<16}{r.declared_by:<24}{r.note}{mark}")
     return 0
 
 

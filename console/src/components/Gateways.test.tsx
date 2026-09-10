@@ -96,3 +96,34 @@ describe("gateway candidates", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(/not a valid network/);
   });
 });
+
+
+describe("which region a question is about", () => {
+  it("names it, because answering declares the address for that region only", () => {
+    render(
+      <Gateways
+        candidates={[candidate({ region: "eu-west-1" })]}
+        operator="ezra@custos.dev"
+        busy={null}
+        error={null}
+        onDeclare={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/eu-west-1/)).toBeInTheDocument();
+  });
+
+  it("says nothing when the question carries no region", () => {
+    // An older control plane recorded candidates without one, and a bare
+    // separator with nothing after it is worse than no separator.
+    render(
+      <Gateways
+        candidates={[candidate({ region: "" })]}
+        operator="ezra@custos.dev"
+        busy={null}
+        error={null}
+        onDeclare={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/·/)).toBeNull();
+  });
+});

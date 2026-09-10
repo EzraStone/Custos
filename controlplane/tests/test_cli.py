@@ -612,3 +612,19 @@ def test_accounts_puts_the_dangerous_and_the_unscanned_first(tmp_path, capsys):
         "one agent that can delete outranks five that can only read"
     )
     assert "never" in out, "an unscanned account should say so"
+
+
+def test_endpoints_says_where_each_declaration_is_in_force(tmp_path, capsys):
+    """A blank column would read as missing data. "everywhere" is the larger
+    claim and should read as one."""
+    db = tmp_path / "e2.db"
+    main(["--db", str(db), "declare", "10.0.7.0/24", "--account", "1",
+          "--operator", "ezra@custos.dev", "--region", "us-east-1"])
+    main(["--db", str(db), "declare", "160.79.104.0/23", "--account", "1",
+          "--operator", "ezra@custos.dev"])
+    capsys.readouterr()
+
+    assert main(["--db", str(db), "endpoints", "--account", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "us-east-1" in out
+    assert "everywhere" in out

@@ -90,6 +90,13 @@ function Candidate({
       <p className="who">
         Reached by{" "}
         {candidate.blind_principals.map((p) => p.split("/").pop()).join(", ")}
+        {/*
+          Which region this is about, when the account is collected in more
+          than one. Answering declares the address for that region only — the
+          same address elsewhere is a different host — so the person clicking
+          has to be able to see which one they are answering for.
+        */}
+        {candidate.region ? <span className="muted"> · {candidate.region}</span> : null}
       </p>
       <div className="actions">
         <label className="visually-hidden" htmlFor={`note-${candidate.address}`}>
