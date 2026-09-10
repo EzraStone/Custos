@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
-import type { Agent } from "./api/types";
+import type { Agent, FleetRow, GatewayCandidate, Review } from "./api/types";
 import * as session from "./session";
 
 function agent(overrides: Partial<Agent> = {}): Agent {
@@ -30,6 +30,18 @@ function agent(overrides: Partial<Agent> = {}): Agent {
   };
 }
 
+/**
+ * What the fake control plane returns.
+ *
+ * The list fields are typed rather than `unknown[]`, and that is not tidiness.
+ * A fixture missing a field the component reads compiles fine as `unknown[]`,
+ * the component throws on the first render, and the page comes back blank —
+ * so the failure arrives as "unable to find heading" in whichever test happens
+ * to look for one, pointing at nothing. It has happened twice: once for a
+ * review's `sends_to` and once for a fleet row's `regions`.
+ *
+ * Typed, a missing field is a compile error naming the field.
+ */
 interface Backend {
   agents?: Agent[];
   coverage?: number;
@@ -40,10 +52,10 @@ interface Backend {
   truncated?: boolean;
   accounts?: string[];
   diff?: unknown;
-  candidates?: unknown[];
-  reviews?: unknown[];
+  candidates?: GatewayCandidate[];
+  reviews?: Review[];
   registerPrices?: string;
-  fleet?: unknown[];
+  fleet?: FleetRow[];
   declareStatus?: number;
   declareDetail?: string;
   reportStatus?: number;
@@ -995,10 +1007,12 @@ describe("picking an account out of a fleet", () => {
       fleet: [
         { account_id: "111111111111", agents: 12, unsanctioned: 5, destructive: 2,
           last_scan: "2026-09-08T09:00:00+00:00", coverage: 1, scope_readable: 0.8,
-          reviews: 1, gateway_questions: 0, rates_verified: true },
+          reviews: 1, gateway_questions: 0, rates_verified: true,
+          regions: ["eu-west-1", "us-east-1"] },
         { account_id: "222222222222", agents: 0, unsanctioned: 0, destructive: 0,
           last_scan: null, coverage: null, scope_readable: null,
-          reviews: 0, gateway_questions: 0, rates_verified: false },
+          reviews: 0, gateway_questions: 0, rates_verified: false,
+          regions: [] },
       ],
     });
     session.save({ token: "tok-fleet", operator: "ezra@custos.dev" });
