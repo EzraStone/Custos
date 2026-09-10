@@ -82,6 +82,14 @@ us-east-1 — so a report from one region says nothing about the others, and say
 so. `--check` names which of your regions have flow logs; `CUSTOS_REGIONS` is
 how you cover them.
 
+Point `CUSTOS_FLOW_LOGS` and `CUSTOS_ACCESS_LOGS` at the **bucket alone**
+(`s3://your-bucket`) when you cover more than one region. AWS delivers both per
+region, under `AWSLogs/<account>/vpcflowlogs/<region>/` and
+`AWSLogs/<account>/elasticloadbalancing/<region>/`, and the collector derives
+those paths itself. A prefix that names a region names one region: the collector
+refuses to read it for another rather than filing one region's traffic under
+another's name.
+
 One batch ships per region rather than one merged batch, because a private
 address is unique within a region and nowhere else. `10.0.4.21` is your billing
 API in one region and something entirely different in another, and a scan

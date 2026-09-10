@@ -18,6 +18,9 @@ export AWS_REGION=us-east-1
 export CUSTOS_ACCOUNT_ID=447120043318
 export CUSTOS_FLOW_LOGS=/aws/vpc/flowlogs          # or s3://bucket/prefix
 export CUSTOS_REGIONS=eu-west-1,ap-south-1         # every region they run in
+# With more than one region, point at the bucket alone: both log types are
+# delivered per region and the per-region path is derived.
+export CUSTOS_ACCESS_LOGS=s3://their-alb-logs
 export CUSTOS_ACCESS_LOGS=s3://their-alb-logs/AWSLogs/...   # worth asking for
 # Only if they pointed us at a log they already had, and only for CloudWatch:
 export CUSTOS_FLOW_LOG_FORMAT="${version} ${account-id} ${interface-id} ..."
