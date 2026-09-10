@@ -67,6 +67,17 @@ The same applies to a test for behaviour you are keeping: if you cannot think of
 an edit that would make it fail, it is describing the code rather than
 constraining it.
 
+**Put back exactly what you took out.** A mutation check reverts by replacing
+the mutated text with the original — and if that text appears twice in the
+file, the revert changes both. That happened here: the same expression sat in
+an insert branch and an update branch, the revert gave both the update's
+version, and inserting a new row started dereferencing a variable that is None
+by definition. Ninety-one tests said so.
+
+Anchor the revert on enough surrounding lines to be unique, or edit by line
+number. And read the suite output before committing, which is the step that
+would have caught it anyway.
+
 **Clear `__pycache__` after a fast revert.** Break, run, restore, run — done
 quickly enough, the restore lands inside the same filesystem-timestamp second
 as the break, Python keeps the cached bytecode of the broken version, and the
