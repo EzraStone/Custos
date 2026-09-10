@@ -219,7 +219,7 @@ def _format_limits(coverage: Coverage | None) -> list[str]:
     if coverage.regions:
         named = ", ".join(_e(r) for r in coverage.regions)
         items.append(
-            f"This scan covered {named} and no other region. An AWS account is "
+            f"This report covers {named} and no other region. An AWS account is "
             "a region-by-region thing: a workload in another region has its own "
             "flow logs, its own interfaces, and no representation here at all. "
             "Everything above is a statement about the regions named, not about "

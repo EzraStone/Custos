@@ -145,7 +145,7 @@ def test_the_report_names_the_region_it_covered():
     page = render(
         result([agent()]), "acme", T0, coverage=Coverage(regions=("us-east-1",))
     )
-    assert "covered us-east-1 and no other region" in page
+    assert "covers us-east-1 and no other region" in page
     assert "not about the account" in page
 
 

@@ -783,7 +783,11 @@ def create_app(
             missing_fields=latest.missing_fields if latest else (),
             direction_undecided=latest.direction_undecided if latest else 0,
             read_errors=latest.read_errors if latest else 0,
-            regions=latest.regions if latest else (),
+            # Every region this account has been collected in, not the
+            # latest scan's. The register below holds agents from all of
+            # them; labelling it with one scan's region tells a reader a
+            # region they can see agents from was never covered.
+            regions=tuple(scans.regions_scanned(account_id)),
         ) if latest else None
 
         diff = ScanDiff()

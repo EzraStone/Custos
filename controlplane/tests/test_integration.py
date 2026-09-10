@@ -447,7 +447,7 @@ def test_the_report_names_the_region_of_the_scan_it_rendered(client):
     client.post("/v1/batches", json=payload, headers=AUTH)
 
     page = client.get("/v1/report", headers=AUTH).text
-    assert "covered eu-west-1 and no other region" in page
+    assert "covers eu-west-1 and no other region" in page
 
 
 def test_a_records_region_survives_the_whole_pipeline(client):
@@ -464,3 +464,28 @@ def test_a_records_region_survives_the_whole_pipeline(client):
 
     assert records
     assert {r.region for r in records} == {"ap-south-1"}
+
+
+def test_the_served_report_names_every_region_it_shows_agents_from(client):
+    """The served report renders the whole register — every agent, from every
+    region the account has been collected in — but it used to take its region
+    label from the latest scan alone, which is one region.
+
+    So a two-region account got a report listing agents from both and a
+    limitations section saying "eu-west-1 and no other region". The list is
+    what a customer forwards to their security team; the sentence under it
+    told them a region they can see agents from was not covered.
+    """
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+
+    small = corpus.build(corpus.CorpusSpec(days=1))
+    for region in ("us-east-1", "eu-west-1"):
+        payload = build_batch(small, region=region).model_dump(mode="json")
+        payload["account_id"] = ACCOUNT
+        client.post("/v1/batches", json=payload, headers=AUTH)
+
+    page = client.get("/v1/report", headers=AUTH).text
+    assert "eu-west-1, us-east-1 and no other region" in page, (
+        "the report named one region while listing agents from two"
+    )
