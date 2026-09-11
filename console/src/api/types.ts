@@ -51,11 +51,24 @@ export interface Agent {
   /**
    * Every region this agent has been seen in.
    *
-   * The figures above come from the scan that last saw it, which is one
-   * region's traffic. A view showing several regions and one spend figure
-   * reads as the total, so it has to say which.
+   * `tools`, `data_stores` and `est_monthly_spend_usd` above cover all of
+   * them. `blast_radius` comes from IAM, which is account-wide by nature: a
+   * role that can delete a bucket can delete it from anywhere it runs.
    */
   regions: string[];
+
+  /**
+   * What was resolved in each region, which is not the union above divided up.
+   *
+   * A region with empty lists is one where a scan saw this agent and resolved
+   * no destinations at all — usually a flow log with no port field. Rendering
+   * that the same as a region the agent genuinely touches nothing in would
+   * report a gap in the log as a fact about the workload.
+   *
+   * Optional: a control plane older than this field sends none, and every
+   * agent discovered before it exists has an empty one.
+   */
+  region_reach?: Record<string, { tools: string[]; data_stores: string[] }>;
 
   unsanctioned: boolean;
   imprimatur: Imprimatur | null;

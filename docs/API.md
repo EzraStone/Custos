@@ -107,11 +107,20 @@ argue with instead of the facts.
 scans, because one scan covers one region and a role running in three is
 discovered three times.
 
-**The other figures are one region's.** `est_monthly_spend_usd`, `tools`,
-`data_stores` and `blast_radius` come from the scan that last saw the agent. An
-agent listing three regions and one spend figure is not showing you the total,
-and a caller that renders the regions without saying so is worse than one that
-renders neither.
+**The other figures cover all of them.** `est_monthly_spend_usd` is the sum
+across regions and `tools` and `data_stores` are the union, both kept per
+region and replaced per region — so a second scan of one region is a fresher
+figure for that region rather than a correction of the whole. `blast_radius`
+comes from IAM, which is account-wide by nature: a role that can delete a
+bucket can delete it from anywhere it runs.
+
+`region_reach` is the breakdown: what was resolved in each region. It is not
+the union divided up. A region with empty lists is one where a scan saw this
+agent and resolved no destinations at all — usually a flow log with no port
+field — and a caller that renders that the same as a region the agent
+genuinely touches nothing in is reporting a gap in the log as a fact about the
+workload. Agents discovered before the breakdown existed have an empty one, so
+an empty object means "not recorded" rather than "nothing anywhere".
 
 ## `GET /v1/accounts`
 

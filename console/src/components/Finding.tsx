@@ -39,6 +39,21 @@ export interface FindingProps {
   spendIsEstimate?: boolean;
 }
 
+/**
+ * Whether a scan saw this agent in `region` and resolved no destinations.
+ *
+ * False when there is no breakdown at all: a control plane older than the
+ * field sends none, and marking every region of every such agent would be a
+ * claim about our own schema rather than about the account.
+ */
+function resolvedNothing(agent: Agent, region: string): boolean {
+  const breakdown = agent.region_reach;
+  if (!breakdown || Object.keys(breakdown).length === 0) return false;
+  const seen = breakdown[region];
+  if (!seen) return true;
+  return seen.tools.length === 0 && seen.data_stores.length === 0;
+}
+
 export function Finding({
   agent,
   operator,
@@ -102,16 +117,28 @@ export function Finding({
           Shown only when there is more than one. One region is the ordinary
           case and a column of the same word is not information.
 
-          The note is about reach, not spend. Spend is summed across regions
-          by the control plane; the tools and data stores listed are the ones
-          the scan that last saw this agent observed, which is one region's.
+          There is no caveat on the reach any more. Spend is summed across
+          regions and the tools and data stores are the union across them, so
+          the figures cover every region named here.
+
+          What is marked instead is a region where a scan saw this agent and
+          resolved nothing — usually a flow log with no port field. Drawing
+          that the same as any other region would report a gap in the log as a
+          fact about the workload.
         */}
         {agent.regions.length > 1 ? (
           <div>
             <dt>Regions</dt>
             <dd>
-              {agent.regions.join(", ")}
-              <span className="muted"> (reach from one)</span>
+              {agent.regions.map((region, i) => (
+                <span key={region}>
+                  {i > 0 ? ", " : ""}
+                  {region}
+                  {resolvedNothing(agent, region) ? (
+                    <span className="muted"> (nothing resolved)</span>
+                  ) : null}
+                </span>
+              ))}
             </dd>
           </div>
         ) : null}

@@ -239,15 +239,50 @@ describe("an agent in more than one region", () => {
       />,
     );
 
+  function regionsRow() {
+    return screen.getByText("Regions").nextElementSibling?.textContent;
+  }
+
   it("names the regions it runs in", () => {
     inRegions(["eu-west-1", "us-east-1"]);
-    expect(screen.getByText(/eu-west-1, us-east-1/)).toBeInTheDocument();
+    expect(regionsRow()).toBe("eu-west-1, us-east-1");
   });
 
-  it("says the reach beside them is one region's", () => {
-    // Spend is summed across regions. Reach is not.
+  it("no longer says the reach beside them is one region's", () => {
+    // It was, and it is not: spend is summed across regions and the tools and
+    // data stores are the union across them. A caveat describing a defect
+    // that has been fixed is worse than none, because a reader who takes it
+    // seriously discounts a list that is complete.
     inRegions(["eu-west-1", "us-east-1"]);
-    expect(screen.getByText(/reach from one/)).toBeInTheDocument();
+    expect(screen.queryByText(/reach from one/)).toBeNull();
+  });
+
+  it("marks a region where a scan resolved nothing", () => {
+    // Usually a flow log with no port field. Drawing it like any other region
+    // reports a gap in the log as a fact about the workload.
+    render(
+      <Finding
+        agent={agent({
+          regions: ["eu-west-1", "us-east-1"],
+          region_reach: {
+            "us-east-1": { tools: ["billing-api"], data_stores: [] },
+            "eu-west-1": { tools: [], data_stores: [] },
+          },
+        })}
+        operator="ezra@custos.dev"
+        onGrant={vi.fn()}
+        onTransition={vi.fn()}
+      />,
+    );
+    expect(regionsRow()).toBe("eu-west-1 (nothing resolved), us-east-1");
+  });
+
+  it("marks nothing when the control plane sent no breakdown", () => {
+    // An older control plane sends none, and every agent discovered before
+    // the field existed has an empty one. Marking all of their regions would
+    // be a claim about our schema rather than about the account.
+    inRegions(["eu-west-1", "us-east-1"]);
+    expect(regionsRow()).toBe("eu-west-1, us-east-1");
   });
 
   it("says nothing about regions when there is only one", () => {

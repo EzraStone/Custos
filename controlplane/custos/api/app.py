@@ -1012,12 +1012,23 @@ def _render(agent) -> dict:
         # region, so the scan's own figure is a fraction of the cost whenever
         # the agent runs in more than one.
         "est_monthly_spend_usd": agent.monthly_spend_usd,
-        # Every region this agent has been seen in. The figures above come from
-        # the scan that last saw it, which is one region's traffic — so a
-        # tools, data_stores and blast_radius above come from the scan that
-        # last saw this agent, which is one region's. Spend is not: it is
-        # summed.
+        # Every region this agent has been seen in. tools, data_stores and
+        # spend above cover all of them; blast_radius comes from IAM and is
+        # account-wide by nature.
         "regions": sorted(agent.regions),
+        # What was resolved in each of them, which is not the same as the
+        # union above divided up. A region with an empty list is one where a
+        # scan saw this agent and resolved no destinations — usually a flow
+        # log with no port field — and a client that cannot tell that apart
+        # from a region it touches nothing in will report a gap in the log as
+        # a fact about the workload.
+        "region_reach": {
+            region: {
+                "tools": sorted(seen.tools),
+                "data_stores": sorted(seen.data_stores),
+            }
+            for region, seen in sorted(agent.region_reach.items())
+        },
         "unsanctioned": agent.unsanctioned,
         "imprimatur": None if agent.imprimatur is None else {
             "granted_by": agent.imprimatur.granted_by,

@@ -1157,3 +1157,26 @@ def test_the_candidates_route_says_how_many_it_declined_to_ask_about(client):
 
     client.post("/v1/batches", json=batch(), headers=AUTH)
     assert "declined" in client.get("/v1/gateway-candidates", headers=AUTH).json()
+
+
+def test_the_register_sends_what_each_region_resolved(client):
+    """A region with an empty list is one where a scan saw this agent and
+    resolved no destinations. A client that cannot tell that apart from a
+    region the agent touches nothing in reports a gap in the flow log as a
+    fact about the workload."""
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+
+    payload = build_batch(
+        corpus.build(corpus.CorpusSpec(days=1)), region="us-east-1"
+    ).model_dump(mode="json")
+    payload["account_id"] = ACCOUNT
+    client.post("/v1/batches", json=payload, headers=AUTH)
+    agents = client.get("/v1/register", headers=AUTH).json()["agents"]
+
+    assert agents
+    for row in agents:
+        assert "region_reach" in row
+        assert set(row["region_reach"]) <= set(row["regions"])
+        for seen in row["region_reach"].values():
+            assert set(seen) == {"tools", "data_stores"}
