@@ -21,6 +21,10 @@ Three groups, in increasing order of difficulty:
                         goes in, something substantial comes back. Not
                         separable from a gateway by volume or ratio, because
                         there is no volume or ratio that distinguishes them.
+                        Both run a loop over several destinations — fetch the
+                        object, transform it, write the result — so they are
+                        not separable by "does this workload reach more than
+                        one thing" either, which is the first idea anyone has.
 
 None of these is an agent, none of them makes a model call, and all of them are
 blind by the detector's definition — which is the property that makes them
@@ -35,11 +39,13 @@ from random import Random
 from ..arrivals import jitter, poisson_arrivals, uniform_arrivals
 from ..endpoints import (
     ARTIFACT_REGISTRY,
+    ARTIFACTS_S3,
     BACKUP_SVC,
     DOC_EXTRACT,
     EVENT_PROXY,
     LOG_COLLECTOR,
     METRICS_PUSH,
+    ORDERS_DB,
     THUMBNAILER,
     Endpoint,
 )
@@ -192,11 +198,31 @@ def image_pipeline(rng: Random, start: datetime, end: datetime) -> Workload:
             "smaller image back. Roughly six to one, megabytes in both "
             "directions, no model traffic, no inbound requests. There is no "
             "byte ratio that separates this from a model gateway, because on "
-            "the wire there is nothing to separate."
+            "the wire there is nothing to separate. It fetches from S3 and "
+            "writes back, so it is not separable by destination count either."
         ),
     )
-    _stream(w, rng, uniform_arrivals(rng, start, end, 12.0), THUMBNAILER,
-            req=1_800_000, resp=280_000, spread=0.45)
+    for i, at in enumerate(uniform_arrivals(rng, start, end, 12.0)):
+        # Fetch, transform, store. The loop is what makes this hard: a
+        # workload reaching three destinations in one window is the shape an
+        # agent's tool loop has, and this is a for-loop over a queue.
+        w.calls.append(Call(
+            at=at, kind=CallKind.TOOL, endpoint=ARTIFACTS_S3,
+            req_bytes=900, resp_bytes=int(1_800_000 * (0.6 + 0.8 * rng.random())),
+            step=i,
+        ))
+        w.calls.append(Call(
+            at=at + timedelta(milliseconds=180 + 400 * rng.random()),
+            kind=CallKind.TOOL, endpoint=THUMBNAILER,
+            req_bytes=int(1_800_000 * (0.55 + 0.9 * rng.random())),
+            resp_bytes=int(280_000 * (0.7 + 0.6 * rng.random())), step=i,
+        ))
+        w.calls.append(Call(
+            at=at + timedelta(milliseconds=900 + 600 * rng.random()),
+            kind=CallKind.TOOL, endpoint=ARTIFACTS_S3,
+            req_bytes=int(280_000 * (0.7 + 0.6 * rng.random())),
+            resp_bytes=420, step=i,
+        ))
     return w
 
 
@@ -211,9 +237,26 @@ def document_ingest(rng: Random, start: datetime, end: datetime) -> Workload:
             "THE OTHER HARD NEGATIVE, and the one most likely to be mistaken "
             "for the real thing: PDFs go to the extractor, text comes back. "
             "Nine to one, which is squarely inside the band an agent's "
-            "transcript traffic occupies."
+            "transcript traffic occupies — and it fetches, transforms and "
+            "stores, so it reaches three destinations in a window like a tool "
+            "loop does."
         ),
     )
-    _stream(w, rng, uniform_arrivals(rng, start, end, 8.0), DOC_EXTRACT,
-            req=1_200_000, resp=130_000, spread=0.55)
+    for i, at in enumerate(uniform_arrivals(rng, start, end, 8.0)):
+        pdf = int(1_200_000 * (0.45 + 1.1 * rng.random()))
+        text = int(130_000 * (0.6 + 0.8 * rng.random()))
+        w.calls.append(Call(
+            at=at, kind=CallKind.TOOL, endpoint=ARTIFACTS_S3,
+            req_bytes=850, resp_bytes=pdf, step=i,
+        ))
+        w.calls.append(Call(
+            at=at + timedelta(milliseconds=240 + 500 * rng.random()),
+            kind=CallKind.TOOL, endpoint=DOC_EXTRACT,
+            req_bytes=pdf, resp_bytes=text, step=i,
+        ))
+        w.calls.append(Call(
+            at=at + timedelta(milliseconds=1400 + 900 * rng.random()),
+            kind=CallKind.TOOL, endpoint=ORDERS_DB,
+            req_bytes=text, resp_bytes=260, step=i,
+        ))
     return w
