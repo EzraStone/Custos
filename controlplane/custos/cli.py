@@ -456,9 +456,12 @@ def cmd_gateways(args: argparse.Namespace) -> int:
     which is why this reads as a list of things to ask about rather than a list
     of things we concluded.
     """
-    found = _open_questions(open_database(args.db), args.account)
+    conn = open_database(args.db)
+    found = _open_questions(conn, args.account)
+    declined = _declined(conn, args.account)
     if not found:
         print("Nothing looks like an undeclared model gateway in the last scan.")
+        _print_declined(declined)
         return 0
 
     print("These addresses behave like model endpoints. If one is yours:")
@@ -468,7 +471,35 @@ def cmd_gateways(args: argparse.Namespace) -> int:
         print(f"  {c.question}")
         who = ", ".join(p.split("/")[-1] for p in c.blind_principals)
         print(f"      reached by: {who}")
+    _print_declined(declined)
     return 0
+
+
+def _declined(conn, account_id: str) -> int:
+    """Destinations with this shape the scan did not ask about."""
+    from .store.scans import ScanStore
+
+    return sum(s.bulk_senders for s in ScanStore(conn).latest_scan_per_region(account_id))
+
+
+def _print_declined(count: int) -> None:
+    """Say what was ruled out, because "nothing" above means two things.
+
+    An account with nine destinations of this shape and a rule that excluded
+    all nine prints the same line as an account with none, and the second is a
+    much more reassuring claim than the first.
+    """
+    if count <= 0:
+        return
+    print()
+    thing = "destination" if count == 1 else "destinations"
+    reach = "reaching it talks" if count == 1 else "reaching them talk"
+    print(
+        f"{count} other {thing} had this shape and {'was' if count == 1 else 'were'} "
+        f"not asked about: the {'workload' if count == 1 else 'workloads'} {reach} "
+        "to nothing else, which is what a log collector or a backup service "
+        "looks like."
+    )
 
 
 def cmd_grant(args: argparse.Namespace) -> int:

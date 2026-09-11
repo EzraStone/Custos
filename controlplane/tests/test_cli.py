@@ -628,3 +628,44 @@ def test_endpoints_says_where_each_declaration_is_in_force(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "us-east-1" in out
     assert "everywhere" in out
+
+
+def test_gateways_says_what_it_declined_to_ask_about(tmp_path, capsys):
+    """"Nothing looks like an undeclared model gateway" means two different
+    things depending on whether nine were ruled out, and the reassuring reading
+    is the wrong one on an account that has a gateway we filtered away."""
+    from custos.store.db import open_database
+    from custos.store.scans import ScanStore
+
+    db = tmp_path / "c.db"
+    conn = open_database(str(db))
+    scans = ScanStore(conn)
+    batch = scans.record_batch(
+        account_id="1", region="us-east-1",
+        window_start=datetime(2026, 8, 10, tzinfo=UTC),
+        window_end=datetime(2026, 8, 10, 1, tzinfo=UTC),
+        collector="t", received_at=datetime(2026, 8, 10, 1, tzinfo=UTC),
+        flow_records=1, requests=0, have_alb_logs=False,
+    )
+    scans.record_scan(
+        batch_id=batch.id, account_id="1",
+        started_at=datetime(2026, 8, 10, tzinfo=UTC), principals_seen=1,
+        agents_found=0, review_candidates=0, coverage=1.0, truncated=False,
+        catalogue_revision="r", regions=("us-east-1",), bulk_senders=9,
+    )
+    conn.commit()
+
+    assert main(["--db", str(db), "gateways", "--account", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "Nothing looks like an undeclared model gateway" in out
+    assert "9 other destinations had this shape" in out
+    assert "log collector or a backup service" in out
+
+
+def test_gateways_stays_quiet_when_nothing_was_ruled_out(tmp_path, capsys):
+    from custos.store.db import open_database
+
+    db = tmp_path / "q.db"
+    open_database(str(db)).commit()
+    assert main(["--db", str(db), "gateways", "--account", "1"]) == 0
+    assert "had this shape" not in capsys.readouterr().out
