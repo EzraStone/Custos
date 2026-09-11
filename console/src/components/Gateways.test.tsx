@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { GatewayCandidate } from "../api/types";
-import { Gateways, questionKey } from "./Gateways";
+import { questionKey } from "../questions";
+import { Gateways } from "./Gateways";
 
 function candidate(overrides: Partial<GatewayCandidate> = {}): GatewayCandidate {
   return {

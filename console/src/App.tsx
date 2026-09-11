@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError, Client } from "./api/client";
+import { questionKey } from "./questions";
 import {
   byConsequence,
   type Agent,
@@ -16,7 +17,7 @@ import { AccountPicker } from "./components/AccountPicker";
 import { Changes } from "./components/Changes";
 import { Filters } from "./components/Filters";
 import { Finding } from "./components/Finding";
-import { Gateways, questionKey } from "./components/Gateways";
+import { Gateways } from "./components/Gateways";
 import { GrantDialog } from "./components/GrantDialog";
 import { Reviews } from "./components/Reviews";
 import { Scans } from "./components/Scans";
