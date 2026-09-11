@@ -29,6 +29,45 @@ this system hides an agent, and a hidden agent is a gap somebody can be told
 about. This one invents them, in a document whose whole value is that a
 security team believes it.
 
+### Everything with a memory was comparing two regions against each other
+
+Making a batch one region's window fixed collection and left four
+account-wide comparisons reading across regions as though they were one
+stream. Each is a different way of telling a customer their workloads changed
+when what changed was which region we last looked at.
+
+**Reach was replaced, not merged.** A scan of eu-west-1 overwrote the tools
+observed in us-east-1, so an agent appeared to stop touching a billing API the
+moment another region was collected. Reach is now kept per region and replaced
+per region, unioned into the flat lists every reader already uses — the same
+treatment spend got. Credentials and blast radius stay flat: they come from
+IAM, and a role that can delete a bucket can delete it from anywhere it runs.
+
+**Behavioural baselines mixed regions.** An agent's behaviour in us-east-1 is a
+trend; its observations in two regions interleaved are two trends sampled
+alternately. The worst case is the first scan of a second region, where every
+internal service that region uses arrives as "reached for the first time in 30
+scans" — a finding about a change in our own coverage, delivered to a
+workload's owner as a finding about their workload. The same mixing widens the
+volume baseline's standard deviation, which suppresses real spikes rather than
+inventing them. Wrong in both directions.
+
+**The scan diff compared each region against the other.** The comparison
+baseline was whichever scan came before, which on a two-region account is the
+other region: every workload in one arrived as APPEARED and every workload in
+the other as DISAPPEARED, alternately, every week, for ever. It is the section
+a customer reads first.
+
+**Delivery suppressed the second region's drift as a repeat of the first.**
+Findings are fingerprinted on account, principal, severity and title, and every
+drift finding carries the same title. Two questions about two deployments
+hashed to one, and the second was dropped for a fortnight.
+
+Observations carry their region now, baselines and diffs are built per region,
+findings name the region they are about on every surface, and the region is
+part of a finding's fingerprint — appended only when there is one, so nothing
+that never had a region is re-delivered for the sake of a hash change.
+
 ### The gateway questions had no number, and it turned out to be zero
 
 **The detector that interrupts a human had never been scored.** It asks a

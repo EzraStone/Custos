@@ -29,7 +29,7 @@ custos diff                 →  what changed since last week
 | Attribution to a team | Works, four methods with stated confidence |
 | Persistent register with SEC-17 state machine | Works |
 | Scan comparison | Works |
-| Behavioural baselines and drift | Works |
+| Behavioural baselines and drift | Works, per region. A new region does not read as drift |
 | HTTP API, container image, retention | Works |
 | Delivery to Slack and SIEM | Works, with per-channel suppression |
 | Scheduled collection | Works, cursor-tracked, no gaps on restart |
@@ -177,11 +177,17 @@ it covered, and spend is summed across the regions an agent runs in — kept
 per region, so re-scanning one replaces that region's figure instead of the
 whole total.
 
-What is not fixed is reach: the tools and data stores beside an agent are the
-ones the scan that last saw it observed, in one region. Every surface that
-names more than one region says so rather than presenting a fraction as a
-total. Doing better needs the latest observation per region rather than a
-merged blob.
+Reach is fixed too, along with three other things that were comparing one
+region against another: an agent's tools and data stores are kept per region
+and unioned, behavioural baselines are built per region, the scan diff compares
+a region against its own previous scan, and a drift finding's fingerprint
+includes its region so a question about eu-west-1 is not suppressed as a repeat
+of one about us-east-1.
+
+What is left is the limit of the data rather than of the code. A region where
+a scan resolved no destinations at all is marked as such rather than shown as a
+region the agent touches nothing in, because those look identical in a union
+and the first is usually a flow log with no port field.
 
 **The IAM policy asked for thirteen permissions nothing used, and I nearly
 kept them.** The same test that found the missing S3 grant flagged thirteen
