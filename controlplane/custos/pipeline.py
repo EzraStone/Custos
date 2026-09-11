@@ -317,6 +317,10 @@ def ingest(
             # report a customer opens later rather than only the one the CLI
             # printed on the day.
             ipv6_destinations=ipv6_destinations(scan_input),
+            # Records AWS dropped before we read them. It changes what a
+            # quiet account means, and it drives the banner printed above the
+            # findings rather than below them.
+            skipped_records=batch.collection.records_skipped,
         )
 
         # Questions to put to the customer, from this scan's traffic. Recorded

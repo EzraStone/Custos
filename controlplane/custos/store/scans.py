@@ -50,6 +50,14 @@ class ScanRecord:
     direction_undecided: int = 0
     read_errors: int = 0
     regions: tuple[str, ...] = ()
+    skipped_records: int = 0
+    """Records AWS dropped before we read them, from its own NODATA and
+    SKIPDATA markers.
+
+    The difference between "this account is quiet" and "we were handed less
+    than happened". It feeds the incomplete-coverage banner, which is the one
+    caveat printed above the findings rather than below them."""
+
     ipv6_destinations: int = 0
     """Public IPv6 destinations this scan's traffic reached.
 
@@ -102,6 +110,7 @@ def _scan(row: sqlite3.Row) -> ScanRecord:
         regions=tuple(loads(row["regions"])),
         bulk_senders=row["bulk_senders"],
         ipv6_destinations=row["ipv6_destinations"],
+        skipped_records=row["skipped_records"],
     )
 
 
@@ -182,18 +191,20 @@ class ScanStore:
         regions: tuple[str, ...] = (),
         bulk_senders: int = 0,
         ipv6_destinations: int = 0,
+        skipped_records: int = 0,
     ) -> int:
         cursor = self.conn.execute(
             "INSERT INTO scans (batch_id, account_id, started_at, principals_seen, "
             "agents_found, review_candidates, coverage, truncated, catalogue_revision, "
             "scope_named, scope_total, missing_fields, direction_undecided, "
-            "read_errors, regions, bulk_senders, ipv6_destinations) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "read_errors, regions, bulk_senders, ipv6_destinations, "
+            "skipped_records) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (batch_id, account_id, iso(started_at), principals_seen, agents_found,
              review_candidates, coverage, int(truncated), catalogue_revision,
              scope_named, scope_total, dumps(list(missing_fields)),
              direction_undecided, read_errors, dumps(list(regions)),
-             bulk_senders, ipv6_destinations),
+             bulk_senders, ipv6_destinations, skipped_records),
         )
         return cursor.lastrowid
 

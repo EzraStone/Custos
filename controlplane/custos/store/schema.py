@@ -22,7 +22,7 @@ agent's apparent spend and reach.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
 
 # Columns added after a table was first written, applied by ALTER on databases
 # that already exist. The schema below is applied with CREATE TABLE IF NOT
@@ -52,6 +52,10 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     # the disclosure has to survive into the report a customer opens later,
     # not only the one the CLI printed on the day.
     ("scans", "ipv6_destinations", "INTEGER NOT NULL DEFAULT 0"),
+    # Records AWS itself dropped before we read them, from its own NODATA and
+    # SKIPDATA markers. It is the difference between "your account is quiet"
+    # and "we were handed less than happened".
+    ("scans", "skipped_records", "INTEGER NOT NULL DEFAULT 0"),
     # Regions this agent has been seen in. Accumulated across scans, because a
     # scan covers one region and a role running in three is discovered three
     # times.
@@ -123,6 +127,7 @@ CREATE TABLE IF NOT EXISTS scans (
     principals_seen     INTEGER NOT NULL DEFAULT 0,
     bulk_senders        INTEGER NOT NULL DEFAULT 0,
     ipv6_destinations   INTEGER NOT NULL DEFAULT 0,
+    skipped_records     INTEGER NOT NULL DEFAULT 0,
     agents_found        INTEGER NOT NULL DEFAULT 0,
     review_candidates   INTEGER NOT NULL DEFAULT 0,
     coverage            REAL    NOT NULL DEFAULT 0.0,

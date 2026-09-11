@@ -835,6 +835,7 @@ def create_app(
             # to — the served report was silent about it entirely, so the one
             # disclosure a customer keeps was the one that did not carry it.
             ipv6_destinations=sum(s.ipv6_destinations for s in per_region),
+            skipped_records=sum(s.skipped_records for s in per_region),
             # Every region this account has been collected in, not the
             # latest scan's. The register below holds agents from all of
             # them; labelling it with one scan's region tells a reader a
