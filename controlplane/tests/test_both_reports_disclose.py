@@ -120,3 +120,24 @@ def test_both_reports_are_rendered_with_the_same_sections():
     assert not (served - cli - RENDER_ONLY_IN_SERVED), (
         f"the CLI report has no {sorted(served - cli - RENDER_ONLY_IN_SERVED)}"
     )
+
+
+def test_every_section_the_report_can_render_is_passed_by_someone():
+    """A parameter on `render` that neither path fills is a section that never
+    appears anywhere. It is not dead code — the function still renders it, for
+    a caller that does not exist — so nothing flags it and reading the module
+    suggests the report has a section it has never had."""
+    import inspect
+
+    from custos.report import render
+
+    optional = {
+        name
+        for name, p in inspect.signature(render).parameters.items()
+        if p.default is not inspect.Parameter.empty
+    }
+    filled = (
+        _kwargs(ROOT / "cli.py", *_CLI_RENDER)
+        | _kwargs(ROOT / "api" / "app.py", *_SERVED_RENDER)
+    )
+    assert optional <= filled, f"nothing ever passes {sorted(optional - filled)}"
