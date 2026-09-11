@@ -129,3 +129,55 @@ def test_collecting_one_more_region_changes_nothing_that_is_not_about_it(two_reg
     after = two_regions.get("/v1/gateway-candidates", headers=AUTH).json()["candidates"]
     west_after = [c for c in after if c["region"] == "eu-west-1"]
     assert [c["address"] for c in west_after] == [c["address"] for c in west_before]
+
+
+def test_pruning_a_regions_batches_does_not_unsay_that_it_was_covered(two_regions):
+    """Batches and scans are pruned after ninety days; the register is not,
+    because an agent discovered last year is still running.
+
+    So a report rendered after a prune lists agents from a region whose
+    batches are gone. A coverage claim built from batches alone then says that
+    region was never covered — which is the exact false statement the region
+    label exists to prevent, arriving on a timer rather than on a bug.
+    """
+    from custos.register.model import Agent, Identity, Provenance, Source, Status
+    from custos.register.store import agent_id
+    from custos.store.agents import AgentStore
+
+    db = two_regions.app.state.db
+    # An agent discovered in eu-west-1, of the kind that is still running a
+    # year later and long after its batches have gone.
+    principal = f"arn:aws:iam::{ACCOUNT}:role/west-agent"
+    agent = Agent(
+        id=agent_id(ACCOUNT, principal), first_seen=W0, last_seen=W0,
+        status=Status.DISCOVERED,
+        provenance=Provenance(source=Source.DISCOVERED, confidence=0.99,
+                              observed_principal=principal, evidence=["bytes"]),
+        identity=Identity(principal=principal, account_id=ACCOUNT),
+    )
+    agent.regions = {"eu-west-1"}
+    AgentStore(db).upsert(agent)
+    db.commit()
+
+    before = two_regions.get("/v1/report", headers=AUTH).text
+    assert "eu-west-1, us-east-1 and no other region" in before
+
+    db.execute("DELETE FROM gateway_candidates WHERE scan_id IN "
+               "(SELECT s.id FROM scans s JOIN batches b ON b.id = s.batch_id "
+               " WHERE b.region = 'eu-west-1')")
+    db.execute("DELETE FROM review_candidates WHERE scan_id IN "
+               "(SELECT s.id FROM scans s JOIN batches b ON b.id = s.batch_id "
+               " WHERE b.region = 'eu-west-1')")
+    db.execute("DELETE FROM observations WHERE scan_id IN "
+               "(SELECT s.id FROM scans s JOIN batches b ON b.id = s.batch_id "
+               " WHERE b.region = 'eu-west-1')")
+    db.execute("DELETE FROM scans WHERE batch_id IN "
+               "(SELECT id FROM batches WHERE region = 'eu-west-1')")
+    db.execute("DELETE FROM batches WHERE region = 'eu-west-1'")
+    db.commit()
+
+    after = two_regions.get("/v1/report", headers=AUTH).text
+    assert "west-agent" in after, "the register still lists that region's agent"
+    assert "eu-west-1, us-east-1 and no other region" in after, (
+        "the report unsaid a region whose agents it is still listing"
+    )

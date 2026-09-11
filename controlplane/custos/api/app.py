@@ -415,7 +415,14 @@ def create_app(
                 # question a fleet view has to answer is whether an account is
                 # covered, and one region of a three-region account looks
                 # identical to a clean account from every other column here.
-                "regions": scans.regions_scanned(account_id),
+                # Collected in, or holding a register entry from. Batches are
+                # pruned at ninety days and the register is not, so an account
+                # whose eu-west-1 agents are still listed must not be shown as
+                # a one-region account.
+                "regions": sorted(
+                    set(scans.regions_scanned(account_id))
+                    | set(agents.regions_for(account_id))
+                ),
                 "reviews": len(reviews.latest_for(account_id)),
                 "gateway_questions": len(open_questions),
                 "rates_verified": rates.rates_for(account_id).verified,
@@ -840,7 +847,9 @@ def create_app(
             # latest scan's. The register below holds agents from all of
             # them; labelling it with one scan's region tells a reader a
             # region they can see agents from was never covered.
-            regions=tuple(scans.regions_scanned(account_id)),
+            regions=tuple(sorted(
+                set(scans.regions_scanned(account_id)) | set(agents.regions_for(account_id))
+            )),
         ) if latest else None
 
         diff = ScanDiff()

@@ -320,6 +320,25 @@ class AgentStore:
             )
         ]
 
+    def regions_for(self, account_id: str) -> list[str]:
+        """Every region this account's register has an agent from.
+
+        Not the same question as which regions have been collected, and it
+        outlives the answer to that one. Batches and scans are pruned after
+        ninety days; the register is not, because an agent discovered last
+        year is still running. So a report rendered after a prune lists agents
+        from a region whose batches are gone, and a coverage claim built from
+        batches alone would say that region was never covered — the exact
+        false statement the region label exists to prevent, arriving on a
+        timer.
+        """
+        found: set[str] = set()
+        for row in self.conn.execute(
+            "SELECT regions FROM agents WHERE account_id = ?", (account_id,)
+        ):
+            found |= set(loads(row["regions"]))
+        return sorted(r for r in found if r)
+
     def list_for_account(self, account_id: str, status: Status | None = None) -> list[Agent]:
         if status is None:
             rows = self.conn.execute(
