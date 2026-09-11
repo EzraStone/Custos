@@ -192,20 +192,30 @@ class CandidateStore:
         )
 
     def latest_for(self, account_id: str) -> list[dict]:
-        """Candidates from this account's most recent scan that had any.
+        """Candidates from the most recent scan of each region that had any.
 
-        Not from the most recent scan outright. A gateway that was quiet during
-        one window is still a gateway, and an empty list because nothing
-        happened to use it for an hour reads as "we looked and there is
-        nothing" — which is a different and much more reassuring claim.
+        Not from the most recent scan outright, for two reasons that compound.
+
+        A gateway that was quiet during one window is still a gateway, and an
+        empty list because nothing happened to use it for an hour reads as "we
+        looked and there is nothing" — a different and much more reassuring
+        claim than the truth.
+
+        And a scan is one region's window. Taking the highest scan id across
+        the account means the questions about eu-west-1 disappear the moment
+        us-east-1 is collected, and come back when eu-west-1 is — so a customer
+        running one collector per region is shown half their open questions,
+        alternating, and the half they answered last week is the half they see
+        again this week.
         """
-        row = self.conn.execute(
-            "SELECT MAX(scan_id) AS scan_id FROM gateway_candidates WHERE account_id = ?",
+        rows = self.conn.execute(
+            "SELECT c.* FROM gateway_candidates c WHERE c.account_id = ? "
+            "AND c.scan_id = ("
+            "  SELECT MAX(c2.scan_id) FROM gateway_candidates c2 "
+            "  WHERE c2.account_id = c.account_id AND c2.region = c.region"
+            ") ORDER BY c.region, c.egress DESC",
             (account_id,),
-        ).fetchone()
-        if row is None or row["scan_id"] is None:
-            return []
-
+        )
         return [
             {
                 "address": r["address"],
@@ -218,10 +228,7 @@ class CandidateStore:
                 "region": r["region"],
                 "scan_id": r["scan_id"],
             }
-            for r in self.conn.execute(
-                "SELECT * FROM gateway_candidates WHERE scan_id = ? ORDER BY egress DESC",
-                (row["scan_id"],),
-            )
+            for r in rows
         ]
 
 

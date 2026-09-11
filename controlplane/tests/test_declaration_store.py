@@ -214,3 +214,80 @@ def test_asking_without_a_region_returns_only_the_everywhere_ones(store):
         ACCOUNT, "10.0.7.0/24", "range", "ezra@custos.dev", region="us-east-1", at=AT
     )
     assert store.declared_for(ACCOUNT).empty
+
+
+# --- questions from every region ----------------------------------------------
+
+def _candidate(address, region):
+    from custos.gateway import Candidate
+
+    return Candidate(
+        address=address, egress=5_000_000, ingress=1_000_000,
+        principals=("role/a",), blind_principals=("role/a",), interleave=0.9,
+    ), region
+
+
+@pytest.fixture
+def candidates():
+    """A candidate store over a database with three real scans in it.
+
+    Real scans because gateway_candidates has a foreign key onto them and is
+    pruned with them: a question about traffic from three months ago is not a
+    question anybody should still be answering.
+    """
+    from datetime import timedelta
+
+    from custos.store.declarations import CandidateStore
+    from custos.store.scans import ScanStore
+
+    conn = open_database()
+    scans = ScanStore(conn)
+    for i, region in enumerate(("us-east-1", "eu-west-1", "us-east-1")):
+        batch = scans.record_batch(
+            account_id=ACCOUNT, region=region,
+            window_start=AT + timedelta(hours=i), window_end=AT + timedelta(hours=i + 1),
+            collector="t", received_at=AT + timedelta(hours=i + 1),
+            flow_records=1, requests=0, have_alb_logs=True,
+        )
+        scans.record_scan(
+            batch_id=batch.id, account_id=ACCOUNT, started_at=AT + timedelta(hours=i),
+            principals_seen=1, agents_found=0, review_candidates=0, coverage=1.0,
+            truncated=False, catalogue_revision="r", regions=(region,),
+        )
+    return CandidateStore(conn)
+
+
+def test_every_regions_open_questions_are_kept(candidates):
+    """A scan is one region's window. Taking the highest scan id across the
+    account means the questions about eu-west-1 disappear the moment us-east-1
+    is collected — so a customer running one collector per region sees half
+    their open questions, alternating."""
+    store = candidates
+    east, _ = _candidate("10.0.7.40", "us-east-1")
+    west, _ = _candidate("10.1.7.40", "eu-west-1")
+    store.record(1, ACCOUNT, [east], region="us-east-1")
+    store.record(2, ACCOUNT, [west], region="eu-west-1")
+    # A third scan, of us-east-1 again, with a fresher question.
+    store.record(3, ACCOUNT, [east], region="us-east-1")
+
+    asked = store.latest_for(ACCOUNT)
+    assert {(c["address"], c["region"], c["scan_id"]) for c in asked} == {
+        ("10.1.7.40", "eu-west-1", 2),
+        ("10.0.7.40", "us-east-1", 3),
+    }
+
+
+def test_a_regions_older_questions_are_not_shown_beside_its_newer_ones(candidates):
+    """Within a region the newest scan replaces the last, or an address a
+    customer answered last week comes back beside this week's numbers."""
+    store = candidates
+    old, _ = _candidate("10.0.7.40", "us-east-1")
+    new, _ = _candidate("10.0.7.99", "us-east-1")
+    store.record(1, ACCOUNT, [old], region="us-east-1")
+    store.record(2, ACCOUNT, [new], region="us-east-1")
+
+    assert [c["address"] for c in store.latest_for(ACCOUNT)] == ["10.0.7.99"]
+
+
+def test_an_account_with_no_questions_has_none(candidates):
+    assert candidates.latest_for(ACCOUNT) == []
