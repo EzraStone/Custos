@@ -404,14 +404,53 @@ class ReviewStore:
         )
 
     def latest_for(self, account_id: str) -> list[dict]:
-        """This account's most recent scan's review candidates."""
-        row = self.conn.execute(
-            "SELECT MAX(scan_id) AS scan_id FROM review_candidates WHERE account_id = ?",
-            (account_id,),
-        ).fetchone()
-        if row is None or row["scan_id"] is None:
-            return []
-        return self._for_scan(row["scan_id"])
+        """The most recent review candidates from each region of this account.
+
+        Not the highest scan id outright. A scan is one region's window, so
+        that would show the maybes from us-east-1, then the maybes from
+        eu-west-1, then us-east-1 again — and a workload the classifier is
+        permanently unsure about would look as though it resolved itself every
+        other week.
+
+        A principal appearing in two regions is one row, at its highest
+        confidence. The review band asks "is this principal an agent?", and an
+        IAM role is account-wide: the same question twice is not two questions.
+        """
+        rows = [
+            dict(r)
+            for r in self.conn.execute(
+                "SELECT r.* FROM review_candidates r "
+                "JOIN scans s ON s.id = r.scan_id "
+                "JOIN batches b ON b.id = s.batch_id "
+                "WHERE r.account_id = ? AND r.scan_id = ("
+                "  SELECT MAX(r2.scan_id) FROM review_candidates r2 "
+                "  JOIN scans s2 ON s2.id = r2.scan_id "
+                "  JOIN batches b2 ON b2.id = s2.batch_id "
+                "  WHERE r2.account_id = r.account_id AND b2.region = b.region"
+                ")",
+                (account_id,),
+            )
+        ]
+
+        best: dict[str, dict] = {}
+        for r in rows:
+            seen = best.get(r["principal"])
+            if seen is None or r["confidence"] > seen["confidence"]:
+                best[r["principal"]] = r
+
+        return sorted(
+            (
+                {
+                    "principal": r["principal"],
+                    "confidence": r["confidence"],
+                    "evidence": loads(r["evidence"]),
+                    "unavailable": loads(r["unavailable"]),
+                    "scan_id": r["scan_id"],
+                }
+                for r in best.values()
+            ),
+            key=lambda r: (-r["confidence"], r["principal"]),
+        )
 
     def _for_scan(self, scan_id: int) -> list[dict]:
         return [

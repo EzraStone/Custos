@@ -1180,3 +1180,53 @@ def test_the_register_sends_what_each_region_resolved(client):
         assert set(row["region_reach"]) <= set(row["regions"])
         for seen in row["region_reach"].values():
             assert set(seen) == {"tools", "data_stores"}
+
+
+# --- maybes from every region -------------------------------------------------
+
+def _seed_review_in(client, region, principal, confidence=0.5):
+    from types import SimpleNamespace
+
+    from custos.store.scans import ReviewStore, ScanStore
+
+    client.post(
+        "/v1/batches",
+        json=batch(start=_seed_review.at) | {"region": region},
+        headers=AUTH,
+    )
+    _seed_review.at += timedelta(hours=1)
+    db = client.app.state.db
+    scan_id = ScanStore(db).latest_scan(ACCOUNT).id
+    ReviewStore(db).record(scan_id, ACCOUNT, [
+        SimpleNamespace(principal=principal, confidence=confidence,
+                        evidence=["odd bursts"], unavailable=[]),
+    ])
+    db.commit()
+
+
+def test_the_maybes_from_every_region_are_kept(client):
+    """A scan is one region's window. Taking the highest scan id showed the
+    maybes from us-east-1, then the maybes from eu-west-1, then us-east-1
+    again — so a workload the classifier is permanently unsure about looked as
+    though it resolved itself every other week."""
+    _seed_review_in(client, "us-east-1", "arn:aws:iam::1:role/east")
+    _seed_review_in(client, "eu-west-1", "arn:aws:iam::1:role/west")
+
+    reviews = client.get("/v1/reviews", headers=AUTH).json()["reviews"]
+    assert {r["principal"] for r in reviews} == {
+        "arn:aws:iam::1:role/east", "arn:aws:iam::1:role/west",
+    }
+
+
+def test_one_principal_uncertain_in_two_regions_is_one_question(client):
+    """An IAM role is account-wide, and "is this principal an agent?" asked
+    twice is not two questions. Shown at its highest confidence, because that
+    is the reading that most deserves a person's attention."""
+    both = "arn:aws:iam::1:role/everywhere"
+    _seed_review_in(client, "us-east-1", both, confidence=0.41)
+    _seed_review_in(client, "eu-west-1", both, confidence=0.62)
+
+    reviews = client.get("/v1/reviews", headers=AUTH).json()["reviews"]
+    rows = [r for r in reviews if r["principal"] == both]
+    assert len(rows) == 1
+    assert rows[0]["confidence"] == 0.62
