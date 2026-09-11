@@ -8,9 +8,9 @@ make check
 
 CI runs exactly these targets. If `make check` passes, CI passes.
 
-## The eight invariants
+## The nine invariants
 
-`docs/SECURITY-INVARIANTS.md` lists SEC-16 through SEC-23. Each one names the
+`docs/SECURITY-INVARIANTS.md` lists SEC-16 through SEC-24. Each one names the
 test that enforces it.
 
 **A change that removes or weakens one of those tests is a change to the
@@ -106,6 +106,37 @@ against and discovers at runtime.
 
 Add one whenever you notice two places that have to agree and nothing making
 them.
+
+## An account-scoped answer from a per-region row
+
+The most expensive class of bug in this codebase so far, and it has been
+written six separate times.
+
+A batch is one region's window. Everything a customer sees is about their
+account. Any code that answers an account-wide question by reading the latest
+scan, the highest scan id, or the previous scan is answering from one region,
+and the symptom is always the same: **the answer alternates with whichever
+region was collected last.**
+
+Found and fixed, one at a time, each after the previous one was fixed:
+
+- the report labelled the whole register with the latest scan's region
+- one region's flow log format was described as the account's
+- the incomplete-coverage banner was suppressed by a healthy region
+- reach was replaced rather than merged, so a rescan erased another region's
+- behavioural baselines mixed two regions into one trend
+- the scan diff compared each region against the other
+- gateway questions and review candidates showed one region at a time
+
+Before writing a query that answers something about an account, ask which
+region the row it reads belongs to. If the answer is "whichever came last",
+the query is wrong even when its test passes — because a single-region test
+account, which is every test account, cannot tell the difference.
+
+`tests/test_two_regions_alternate.py` asserts the property directly: two
+regions collected alternately, and nothing the account can see may move when
+another window of one of them arrives. Add to it rather than only fixing the
+instance.
 
 ## Changing the corpus
 

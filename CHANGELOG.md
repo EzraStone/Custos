@@ -29,6 +29,41 @@ this system hides an agent, and a hidden agent is a gap somebody can be told
 about. This one invents them, in a document whose whole value is that a
 security team believes it.
 
+### Half the account, alternating
+
+The same shape again, in the two lists a person is supposed to act on. Gateway
+questions and review candidates were both read as "the most recent scan that
+had any" — and a scan is one region's window.
+
+So a customer running one collector per region saw the questions about
+us-east-1, then the questions about eu-west-1, then us-east-1 again. Never
+both. The set they answered last week was the set that came back this week,
+and the set they had not seen yet was invisible. Same for the review band,
+where a workload the classifier is permanently unsure about looked as though
+it resolved itself every other week.
+
+Both are the surfaces where something we could not decide is handed to a
+person. A list that drops half of itself on an alternating schedule is worse
+than no list, because the absence reads as a decision somebody made.
+
+Both now take the most recent candidate-bearing scan of each region. Within a
+region the newest still replaces the last, or an address somebody answered
+comes back beside last week's numbers. A principal uncertain in two regions is
+one row at its highest confidence: an IAM role is account-wide, and "is this
+principal an agent?" asked twice is not two questions.
+
+Four of these have now been found one at a time, each after the previous was
+fixed, so there is a test for the property rather than for the instances: two
+regions collected alternately, and nothing the account can see may move when
+another window of one of them arrives.
+
+`--check` had a version of it too, in the other direction — it compared the
+regions with flow logs against the single AWS_REGION rather than the
+configured list, and warned a customer about a region they had already told it
+to cover. It also reads one region's records while a collection covers all of
+them, which is a reasonable trade and was a silent one: the report now names
+the region its gateway, destination-name and IPv6 checks actually read.
+
 ### Everything with a memory was comparing two regions against each other
 
 Making a batch one region's window fixed collection and left four
