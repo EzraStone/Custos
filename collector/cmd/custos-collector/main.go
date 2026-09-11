@@ -395,6 +395,9 @@ func preflightCheck(ctx context.Context, cfg *config.Config, stdout *os.File) er
 		AccessLogs:   cfg.AccessLogs,
 		HaveEndpoint: cfg.Endpoint != "",
 		HaveToken:    cfg.Token != "",
+		// Every region a collection would cover, so "other regions" does not
+		// warn about one the operator has already configured.
+		Covering: cfg.RegionList(),
 	}
 	// Reported even when credentials are absent: the format is the one thing
 	// preflight can check about the log without being able to read it.

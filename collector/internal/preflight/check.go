@@ -108,6 +108,13 @@ type Config struct {
 	HaveToken     bool
 	ProbeInterval time.Duration
 
+	// Every region this collector is configured to cover. Empty means Region
+	// alone. Separate from Region because Region is also the region the
+	// sampled checks below read from: a run covering three regions still
+	// reads one region's records, and "other regions" must not warn about a
+	// region the operator has already configured.
+	Covering []string
+
 	// Format the flow log is written in. The zero value means Custos's own.
 	Format flowlogs.Format
 }
@@ -164,6 +171,7 @@ func RunWith(
 	checkDestinationNames(ctx, &report, names, records)
 	checkForGateway(&report, records)
 	checkForIPv6(&report, records)
+	checkSampleScope(&report, cfg)
 	return report
 }
 
@@ -194,10 +202,15 @@ func checkRegions(ctx context.Context, r *Report, cfg Config, regions Regions) {
 		return
 	}
 
+	covering := map[string]bool{cfg.Region: true}
+	for _, name := range cfg.Covering {
+		covering[name] = true
+	}
+
 	configured := ingest.Configured(found)
 	var elsewhere []string
 	for _, name := range configured {
-		if name != cfg.Region {
+		if !covering[name] {
 			elsewhere = append(elsewhere, name)
 		}
 	}
@@ -211,6 +224,12 @@ func checkRegions(ctx context.Context, r *Report, cfg Config, regions Regions) {
 	}
 
 	if len(elsewhere) == 0 {
+		if len(covering) > 1 {
+			r.add("other regions", Pass,
+				fmt.Sprintf("every region with flow logs is covered (%s)",
+					strings.Join(sortedKeys(covering), ", ")), "")
+			return
+		}
 		r.add("other regions", Pass,
 			fmt.Sprintf("%s is the only region with flow logs", cfg.Region), "")
 		return
@@ -662,4 +681,47 @@ func hasModelTraffic(records []wire.FlowRecord) bool {
 		}
 	}
 	return false
+}
+
+// checkSampleScope says which region the three checks above actually read.
+//
+// A collection covers every configured region. Preflight reads one - the
+// source is built for cfg.Region, and sampling every region would be one
+// CloudWatch read per region before the operator has agreed to anything.
+//
+// That is a reasonable trade and a silent one. "Possible model gateway: none"
+// over a three-region account is the same sentence whether we looked at three
+// regions or at one of them, and it is the sentence a customer takes away.
+// So the report says which region it is about.
+func checkSampleScope(r *Report, cfg Config) {
+	if len(cfg.Covering) < 2 {
+		return
+	}
+	var elsewhere []string
+	for _, name := range cfg.Covering {
+		if name != cfg.Region {
+			elsewhere = append(elsewhere, name)
+		}
+	}
+	if len(elsewhere) == 0 {
+		return
+	}
+	sort.Strings(elsewhere)
+	r.add("what was sampled", Warn,
+		fmt.Sprintf("traffic from %s only", cfg.Region),
+		fmt.Sprintf("the gateway, destination name and IPv6 checks above read "+
+			"%s; %s are collected by a scan but were not sampled here, so "+
+			"those three results describe one region of this account",
+			cfg.Region, strings.Join(elsewhere, ", ")))
+}
+
+// sortedKeys is the set as a stable list, so a report does not reorder itself
+// between runs on the same configuration.
+func sortedKeys(set map[string]bool) []string {
+	out := make([]string, 0, len(set))
+	for name := range set {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
 }

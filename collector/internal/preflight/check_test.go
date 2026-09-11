@@ -847,3 +847,61 @@ func TestTheRemedySaysWhatMadeItASuspect(t *testing.T) {
 		t.Fatalf("remedy does not say what made it a suspect: %q", result.Remedy)
 	}
 }
+
+// TestTheSampledChecksSayWhichRegionTheyRead: a collection covers every
+// configured region and preflight reads one of them. "Possible model gateway:
+// none" over a three-region account is the same sentence whether we looked at
+// three regions or one, and it is the sentence a customer takes away.
+func TestTheSampledChecksSayWhichRegionTheyRead(t *testing.T) {
+	cfg := good()
+	cfg.Covering = []string{"us-east-1", "eu-west-1", "ap-south-1"}
+	result := find(t, run(cfg, stubFlows{records: modelTraffic(3)}), "what was sampled")
+
+	if result.Status != Warn || !strings.Contains(result.Detail, "us-east-1 only") {
+		t.Fatalf("got %v, detail %q", result.Status, result.Detail)
+	}
+	for _, name := range []string{"ap-south-1", "eu-west-1"} {
+		if !strings.Contains(result.Remedy, name) {
+			t.Fatalf("remedy does not name %s: %q", name, result.Remedy)
+		}
+	}
+}
+
+// TestASingleRegionRunSaysNothingAboutSampling: there is nothing to say. A
+// warning that fires on every single-region account is one nobody reads.
+func TestASingleRegionRunSaysNothingAboutSampling(t *testing.T) {
+	for _, r := range run(good(), stubFlows{records: modelTraffic(3)}).Results {
+		if r.Name == "what was sampled" {
+			t.Fatalf("warned about sampling on a one-region run: %+v", r)
+		}
+	}
+}
+
+// TestAConfiguredRegionIsNotReportedAsUncovered: a customer who set
+// CUSTOS_REGIONS is covering those regions, and warning that they have flow
+// logs is telling them off for doing the thing we asked for.
+func TestAConfiguredRegionIsNotReportedAsUncovered(t *testing.T) {
+	cfg := good()
+	cfg.Covering = []string{"us-east-1", "eu-west-1"}
+	report := RunWith(context.Background(), cfg, stubFlows{records: modelTraffic(1)},
+		nil, twoRegions{})
+
+	result := find(t, report, "other regions")
+	if result.Status != Pass {
+		t.Fatalf("warned about a configured region: %+v", result)
+	}
+	if !strings.Contains(result.Detail, "every region with flow logs is covered") {
+		t.Fatalf("detail does not say they are covered: %q", result.Detail)
+	}
+}
+
+// twoRegions is an account with flow logs in two regions, both of which the
+// operator configured.
+type twoRegions struct{}
+
+func (twoRegions) Run(context.Context) ([]ingest.Region, error) {
+	return []ingest.Region{
+		{Name: "us-east-1", FlowLogs: 1},
+		{Name: "eu-west-1", FlowLogs: 2},
+	}, nil
+}
