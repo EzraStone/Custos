@@ -58,6 +58,9 @@ falls to **0.14**. Quote that number, not the first one, wherever it would be
 doing work.
 
 Reproduce with `make experiment`. CI fails the build if it stops holding.
+`make gates` prints all three measured numbers in one run — the base corpus
+margin, the stress corpus margin, and the gateway detector's question score —
+which is the set anyone asking what is real will want together.
 
 The finding underneath it is the interesting part: the signal the specification
 leads with — burst timing and per-call payload growth — is not implementable,

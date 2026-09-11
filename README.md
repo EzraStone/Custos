@@ -67,6 +67,7 @@ make setup       # virtualenv, both Python packages
 make check       # lint and test everything
 make experiment  # run A0, print the G0 verdict, write a sample scan report
 make questions   # score the gateway detector against the noise corpus
+make gates       # all three measured numbers, in one run
 ```
 
 ## The loop, end to end

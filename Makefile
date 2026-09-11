@@ -15,7 +15,7 @@ VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 .PHONY: help setup check lint test test-py test-go test-console fmt experiment \
         collector console serve scan image prune onboard preflight smoke \
-        screenshots stress questions clean
+        screenshots stress questions gates clean
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -105,6 +105,16 @@ stress: ## Score the classifier against the partially-coupled corpus
 
 questions: ## Score the gateway detector against the noise corpus
 	$(PY) -m custos_a0.cli questions
+
+gates: ## Every measured number this product rests on, in one run
+	@echo "=== G0: the classifier, base corpus ==="
+	@$(PY) -m custos_a0.cli experiment | tail -3
+	@echo
+	@echo "=== the classifier, stress corpus (quote this one) ==="
+	@$(PY) -m custos_a0.cli stress | tail -4
+	@echo
+	@echo "=== the gateway detector, noise corpus ==="
+	@$(PY) -m custos_a0.cli questions | tail -2
 
 clean:
 	rm -rf a0/out collector/bin checkpoint/bin
