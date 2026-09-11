@@ -164,6 +164,50 @@ def cmd_fixtures(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_questions(args: argparse.Namespace) -> int:
+    """Score the gateway detector against a corpus that can produce a bad question.
+
+    Separate from `stress` because it measures a different thing. `stress`
+    scores verdicts; this scores an interruption. The corpus it runs against
+    contains one real self-hosted gateway and seven ordinary internal services
+    that ordinary infrastructure floods — a log collector, a backup service, a
+    thumbnailer — each of which has the traffic shape the detector looks for
+    and none of which is a gateway.
+    """
+    from .questions import run
+
+    result = run(limit=args.limit)
+
+    print("Custos gateway questions — one real gateway, seven ordinary services\n")
+    header = f"{'':4}  {'address':16}{'egress':>12}{'ingress':>11}{'ratio':>9}   answer"
+    print(header)
+    print("-" * len(header))
+    for i, a in enumerate(result.asked, start=1):
+        c = a.candidate
+        cut = "" if i <= result.limit else "   (below the cut, never shown)"
+        print(
+            f"{i:>3}.  {c.address:16}{c.egress / 1e6:>10.1f}MB"
+            f"{c.ingress / 1e6:>9.1f}MB{c.ratio:>8.1f}:1   "
+            f"{'GATEWAY' if a.real else 'no'}{cut}"
+        )
+
+    print()
+    rank = result.rank if result.rank is not None else "never asked"
+    print(
+        f"shown {len(result.shown)}   worth asking "
+        f"{len(result.shown) - result.wasted}   precision {result.precision:.2f}   "
+        f"real gateway at {rank}"
+    )
+    if not result.found:
+        print()
+        print(
+            "The customer never sees the question that matters. Every other "
+            "question is honest and every one of them wastes the attention "
+            "that would have answered it."
+        )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="custos-a0", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -177,6 +221,11 @@ def main(argv: list[str] | None = None) -> int:
                    help="leave the self-hosted gateway undeclared, as a customer "
                         "who has not told us about theirs")
     p.set_defaults(func=cmd_stress)
+
+    p = sub.add_parser("questions", help="score the gateway detector's questions")
+    p.add_argument("--limit", type=int, default=5,
+                   help="how many questions a customer is shown")
+    p.set_defaults(func=cmd_questions)
 
     p = sub.add_parser("report", help="render a scan report from the corpus")
     p.add_argument("--out", default="out")
