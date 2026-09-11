@@ -116,7 +116,22 @@ See `deploy/README.md`. One process, one SQLite file, one token per account.
 
 Whatever the customer already uses — an ECS scheduled task, a Lambda on a rule,
 a cron on a bastion. It needs the role and an endpoint, and it ships one window
-per run.
+per run — one batch per region it covers.
+
+Set `CUSTOS_REGIONS` to every region `--check` reported flow logs in. One
+process covering three regions ships three batches per window and holds its
+cursor if any of them fails, so a region that never shipped is retried rather
+than skipped. Running one process per region works too and is what a customer
+with separate deployment pipelines will do; the control plane keys a batch on
+(account, region, window) either way.
+
+### Upgrading the control plane
+
+Stop it, replace the binary or image, start it. The schema migration runs on
+open: additive columns are applied to the existing tables, and the one
+structural change so far — region becoming part of a batch's key — rebuilds
+that table in a transaction and keeps the row ids, so historical scans still
+resolve. Take a copy of the SQLite file first anyway; it is one file.
 
 ### Hand them the console
 
@@ -171,6 +186,27 @@ Check coverage first. Then check that `CUSTOS_FLOW_LOGS` points at the group
 carrying the traffic — an account can have several and the empty one still
 parses cleanly. Then check the catalogue revision: an agent using a provider we
 do not recognise is invisible.
+
+**The agent count halves and doubles every other week.**
+Two regions taking turns. A scan is one region's window, so an account
+collected in two regions produces two interleaved series of scans — and a
+history read as one list looks like an estate that keeps losing half its
+workloads. `custos history` and the console's scan list show a region column
+when there is more than one; check that first, before looking for the outage.
+
+Everything downstream of a scan is per region for the same reason: an agent's
+reach is the union across regions, its behavioural baseline is built per
+region, the scan diff compares a region against its own previous scan, and the
+gateway questions and review band carry every region's. If something looks
+like it is alternating, that is the bug, and `CONTRIBUTING.md` has the pattern
+under "An account-scoped answer from a per-region row".
+
+**A region is named in the report but nothing was collected from it.**
+Expected after ninety days. Telemetry is pruned on that schedule and the
+register is not, because an agent discovered last year is still running — so
+the report lists its agents and says, in the limitations, that the figures
+beside them come from a scan that no longer exists. Collect that region again
+and the sentence goes away.
 
 **Everything lands in the review band.**
 Almost always missing access logs. The decoupling signal is unavailable, so
