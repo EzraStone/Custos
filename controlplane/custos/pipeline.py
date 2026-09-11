@@ -311,6 +311,12 @@ def ingest(
             # about. Counted at scan time because the per-window destination
             # bytes it is derived from are not kept.
             bulk_senders=len(bulk_senders(result.telemetry)),
+            # Public IPv6 destinations reached. The catalogue is IPv4 only, so
+            # a model endpoint among these makes no finding at all — the same
+            # shape a hidden gateway produces, and it has to survive into the
+            # report a customer opens later rather than only the one the CLI
+            # printed on the day.
+            ipv6_destinations=ipv6_destinations(scan_input),
         )
 
         # Questions to put to the customer, from this scan's traffic. Recorded

@@ -783,3 +783,33 @@ def test_two_regions_do_not_report_each_other_as_appearing_and_disappearing():
     assert [c.kind for c in diff.changes] == [], (
         f"one region's scan invented changes about another's: {diff.changes}"
     )
+
+
+def test_the_served_report_discloses_ipv6_blindness_like_the_cli_one(client):
+    """The model endpoint catalogue is IPv4 only, so an agent reaching a
+    provider over IPv6 produces no finding of any kind — the same shape a
+    hidden gateway produces, and disclosed for the same reason.
+
+    The CLI report says so from the scan it just ran. The served report is the
+    one a customer opens a week later, and it was silent: the count was
+    computed at scan time and never stored, so the disclosure existed only in
+    the document nobody keeps.
+    """
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+
+    payload = build_batch(
+        corpus.build(corpus.CorpusSpec(days=1)), region="us-east-1"
+    ).model_dump(mode="json")
+    payload["account_id"] = ACCOUNT
+    # One public IPv6 destination, which is all it takes for the claim
+    # "no unsanctioned agents found" to be narrower than it reads.
+    flow = dict(payload["flows"][0])
+    flow["dstaddr"] = "2606:4700::6810:85e5"
+    flow["srcaddr"] = "10.0.1.5"
+    flow["direction"] = "egress"
+    payload["flows"].append(flow)
+    assert client.post("/v1/batches", json=payload, headers=AUTH).status_code == 202
+
+    page = client.get("/v1/report", headers=AUTH).text
+    assert "were IPv6" in page, "the served report never mentions the IPv6 blind spot"

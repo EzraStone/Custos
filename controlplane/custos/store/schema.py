@@ -22,7 +22,7 @@ agent's apparent spend and reach.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 # Columns added after a table was first written, applied by ALTER on databases
 # that already exist. The schema below is applied with CREATE TABLE IF NOT
@@ -47,6 +47,11 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     # the account, which the report has to be able to say.
     ("scans", "regions", "TEXT NOT NULL DEFAULT '[]'"),
     ("scans", "bulk_senders", "INTEGER NOT NULL DEFAULT 0"),
+    # Public IPv6 destinations this scan's traffic reached. The catalogue is
+    # IPv4 only, so a model endpoint among these produces no finding at all —
+    # the disclosure has to survive into the report a customer opens later,
+    # not only the one the CLI printed on the day.
+    ("scans", "ipv6_destinations", "INTEGER NOT NULL DEFAULT 0"),
     # Regions this agent has been seen in. Accumulated across scans, because a
     # scan covers one region and a role running in three is discovered three
     # times.
@@ -117,6 +122,7 @@ CREATE TABLE IF NOT EXISTS scans (
     started_at          TEXT    NOT NULL,
     principals_seen     INTEGER NOT NULL DEFAULT 0,
     bulk_senders        INTEGER NOT NULL DEFAULT 0,
+    ipv6_destinations   INTEGER NOT NULL DEFAULT 0,
     agents_found        INTEGER NOT NULL DEFAULT 0,
     review_candidates   INTEGER NOT NULL DEFAULT 0,
     coverage            REAL    NOT NULL DEFAULT 0.0,

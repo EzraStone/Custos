@@ -50,6 +50,14 @@ class ScanRecord:
     direction_undecided: int = 0
     read_errors: int = 0
     regions: tuple[str, ...] = ()
+    ipv6_destinations: int = 0
+    """Public IPv6 destinations this scan's traffic reached.
+
+    The model endpoint catalogue is IPv4 only, so an agent reaching a provider
+    over IPv6 is classified as reaching an ordinary external address and makes
+    no finding of any kind. Stored rather than only printed, because the report
+    a customer opens a week later is the one they forward."""
+
     bulk_senders: int = 0
     """Internal destinations that had a gateway's traffic shape and were not
     asked about, because the workloads reaching them reach nothing else.
@@ -93,6 +101,7 @@ def _scan(row: sqlite3.Row) -> ScanRecord:
         read_errors=row["read_errors"],
         regions=tuple(loads(row["regions"])),
         bulk_senders=row["bulk_senders"],
+        ipv6_destinations=row["ipv6_destinations"],
     )
 
 
@@ -172,18 +181,19 @@ class ScanStore:
         read_errors: int = 0,
         regions: tuple[str, ...] = (),
         bulk_senders: int = 0,
+        ipv6_destinations: int = 0,
     ) -> int:
         cursor = self.conn.execute(
             "INSERT INTO scans (batch_id, account_id, started_at, principals_seen, "
             "agents_found, review_candidates, coverage, truncated, catalogue_revision, "
             "scope_named, scope_total, missing_fields, direction_undecided, "
-            "read_errors, regions, bulk_senders) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "read_errors, regions, bulk_senders, ipv6_destinations) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (batch_id, account_id, iso(started_at), principals_seen, agents_found,
              review_candidates, coverage, int(truncated), catalogue_revision,
              scope_named, scope_total, dumps(list(missing_fields)),
              direction_undecided, read_errors, dumps(list(regions)),
-             bulk_senders),
+             bulk_senders, ipv6_destinations),
         )
         return cursor.lastrowid
 
