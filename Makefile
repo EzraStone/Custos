@@ -15,7 +15,7 @@ VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 .PHONY: help setup check lint test test-py test-go test-console fmt experiment \
         collector console serve scan image prune onboard preflight smoke \
-        screenshots stress clean
+        screenshots stress questions clean
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -101,6 +101,9 @@ preflight: collector ## Check a collector configuration before scanning
 
 stress: ## Score the classifier against the partially-coupled corpus
 	$(PY) -m custos_a0.cli stress
+
+questions: ## Score the gateway detector against the noise corpus
+	$(PY) -m custos_a0.cli questions
 
 clean:
 	rm -rf a0/out collector/bin checkpoint/bin
