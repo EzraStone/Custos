@@ -55,3 +55,38 @@ describe("recent scans", () => {
     expect(screen.getByText(/truncated/)).toBeInTheDocument();
   });
 });
+
+
+describe("which region a scan covered", () => {
+  it("names it when the history holds more than one", () => {
+    // Two regions taking turns look like one account whose agent count halves
+    // and doubles every other week, which is the shape of a real problem.
+    render(
+      <Scans
+        scans={[
+          scan({ id: 2, regions: ["eu-west-1"], agents_found: 2 }),
+          scan({ id: 1, regions: ["us-east-1"], agents_found: 5 }),
+        ]}
+      />,
+    );
+    expect(screen.getByRole("columnheader", { name: "Region" })).toBeInTheDocument();
+    expect(screen.getByText("eu-west-1")).toBeInTheDocument();
+  });
+
+  it("says nothing when every scan covered the same region", () => {
+    render(
+      <Scans
+        scans={[
+          scan({ id: 2, regions: ["us-east-1"] }),
+          scan({ id: 1, regions: ["us-east-1"] }),
+        ]}
+      />,
+    );
+    expect(screen.queryByRole("columnheader", { name: "Region" })).toBeNull();
+  });
+
+  it("says nothing when the control plane sent no regions at all", () => {
+    render(<Scans scans={[scan({ id: 2 }), scan({ id: 1 })]} />);
+    expect(screen.queryByRole("columnheader", { name: "Region" })).toBeNull();
+  });
+});

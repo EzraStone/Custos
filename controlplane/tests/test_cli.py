@@ -669,3 +669,46 @@ def test_gateways_stays_quiet_when_nothing_was_ruled_out(tmp_path, capsys):
     open_database(str(db)).commit()
     assert main(["--db", str(db), "gateways", "--account", "1"]) == 0
     assert "had this shape" not in capsys.readouterr().out
+
+
+def _history_db(tmp_path, regions):
+    from custos.store.db import open_database
+    from custos.store.scans import ScanStore
+
+    db = tmp_path / "h.db"
+    conn = open_database(str(db))
+    scans = ScanStore(conn)
+    for i, region in enumerate(regions):
+        batch = scans.record_batch(
+            account_id="1", region=region,
+            window_start=datetime(2026, 8, 10, i, tzinfo=UTC),
+            window_end=datetime(2026, 8, 10, i + 1, tzinfo=UTC),
+            collector="t", received_at=datetime(2026, 8, 10, i + 1, tzinfo=UTC),
+            flow_records=1, requests=0, have_alb_logs=False,
+        )
+        scans.record_scan(
+            batch_id=batch.id, account_id="1",
+            started_at=datetime(2026, 8, 10, i, tzinfo=UTC), principals_seen=11,
+            agents_found=5, review_candidates=1, coverage=1.0, truncated=False,
+            catalogue_revision="r", regions=(region,),
+        )
+    conn.commit()
+    return db
+
+
+def test_history_names_the_region_when_there_is_more_than_one(tmp_path, capsys):
+    """A scan is one region's window, so a multi-region account's history is
+    two interleaved series. Read as one it looks like an account whose agent
+    count halves and doubles every other week."""
+    db = _history_db(tmp_path, ["us-east-1", "eu-west-1", "us-east-1"])
+    assert main(["--db", str(db), "history", "--account", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "region" in out
+    assert "eu-west-1" in out and "us-east-1" in out
+
+
+def test_history_omits_the_region_for_a_single_region_account(tmp_path, capsys):
+    """A column of the same word is not information."""
+    db = _history_db(tmp_path, ["us-east-1", "us-east-1"])
+    assert main(["--db", str(db), "history", "--account", "1"]) == 0
+    assert "region" not in capsys.readouterr().out

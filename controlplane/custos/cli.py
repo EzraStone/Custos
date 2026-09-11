@@ -305,16 +305,23 @@ def cmd_history(args: argparse.Namespace) -> int:
     # is how much of the traffic was read; `scope` is how much of what was
     # found could be named rather than shown as an address. A run of 100%
     # coverage and 20% scope is a set of correct findings nobody can approve.
+    # The region column appears only when there is more than one. A scan is
+    # one region's window, so a multi-region account's history is two
+    # interleaved series — and read as one it looks like an account whose
+    # agent count halves and doubles every other week.
+    many = len({s.regions[0] for s in scans if s.regions}) > 1
+    region_head = f"{'region':<12}" if many else ""
     print(
-        f"{'when':<26}{'principals':>11}{'agents':>8}{'review':>8}"
+        f"{'when':<26}{region_head}{'principals':>11}{'agents':>8}{'review':>8}"
         f"{'coverage':>10}{'scope':>8}"
     )
-    print("-" * 71)
+    print("-" * (71 + (12 if many else 0)))
     for s in scans:
         flag = " (truncated)" if s.truncated else ""
         scope = f"{s.scope_readable:>7.0%}" if s.scope_total else f"{'-':>8}"
+        region = f"{(s.regions[0] if s.regions else '-'):<12}" if many else ""
         print(
-            f"{s.started_at.strftime('%Y-%m-%d %H:%M UTC'):<26}"
+            f"{s.started_at.strftime('%Y-%m-%d %H:%M UTC'):<26}{region}"
             f"{s.principals_seen:>11}{s.agents_found:>8}{s.review_candidates:>8}"
             f"{s.coverage:>9.0%}{scope}{flag}"
         )

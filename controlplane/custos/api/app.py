@@ -301,6 +301,11 @@ def create_app(
                     "scope_readable": s.scope_readable,
                     "scope_named": s.scope_named,
                     "scope_total": s.scope_total,
+                    # Which region this scan covered. A multi-region account's
+                    # history is two interleaved series, and read as one it
+                    # looks like an account whose agent count halves and
+                    # doubles every other week.
+                    "regions": list(s.regions),
                 }
                 for s in scans.scans_for(account_id, limit=min(limit, 100))
             ],

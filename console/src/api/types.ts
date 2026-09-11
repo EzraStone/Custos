@@ -318,6 +318,17 @@ export interface Scan {
   scope_readable?: number;
   scope_named?: number;
   scope_total?: number;
+  /**
+   * Which region this scan covered.
+   *
+   * A scan is one region's window, so a multi-region account's history is two
+   * interleaved series. Read as one it looks like an account whose agent count
+   * halves and doubles every other week — which is the shape of a real
+   * problem, and here it is the shape of two regions taking turns.
+   *
+   * Optional: a control plane older than the field omits it.
+   */
+  regions?: string[];
 }
 
 export interface ScansResponse {

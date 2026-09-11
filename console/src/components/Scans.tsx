@@ -14,6 +14,13 @@ import type { Scan } from "../api/types";
 export function Scans({ scans }: { scans: Scan[] }) {
   if (scans.length < 2) return null;
 
+  // The column appears only when there is more than one region in the list. A
+  // column of the same word is not information, and on a multi-region account
+  // its absence is worse than noise: two regions taking turns look like one
+  // account whose agent count halves and doubles every other week.
+  const manyRegions =
+    new Set(scans.flatMap((scan) => scan.regions ?? [])).size > 1;
+
   return (
     <details className="scans">
       <summary>Recent scans</summary>
@@ -21,6 +28,7 @@ export function Scans({ scans }: { scans: Scan[] }) {
         <thead>
           <tr>
             <th scope="col">When</th>
+            {manyRegions ? <th scope="col">Region</th> : null}
             <th scope="col">Agents</th>
             <th scope="col">Coverage</th>
             <th scope="col">Scope named</th>
@@ -30,6 +38,7 @@ export function Scans({ scans }: { scans: Scan[] }) {
           {scans.slice(0, 10).map((scan) => (
             <tr key={scan.id}>
               <td className="mono">{when(scan.started_at)}</td>
+              {manyRegions ? <td>{scan.regions?.join(", ") || "—"}</td> : null}
               <td>{scan.agents_found}</td>
               <td className={scan.coverage < 0.95 ? "warn" : ""}>
                 {percent(scan.coverage)}

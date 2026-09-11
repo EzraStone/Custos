@@ -153,6 +153,13 @@ approval decision on each one is a guess.
 A scan that reached nothing internal reports `1.0`, not `0.0`. There is no
 unreadable scope on a scan with no destinations.
 
+`regions` is the region that scan covered. A scan is one region's window, so a
+multi-region account's history is two interleaved series: rendered as one list
+it looks like an account whose agent count halves and doubles every other week,
+which is the shape of a real problem and here is the shape of two regions
+taking turns. Both the console and `custos history` show the column only when
+the list holds more than one region.
+
 ## `GET /v1/fleet`
 
 One line per account this credential covers.
