@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from random import Random
 
-from .scenarios import GENERATORS, HARD
+from .scenarios import GENERATORS, HARD, NOISE
 from .trace import Corpus
 
 
@@ -29,6 +29,15 @@ class CorpusSpec:
     it was originally measured against. Turning it on is how the cost of the
     harder cases becomes a number rather than a silent shift."""
 
+    noise: bool = False
+    """Include ordinary infrastructure that floods an internal destination.
+
+    Log shipping, backups, metrics, a thumbnailer. None of them is a hard case
+    for the classifier — none makes a model call — so they are off by default
+    and out of the G0 numbers. They are the corpus the gateway detector is
+    measured against, because it asks questions about internal destinations
+    and until these existed there was none to ask a wrong question about."""
+
     @property
     def end(self) -> datetime:
         return self.start + timedelta(days=self.days)
@@ -41,7 +50,11 @@ def build(spec: CorpusSpec = DEFAULT) -> Corpus:
     """Generate the labelled corpus."""
     corpus = Corpus(start=spec.start, end=spec.end)
 
-    generators = [*GENERATORS, *HARD] if spec.hard else list(GENERATORS)
+    generators = list(GENERATORS)
+    if spec.hard:
+        generators += HARD
+    if spec.noise:
+        generators += NOISE
 
     for i, gen in enumerate(generators):
         # Derived per-generator seed: stable under reordering.

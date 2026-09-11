@@ -37,6 +37,15 @@ from .hard import (
     agent_via_gateway,
     chatbot_function_call,
 )
+from .noise import (
+    backup_agent,
+    ci_artifact_publisher,
+    document_ingest,
+    event_producer,
+    image_pipeline,
+    log_shipper,
+    metrics_agent,
+)
 
 Generator = Callable[[Random, datetime, datetime], Workload]
 
@@ -67,9 +76,27 @@ measured against originally, and the effect of adding these is a number rather
 than a silent shift.
 """
 
+NOISE: list[Generator] = [
+    log_shipper,
+    backup_agent,
+    metrics_agent,
+    ci_artifact_publisher,
+    event_producer,
+    image_pipeline,
+    document_ingest,
+]
+"""Ordinary infrastructure with the traffic shape a model gateway has.
+
+Not classifier stress — none of these makes a model call, so none of them is a
+hard case for the classifier. They are there to measure the gateway detector,
+which asks a human a question, and which had nothing to get wrong until they
+existed.
+"""
+
 __all__ = [
     "GENERATORS",
     "HARD",
+    "NOISE",
     "Generator",
     "agent_batch",
     "agent_coding",
@@ -79,11 +106,18 @@ __all__ = [
     "agent_scheduled_ops",
     "agent_tool_loop",
     "agent_via_gateway",
+    "backup_agent",
     "batch_summariser",
     "chatbot_function_call",
     "chatbot_multiturn",
     "chatbot_rag",
     "chatbot_simple",
+    "ci_artifact_publisher",
     "ci_codegen",
+    "document_ingest",
     "embedding_service",
+    "event_producer",
+    "image_pipeline",
+    "log_shipper",
+    "metrics_agent",
 ]
