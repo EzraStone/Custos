@@ -113,10 +113,17 @@ class Candidate:
             if len(self.blind_principals) != 1
             else "a workload that never reaches a model provider we recognise"
         )
+        loop = (
+            f" In {self.interleave:.0%} of the minutes they reached it they "
+            "also reached another internal service, which is what a tool loop "
+            "looks like."
+            if self.interleave
+            else ""
+        )
         return (
             f"{self.address} received {self.egress / 1e6:.1f}MB from {who}, and "
-            f"returned {self.ingress / 1e6:.1f}MB — a ratio of {self.ratio:.1f}:1. "
-            "Is it a model gateway?"
+            f"returned {self.ingress / 1e6:.1f}MB — a ratio of {self.ratio:.1f}:1."
+            f"{loop} Is it a model gateway?"
         )
 
 

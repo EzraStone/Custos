@@ -227,3 +227,25 @@ def test_a_quiet_single_destination_is_not_reported_as_declined():
     it would inflate the count of things we chose not to ask about."""
     records = _flows("eni-1", "10.0.8.10", 5, 1_000, 10)
     assert bulk_senders(_telemetry(records, {"eni-1": "role/app"})) == ()
+
+
+def test_the_question_says_what_made_it_a_loop():
+    """The person answering has to check something. "It takes more than it
+    gives" describes a backup service too; "and the workloads using it call
+    other services in the same minute" is the part that makes a gateway the
+    likely answer, so it is in the question rather than in our reasoning."""
+    records = _loop("eni-1", "10.0.7.9", 40, 140_000, 9_000)
+    question = candidates(_telemetry(records, {"eni-1": "role/agent"}))[0].question
+    assert "50% of the minutes" in question
+    assert "tool loop" in question
+    assert question.endswith("Is it a model gateway?")
+
+
+def test_a_question_rebuilt_without_a_loop_figure_does_not_invent_one():
+    """Candidates stored before the loop was measured have none, and a
+    sentence claiming 0% of anything would be a claim nobody made."""
+    row = {
+        "address": "10.0.7.9", "egress": 5_000_000, "ingress": 1_000_000,
+        "principals": ["role/a"], "blind_principals": ["role/a"],
+    }
+    assert "tool loop" not in Candidate.from_row(row).question
