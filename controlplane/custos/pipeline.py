@@ -21,8 +21,7 @@ from .catalog import is_ipv6
 from .classify import Disposition
 from .declared import Declared
 from .diff import ScanDiff, compare
-from .gateway import bulk_senders
-from .gateway import candidates as gateway_candidates
+from .gateway import assess as assess_gateways
 from .reach import IamCapability
 from .report import Coverage
 from .scan import ScanInput, ScanResult
@@ -285,6 +284,10 @@ def ingest(
         scan_input = to_scan_input(batch, interval, declared, rates)
         result = run_scan(scan_input)
         named, total = scope_readability(batch, scan_input)
+        # One pass for both halves. The survey behind them walks every
+        # principal, every window and every destination, and the ingestion
+        # path needs the questions and the count of what was ruled out.
+        gateways = assess_gateways(result.telemetry)
 
         scan_id = scans.record_scan(
             batch_id=record.id, account_id=batch.account_id, started_at=stamp,
@@ -310,7 +313,7 @@ def ingest(
             # Destinations that looked like a gateway and were not asked
             # about. Counted at scan time because the per-window destination
             # bytes it is derived from are not kept.
-            bulk_senders=len(bulk_senders(result.telemetry)),
+            bulk_senders=len(gateways.declined),
             # Public IPv6 destinations reached. The catalogue is IPv4 only, so
             # a model endpoint among these makes no finding at all — the same
             # shape a hidden gateway produces, and it has to survive into the
@@ -332,8 +335,7 @@ def ingest(
         ReviewStore(conn).record(scan_id, batch.account_id, result.review_candidates)
 
         CandidateStore(conn).record(
-            scan_id, batch.account_id, gateway_candidates(result.telemetry),
-            region=batch.region,
+            scan_id, batch.account_id, list(gateways.asked), region=batch.region,
         )
 
         # Captured before this scan's observations are written, so the
@@ -423,7 +425,7 @@ def ingest(
         coverage_note=_coverage_note(batch, result),
         coverage=_coverage(
             batch, (named, total), ipv6_destinations(scan_input),
-            declined=len(bulk_senders(result.telemetry)),
+            declined=len(gateways.declined),
         ),
         diff=diff, drift=drift,
     )

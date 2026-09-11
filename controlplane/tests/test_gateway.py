@@ -249,3 +249,21 @@ def test_a_question_rebuilt_without_a_loop_figure_does_not_invent_one():
         "principals": ["role/a"], "blind_principals": ["role/a"],
     }
     assert "tool loop" not in Candidate.from_row(row).question
+
+
+def test_one_assessment_answers_both_halves():
+    """They are one judgement seen from two sides: what a person is shown, and
+    what the same rule ruled out. Computing them separately meant surveying the
+    telemetry twice on every scan — every principal, every window, every
+    destination — for two answers the same pass already holds."""
+    from custos.gateway import assess
+
+    records = _loop("eni-1", "10.0.7.9", 40, 140_000, 9_000)
+    records += _flows("eni-2", "10.0.8.10", 40, 400_000, 6_000)
+    telemetry = _telemetry(records, {"eni-1": "role/agent", "eni-2": "role/logs"})
+
+    both = assess(telemetry)
+    assert [c.address for c in both.asked] == ["10.0.7.9"]
+    assert both.declined == ("10.0.8.10",)
+    assert list(both.asked) == candidates(telemetry)
+    assert both.declined == bulk_senders(telemetry)

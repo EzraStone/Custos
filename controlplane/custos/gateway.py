@@ -202,6 +202,35 @@ def _survey(telemetry: list[PrincipalTelemetry]) -> _Survey:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class Assessment:
+    """What one pass over the telemetry concluded about internal destinations.
+
+    Both halves together, because they are one judgement seen from two sides:
+    `asked` is what a person is shown, `declined` is what the same rule ruled
+    out. A caller that computes one without the other is either asking
+    questions it cannot explain the silence around, or reporting a silence it
+    cannot justify.
+    """
+
+    asked: tuple[Candidate, ...]
+    declined: tuple[str, ...]
+
+
+def assess(telemetry: list[PrincipalTelemetry], limit: int = 5) -> Assessment:
+    """Both halves in one pass.
+
+    `candidates` and `bulk_senders` each survey the telemetry from scratch, and
+    the survey is the expensive part — every principal, every window, every
+    destination. The ingestion path needs both on every scan.
+    """
+    survey = _survey(telemetry)
+    return Assessment(
+        asked=tuple(_rank(survey, limit)),
+        declined=tuple(_declined(survey)),
+    )
+
+
 def candidates(telemetry: list[PrincipalTelemetry], limit: int = 5) -> list[Candidate]:
     """Internal destinations worth asking a customer about.
 
@@ -216,8 +245,27 @@ def candidates(telemetry: list[PrincipalTelemetry], limit: int = 5) -> list[Cand
     workloads reaching it have no model traffic we recognise, and those
     workloads reach something else as well.
     """
-    survey = _survey(telemetry)
+    return _rank(_survey(telemetry), limit)
 
+
+def bulk_senders(telemetry: list[PrincipalTelemetry]) -> tuple[str, ...]:
+    """Destinations with a gateway's traffic shape whose workloads call nothing
+    else, and which are therefore not asked about.
+
+    Every one of these is a real exclusion made on a real judgement, and the
+    judgement could be wrong: a gateway that proxies a workload's tool calls as
+    well as its model calls would be the only destination that workload
+    reaches, and would land here.
+
+    So the count is reported. A scan that quietly declined to ask about eleven
+    destinations is a scan whose silence means something different from a scan
+    that found none, and the whole reason the question mechanism exists is that
+    a report with nothing in it is what a hidden gateway produces.
+    """
+    return tuple(_declined(_survey(telemetry)))
+
+
+def _rank(survey: _Survey, limit: int) -> list[Candidate]:
     found = []
     for address, principals in survey.reached_by.items():
         if not survey.loud(address):
@@ -247,28 +295,14 @@ def candidates(telemetry: list[PrincipalTelemetry], limit: int = 5) -> list[Cand
     return found[:limit]
 
 
-def bulk_senders(telemetry: list[PrincipalTelemetry]) -> tuple[str, ...]:
-    """Destinations with a gateway's traffic shape whose workloads call nothing
-    else, and which are therefore not asked about.
-
-    Every one of these is a real exclusion made on a real judgement, and the
-    judgement could be wrong: a gateway that proxies a workload's tool calls as
-    well as its model calls would be the only destination that workload
-    reaches, and would land here.
-
-    So the count is reported. A scan that quietly declined to ask about eleven
-    destinations is a scan whose silence means something different from a scan
-    that found none, and the whole reason the question mechanism exists is that
-    a report with nothing in it is what a hidden gateway produces.
-    """
-    survey = _survey(telemetry)
-    return tuple(sorted(
+def _declined(survey: _Survey) -> list[str]:
+    return sorted(
         address
         for address in survey.reached_by
         if survey.loud(address)
         and survey.blind_reached_by.get(address)
         and survey.interleave(address) < MIN_INTERLEAVE
-    ))
+    )
 
 
 def blind_reach(found: list[Candidate]) -> dict[str, tuple[str, ...]]:
