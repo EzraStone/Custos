@@ -27,8 +27,8 @@ custos diff                 →  what changed since last week
 | Resolve interface → principal, EKS | Node level, or exact via CloudTrail for Bedrock traffic |
 | Blast radius from IAM policy | Works |
 | Attribution to a team | Works, four methods with stated confidence |
-| Persistent register with SEC-17 state machine | Works |
-| Scan comparison | Works |
+| Persistent register with SEC-17 state machine | Works. Reach and spend union across regions |
+| Scan comparison | Works, against the same region's previous scan |
 | Behavioural baselines and drift | Works, per region. A new region does not read as drift |
 | HTTP API, container image, retention | Works |
 | Delivery to Slack and SIEM | Works, with per-channel suppression |
@@ -39,7 +39,7 @@ custos diff                 →  what changed since last week
 | Operator console | Works. Read, filter, sanction, retire, and see what changed. Served by the control plane |
 | Destination naming | Works where an ENI, an AWS description, or a port says what something is |
 | Customer-supplied pricing | Works. Per account, dated, superseded rather than overwritten |
-| Gateway questions in the report | Works. Their own section, with the workloads reaching each address |
+| Gateway questions in the report | Works. Their own section, ranked across regions, with what was ruled out |
 | Gateway questions, measured | Works. `make questions`: precision 0.50, real gateway first, was 0.00 and eighth |
 | Review band, kept and readable | Works. In the console, the CLI, and both reports, with evidence and recurrence |
 | Model gateway declaration | Works. Private ranges scoped to a region (SEC-24) |
@@ -110,6 +110,19 @@ the same thing as everywhere else: seven synthetic services are the obvious
 cases, not an account. A gateway that also proxies its workload's tool calls
 is excluded by this rule, and the count of destinations declined that way is
 in the report so the silence can be read correctly.
+
+**Both reports now carry the same caveats, and that took a test to hold.**
+Three disclosures existed in the report `custos scan` prints and not in the one
+served a week later — the IPv6 blind spot, the records AWS dropped, and the
+whole behaviour section — each because a figure was computed at scan time and
+never stored. Nothing failed in any of those cases. Two meta-tests compare the
+two construction sites now, and a third catches a section the renderer handles
+for a caller that does not exist.
+
+The pattern under all of it is in `CONTRIBUTING.md`: a claim in one place that
+nothing obliges a second place to match. It has produced more defects in this
+codebase than any bug class, and none of them fail a test until somebody writes
+the test that compares the two places.
 
 **The byte ratios have only been measured against synthetic traffic.** The
 weights were fitted on the A0 corpus. What A0 establishes is that a separating
