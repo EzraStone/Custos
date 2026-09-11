@@ -22,7 +22,7 @@ agent's apparent spend and reach.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 # Columns added after a table was first written, applied by ALTER on databases
 # that already exist. The schema below is applied with CREATE TABLE IF NOT
@@ -61,6 +61,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     # only in the region it applies to, and the same address elsewhere is a
     # different host and still an open question.
     ("gateway_candidates", "region", "TEXT NOT NULL DEFAULT ''"),
+    ("gateway_candidates", "interleave", "REAL NOT NULL DEFAULT 0"),
 )
 
 BATCHES_TABLE = """CREATE TABLE IF NOT EXISTS batches (
@@ -187,6 +188,7 @@ CREATE TABLE IF NOT EXISTS gateway_candidates (
     principals    TEXT    NOT NULL,
     blind         TEXT    NOT NULL,
     region        TEXT    NOT NULL DEFAULT '',
+    interleave    REAL    NOT NULL DEFAULT 0,
     question      TEXT    NOT NULL,
     PRIMARY KEY (scan_id, address)
 );

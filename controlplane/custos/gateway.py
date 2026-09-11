@@ -42,6 +42,26 @@ MIN_BYTES = 1_000_000
 """Below this a destination is not worth asking about. A megabyte of egress
 over a whole window is a health check, not a model conversation."""
 
+MIN_INTERLEAVE = 0.25
+"""Fraction of a blind workload's windows at this destination that also reached
+something else.
+
+The thing that separates a model gateway from a log collector, and neither
+volume nor ratio does it. An agent behind a gateway runs a loop: call the
+model, call a tool, call the model again with the result. A log shipper, a
+backup agent, a metrics pusher and an artifact publisher each talk to exactly
+one thing, forever — and a destination that is the only thing its workload ever
+reaches cannot be that workload's model endpoint, because an agent with no
+tools has nothing to act through and is not what this product means by an
+agent.
+
+Measured at 0.00 for every bulk sender in the corpus and 0.98 for the real
+gateway, so the threshold sits in empty space rather than between two adjacent
+points. It is not sufficient on its own: a fetch-transform-store pipeline
+interleaves too, and what excludes those is the ratio test on a window that
+fetches as much as it sends. Neither test alone is enough, which is why there
+are two."""
+
 
 @dataclass(frozen=True, slots=True)
 class Candidate:
@@ -62,6 +82,13 @@ class Candidate:
     behind a gateway or is not an agent at all.
     """
 
+    interleave: float = 0.0
+    """How often the blind workloads reaching this also reached something else
+    in the same window. A tool loop, if this address is the model in it.
+
+    Defaulted because a candidate rebuilt from a stored row predates this and
+    is used only to match a declaration against a question that was asked."""
+
     @classmethod
     def from_row(cls, row: dict) -> Candidate:
         """Rebuild a candidate the store wrote, so the functions below work on
@@ -70,6 +97,7 @@ class Candidate:
             address=row["address"], egress=row["egress"], ingress=row["ingress"],
             principals=tuple(row["principals"]),
             blind_principals=tuple(row["blind_principals"]),
+            interleave=row.get("interleave", 0.0),
         )
 
     @property
@@ -92,19 +120,42 @@ class Candidate:
         )
 
 
-def candidates(telemetry: list[PrincipalTelemetry], limit: int = 5) -> list[Candidate]:
-    """Internal destinations worth asking a customer about.
+@dataclass(frozen=True, slots=True)
+class _Survey:
+    """Everything one pass over the telemetry establishes about internal
+    destinations, before any of it is judged."""
 
-    Ordered by how many blind workloads reach them, then by volume. A gateway
-    that three unexplained workloads talk to is a better question than one a
-    single workload talks to, because the alternative explanation — that this
-    one workload has an unusual internal API — gets weaker with each workload
-    that shares it.
-    """
+    egress: dict[str, int]
+    ingress: dict[str, int]
+    reached_by: dict[str, set[str]]
+    blind_reached_by: dict[str, set[str]]
+    blind_windows: dict[str, int]
+    looping_windows: dict[str, int]
+
+    def interleave(self, address: str) -> float:
+        return self.looping_windows.get(address, 0) / max(
+            self.blind_windows.get(address, 0), 1
+        )
+
+    def loud(self, address: str) -> bool:
+        """Enough one-way volume to be worth a question at all."""
+        out, back = self.egress.get(address, 0), self.ingress.get(address, 0)
+        return out >= MIN_BYTES and out / max(back, 1) >= MIN_RATIO
+
+
+def _survey(telemetry: list[PrincipalTelemetry]) -> _Survey:
+    """One pass, no judgements. Separate from the judging so that what was
+    excluded can be reported rather than only what survived."""
     egress: dict[str, int] = {}
     ingress: dict[str, int] = {}
     reached_by: dict[str, set[str]] = {}
     blind_reached_by: dict[str, set[str]] = {}
+    # Windows of a blind workload that reached this address, and how many of
+    # them reached something else as well. The ratio of the two is the tool
+    # loop: a gateway is one destination among several, a log collector is the
+    # only destination there is.
+    blind_windows: dict[str, int] = {}
+    looping_windows: dict[str, int] = {}
 
     for t in telemetry:
         blind = not any(w.model_addresses for w in t.windows)
@@ -123,6 +174,9 @@ def candidates(telemetry: list[PrincipalTelemetry], limit: int = 5) -> list[Cand
                 reached_by.setdefault(address, set()).add(t.principal)
                 if blind:
                     blind_reached_by.setdefault(address, set()).add(t.principal)
+                    blind_windows[address] = blind_windows.get(address, 0) + 1
+                    if set(window.tool_seen) - {address}:
+                        looping_windows[address] = looping_windows.get(address, 0) + 1
 
             # Byte counts are per window and not per destination — the wire
             # does not carry them that way — so a window reaching two internal
@@ -134,24 +188,80 @@ def candidates(telemetry: list[PrincipalTelemetry], limit: int = 5) -> list[Cand
                     egress[address] = egress.get(address, 0) + window.tool_egress
                     ingress[address] = ingress.get(address, 0) + window.tool_ingress
 
+    return _Survey(
+        egress=egress, ingress=ingress, reached_by=reached_by,
+        blind_reached_by=blind_reached_by, blind_windows=blind_windows,
+        looping_windows=looping_windows,
+    )
+
+
+def candidates(telemetry: list[PrincipalTelemetry], limit: int = 5) -> list[Candidate]:
+    """Internal destinations worth asking a customer about.
+
+    Ordered by how many blind workloads reach them, then by volume. A gateway
+    that three unexplained workloads talk to is a better question than one a
+    single workload talks to, because the alternative explanation — that this
+    one workload has an unusual internal API — gets weaker with each workload
+    that shares it.
+
+    Three things have to hold, and the corpus contains a workload that defeats
+    each one on its own: the destination takes far more than it returns, the
+    workloads reaching it have no model traffic we recognise, and those
+    workloads reach something else as well.
+    """
+    survey = _survey(telemetry)
+
     found = []
-    for address, principals in reached_by.items():
-        out, back = egress.get(address, 0), ingress.get(address, 0)
-        if out < MIN_BYTES or out / max(back, 1) < MIN_RATIO:
+    for address, principals in survey.reached_by.items():
+        if not survey.loud(address):
             continue
-        blind = blind_reached_by.get(address, set())
+        blind = survey.blind_reached_by.get(address, set())
         if not blind:
             # Every workload reaching this already talks to a model provider we
             # recognise, so their traffic here is tool calls. Nothing hidden.
             continue
+        loop = survey.interleave(address)
+        if loop < MIN_INTERLEAVE:
+            # The workloads reaching this reach nothing else. Whatever it is,
+            # it is not the model endpoint of an agent: an agent that calls no
+            # tools has nothing to act through. `bulk_senders` reports these so
+            # the omission is stated rather than silent.
+            continue
         found.append(Candidate(
-            address=address, egress=out, ingress=back,
+            address=address,
+            egress=survey.egress.get(address, 0),
+            ingress=survey.ingress.get(address, 0),
             principals=tuple(sorted(principals)),
             blind_principals=tuple(sorted(blind)),
+            interleave=loop,
         ))
 
     found.sort(key=lambda c: (-len(c.blind_principals), -c.egress, c.address))
     return found[:limit]
+
+
+def bulk_senders(telemetry: list[PrincipalTelemetry]) -> tuple[str, ...]:
+    """Destinations with a gateway's traffic shape whose workloads call nothing
+    else, and which are therefore not asked about.
+
+    Every one of these is a real exclusion made on a real judgement, and the
+    judgement could be wrong: a gateway that proxies a workload's tool calls as
+    well as its model calls would be the only destination that workload
+    reaches, and would land here.
+
+    So the count is reported. A scan that quietly declined to ask about eleven
+    destinations is a scan whose silence means something different from a scan
+    that found none, and the whole reason the question mechanism exists is that
+    a report with nothing in it is what a hidden gateway produces.
+    """
+    survey = _survey(telemetry)
+    return tuple(sorted(
+        address
+        for address in survey.reached_by
+        if survey.loud(address)
+        and survey.blind_reached_by.get(address)
+        and survey.interleave(address) < MIN_INTERLEAVE
+    ))
 
 
 def blind_reach(found: list[Candidate]) -> dict[str, tuple[str, ...]]:

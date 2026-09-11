@@ -181,12 +181,12 @@ class CandidateStore:
         self.conn.executemany(
             "INSERT OR REPLACE INTO gateway_candidates "
             "(scan_id, account_id, address, egress, ingress, principals, blind, "
-            "question, region) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "question, region, interleave) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (scan_id, account_id, c.address, c.egress, c.ingress,
                  dumps(list(c.principals)), dumps(list(c.blind_principals)),
-                 c.question, region)
+                 c.question, region, c.interleave)
                 for c in found
             ],
         )
@@ -213,6 +213,7 @@ class CandidateStore:
                 "ingress": r["ingress"],
                 "principals": loads(r["principals"]),
                 "blind_principals": loads(r["blind"]),
+                "interleave": r["interleave"],
                 "question": r["question"],
                 "region": r["region"],
                 "scan_id": r["scan_id"],

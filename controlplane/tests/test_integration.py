@@ -322,10 +322,31 @@ def test_declaring_a_gateway_makes_its_agents_visible_on_the_next_scan():
 
 
 def _gateway_batch(schema, account: str, start, gateway: str):
-    """An agent whose model calls all go through one internal address."""
+    """An agent whose model calls all go through one internal address.
+
+    It also queries a database every other minute, because an agent does. A
+    workload whose only destination is one address is a log shipper, and the
+    detector stopped asking about those — so a fixture without the tool leg
+    would be testing a shape no agent has.
+    """
     flows = []
     for minute in range(40):
         at = start + timedelta(minutes=minute)
+        if minute % 2 == 0:
+            flows.append(schema.FlowRecord(
+                account_id=account, interface_id="eni-1", srcaddr="10.0.1.5",
+                dstaddr="10.0.9.44", srcport=52000 + minute, dstport=5432,
+                protocol=6, packets=12, bytes=4_000,
+                start=at, end=at + timedelta(seconds=30), action="ACCEPT",
+                log_status="OK", direction="egress", tcp_flags=2,
+            ))
+            flows.append(schema.FlowRecord(
+                account_id=account, interface_id="eni-1", srcaddr="10.0.9.44",
+                dstaddr="10.0.1.5", srcport=5432, dstport=52000 + minute,
+                protocol=6, packets=30, bytes=30_000,
+                start=at, end=at + timedelta(seconds=30), action="ACCEPT",
+                log_status="OK", direction="ingress", tcp_flags=16,
+            ))
         flows.append(schema.FlowRecord(
             account_id=account, interface_id="eni-1", srcaddr="10.0.1.5",
             dstaddr=gateway, srcport=41000 + minute, dstport=443,
