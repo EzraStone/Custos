@@ -29,6 +29,40 @@ this system hides an agent, and a hidden agent is a gap somebody can be told
 about. This one invents them, in a document whose whole value is that a
 security team believes it.
 
+### The gateway questions had no number, and it turned out to be zero
+
+**The detector that interrupts a human had never been scored.** It asks a
+customer whether an internal address is their model gateway, and the result
+standing in for a measurement — asks nothing on the base corpus, finds the
+real gateway first on the stress corpus — was a fact about the corpus. Neither
+one contained an internal destination that ordinary infrastructure floods, so
+there was no opportunity to ask a question a customer would answer no to.
+
+Seven were added: a log collector, a backup service, a metrics pushgateway, an
+artifact registry, an event proxy, a thumbnailer and a document extractor.
+**Nine questions asked, five shown, the real gateway eighth.** Precision 0.00.
+
+Neither volume nor ratio separates them — the gateway is the smallest thing on
+the list and its ratio sits between the thumbnailer's and the extractor's. What
+separates them is the loop. An agent behind a gateway calls the model, calls a
+tool, and calls the model again with the result; a log shipper talks to one
+thing forever, and a destination that is the only thing its workload ever
+reaches cannot be that workload's model endpoint. Measured at 0.00 for every
+bulk sender and 0.98 for the real gateway.
+
+Two questions now, the gateway first, precision 0.50. The question itself
+carries the new evidence, because it is the half that decides: "in 98% of the
+minutes they reached it they also reached another internal service, which is
+what a tool loop looks like."
+
+The rule can be wrong — a gateway proxying its workload's tool calls as well
+would be excluded by it — so the number of destinations declined for that
+reason is carried into the report. A silent filter in front of the questions
+would make a clean-looking empty report easier to produce, and that artefact is
+the thing the questions exist to prevent.
+
+`make questions` reproduces it; CI prints it on every build.
+
 ### The report described an account from one region's scan
 
 **A scan is one region's window; the report is the whole register.** Once a

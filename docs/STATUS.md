@@ -40,6 +40,7 @@ custos diff                 →  what changed since last week
 | Destination naming | Works where an ENI, an AWS description, or a port says what something is |
 | Customer-supplied pricing | Works. Per account, dated, superseded rather than overwritten |
 | Gateway questions in the report | Works. Their own section, with the workloads reaching each address |
+| Gateway questions, measured | Works. `make questions`: precision 0.50, real gateway first, was 0.00 and eighth |
 | Review band, kept and readable | Works. In the console, the CLI, and both reports, with evidence and recurrence |
 | Model gateway declaration | Works. Private ranges scoped to a region (SEC-24) |
 | Fleet view across accounts | Works. One line per account, unscanned and destructive first |
@@ -89,12 +90,26 @@ gateway produces.
 now exercises the same per-account declaration the product ships rather than a
 global one nobody can use.
 
-**What is unmeasured is whether the questions are the right ones.** The
-detector finds the real gateway first on the stress corpus and asks nothing at
-all on the base corpus, which is the result that matters. Neither of those is
-a real account. The failure to watch for is a customer who gets three questions
-a week about ordinary internal APIs and stops reading them, which is how they
-miss the one that matters.
+**The questions were measured, and the first measurement was 0.00.** "Finds
+the real gateway first on the stress corpus, asks nothing on the base corpus"
+was a statement about the corpus: neither contained an internal destination
+that ordinary infrastructure floods, so there was nothing to get wrong. Seven
+were added — a log collector, a backup service, a metrics pushgateway, an
+artifact registry, an event proxy, a thumbnailer, a document extractor — and
+the detector asked nine questions, showed five, and ranked the real gateway
+eighth.
+
+Fixed by the loop: a workload whose only destination is one address is not
+running a tool loop, and that address cannot be its model endpoint. Two
+questions now, the gateway first, precision 0.50 — the other question is the
+agent's own deploy API, reached in the same loop, and nothing on the wire says
+which of two addresses in a loop is the model.
+
+`make questions` reproduces it and CI prints it. What is still unmeasured is
+the same thing as everywhere else: seven synthetic services are the obvious
+cases, not an account. A gateway that also proxies its workload's tool calls
+is excluded by this rule, and the count of destinations declined that way is
+in the report so the silence can be read correctly.
 
 **The byte ratios have only been measured against synthetic traffic.** The
 weights were fitted on the A0 corpus. What A0 establishes is that a separating
