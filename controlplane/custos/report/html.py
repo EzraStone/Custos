@@ -56,18 +56,27 @@ def _regions_row(agent: Agent) -> str:
     """Where this agent has been seen, when it is more than one place.
 
     One region is the ordinary case and printing it on every row would be a
-    column of the same word. Several is the interesting case, and it carries
-    the caveat that still applies: spend is now summed across regions, and
-    reach is not — the tools and data stores listed are the ones the scan that
-    last saw this agent observed, in one region.
+    column of the same word. Several is the interesting case: the spend beside
+    it is the sum across them and the reach is the union, so what the row needs
+    to say is which regions those figures cover.
+
+    A region this agent has been seen in but has no reach recorded for is
+    marked. It means the scan that saw it there resolved no destinations —
+    usually an account whose flow log format carries no port field — and an
+    unmarked list would present a gap in the log as a region where this agent
+    touches nothing.
     """
     if len(agent.regions) < 2:
         return ""
-    named = ", ".join(_e(r) for r in sorted(agent.regions))
-    return (
-        f'<div><dt>Regions</dt><dd>{named} '
-        f'<span class="muted">(reach from one)</span></dd></div>'
-    )
+    named = []
+    for region in sorted(agent.regions):
+        seen = agent.region_reach.get(region)
+        if agent.region_reach and (seen is None or not (seen.tools | seen.data_stores)):
+            named.append(f'{_e(region)} <span class="muted">(nothing resolved)</span>')
+        else:
+            named.append(_e(region))
+    joined = ", ".join(named)
+    return f"<div><dt>Regions</dt><dd>{joined}</dd></div>"
 
 
 def _agent_row(agent: Agent) -> str:

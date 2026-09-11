@@ -495,7 +495,14 @@ def test_customer_rates_are_credited_and_still_called_estimates():
 
 
 def _multi_region(agent_):
+    from custos.register.model import RegionalReach
+
     agent_.regions = {"us-east-1", "eu-west-1"}
+    agent_.region_reach = {
+        "us-east-1": RegionalReach(tools=frozenset({"billing-api"})),
+        "eu-west-1": RegionalReach(tools=frozenset({"ticketing"})),
+    }
+    agent_.reach.tools = {"billing-api", "ticketing"}
     return agent_
 
 
@@ -504,12 +511,12 @@ def test_an_agent_seen_in_several_regions_says_where():
     assert "eu-west-1, us-east-1" in page
 
 
-def test_the_reach_beside_it_is_marked_as_one_region_s():
-    """Spend is summed across regions now. Reach is not: the tools and data
-    stores listed are the ones the scan that last saw this agent observed, in
-    one region."""
+def test_no_caveat_is_attached_to_the_reach_any_more():
+    """It used to say "reach from one", because reach was whatever the scan
+    that last saw the agent observed. It is the union across regions now, and
+    a caveat describing a defect that has been fixed is worse than none."""
     page = render(result([_multi_region(agent())]), "acme", T0)
-    assert "reach from one" in page
+    assert "reach from one" not in page
 
 
 def test_an_agent_in_one_region_does_not_get_a_regions_row(page):
@@ -615,3 +622,31 @@ def test_one_declined_destination_reads_as_one():
     page = render(result([agent()]), "acme", T0, coverage=Coverage(bulk_senders=1))
     assert "1 internal destination had the traffic shape" in page
     assert "the workloads reaching it reach nothing else" in page
+
+
+def test_both_regions_tools_are_listed():
+    page = render(result([_multi_region(agent())]), "acme", T0)
+    assert "billing-api" in page
+    assert "ticketing" in page
+
+
+def test_a_region_where_nothing_resolved_is_marked():
+    """The scan that saw this agent there resolved no destinations — usually a
+    flow log with no port field. Listing the region unmarked would present a
+    gap in the log as a region where the agent touches nothing."""
+    from custos.register.model import RegionalReach
+
+    a = _multi_region(agent())
+    a.region_reach["eu-west-1"] = RegionalReach()
+    page = render(result([a]), "acme", T0)
+    assert "nothing resolved" in page
+
+
+def test_an_agent_with_no_breakdown_is_not_accused_of_resolving_nothing():
+    """Every agent discovered before the breakdown existed has an empty one,
+    and marking all of their regions would be a claim about a column rather
+    than about the account."""
+    a = agent()
+    a.regions = {"us-east-1", "eu-west-1"}
+    page = render(result([a]), "acme", T0)
+    assert "nothing resolved" not in page
