@@ -291,3 +291,26 @@ def test_a_regions_older_questions_are_not_shown_beside_its_newer_ones(candidate
 
 def test_an_account_with_no_questions_has_none(candidates):
     assert candidates.latest_for(ACCOUNT) == []
+
+
+def test_questions_are_ranked_across_regions_not_grouped_by_them(candidates):
+    """A list read top-down is a list whose order answers "which of these
+    first". Ordering by region put eu-west-1's weakest question above
+    us-east-1's strongest for no reason but the alphabet."""
+    from custos.gateway import Candidate
+
+    loud = Candidate(
+        address="10.0.7.40", egress=90_000_000, ingress=10_000_000,
+        principals=("role/a", "role/b"), blind_principals=("role/a", "role/b"),
+        interleave=0.9,
+    )
+    quiet = Candidate(
+        address="10.1.7.40", egress=2_000_000, ingress=500_000,
+        principals=("role/c",), blind_principals=("role/c",), interleave=0.9,
+    )
+    candidates.record(1, ACCOUNT, [loud], region="us-east-1")
+    candidates.record(2, ACCOUNT, [quiet], region="eu-west-1")
+
+    assert [c["address"] for c in candidates.latest_for(ACCOUNT)] == [
+        "10.0.7.40", "10.1.7.40",
+    ]

@@ -213,10 +213,10 @@ class CandidateStore:
             "AND c.scan_id = ("
             "  SELECT MAX(c2.scan_id) FROM gateway_candidates c2 "
             "  WHERE c2.account_id = c.account_id AND c2.region = c.region"
-            ") ORDER BY c.region, c.egress DESC",
+            ")",
             (account_id,),
         )
-        return [
+        found = [
             {
                 "address": r["address"],
                 "egress": r["egress"],
@@ -230,6 +230,16 @@ class CandidateStore:
             }
             for r in rows
         ]
+        # The same ranking the detector applies within a region, applied across
+        # them: most unexplained workloads first, then volume. Ordering by
+        # region would put eu-west-1's weakest question above us-east-1's
+        # strongest for no reason but the alphabet, and a list read top-down is
+        # a list whose order is the answer to "which of these first".
+        found.sort(
+            key=lambda c: (-len(c["blind_principals"]), -c["egress"], c["region"],
+                           c["address"])
+        )
+        return found
 
 
 __all__ = ["CandidateStore", "DeclarationRecord", "DeclarationStore"]
