@@ -850,6 +850,13 @@ def create_app(
             regions=tuple(sorted(
                 set(scans.regions_scanned(account_id)) | set(agents.regions_for(account_id))
             )),
+            # Regions in the register that no retained batch covers. The
+            # figures beside those agents are from a scan that has been
+            # pruned, and nothing else on the page distinguishes them from
+            # this week's.
+            unretained_regions=tuple(sorted(
+                set(agents.regions_for(account_id)) - set(scans.regions_scanned(account_id))
+            )),
         ) if latest else None
 
         diff = ScanDiff()

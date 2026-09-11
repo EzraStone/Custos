@@ -650,3 +650,31 @@ def test_an_agent_with_no_breakdown_is_not_accused_of_resolving_nothing():
     a.regions = {"us-east-1", "eu-west-1"}
     page = render(result([a]), "acme", T0)
     assert "nothing resolved" not in page
+
+
+def test_a_region_with_no_retained_telemetry_is_disclosed():
+    """Telemetry is pruned after ninety days and the register is not. An agent
+    from a pruned region is listed with figures from a scan that no longer
+    exists, and nothing else on the page tells a reader that."""
+    page = render(
+        result([agent()]), "acme", T0,
+        coverage=Coverage(
+            regions=("eu-west-1", "us-east-1"), unretained_regions=("eu-west-1",)
+        ),
+    )
+    assert "eu-west-1 appears above because agents were discovered there" in page
+    assert "no longer exists" in page
+
+
+def test_two_unretained_regions_read_as_plural():
+    page = render(
+        result([agent()]), "acme", T0,
+        coverage=Coverage(unretained_regions=("ap-south-1", "eu-west-1")),
+    )
+    assert "ap-south-1, eu-west-1 appear above" in page
+    assert "those regions" in page
+
+
+def test_nothing_is_said_when_every_region_still_has_telemetry():
+    page = render(result([agent()]), "acme", T0, coverage=Coverage(regions=("us-east-1",)))
+    assert "no longer exists" not in page

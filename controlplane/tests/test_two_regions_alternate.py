@@ -181,3 +181,6 @@ def test_pruning_a_regions_batches_does_not_unsay_that_it_was_covered(two_region
     assert "eu-west-1, us-east-1 and no other region" in after, (
         "the report unsaid a region whose agents it is still listing"
     )
+    # And says why that region is there without any telemetry behind it.
+    assert "eu-west-1 appears above because agents were discovered there" in after
+    assert "no longer exists" in after

@@ -264,6 +264,18 @@ def _format_limits(coverage: Coverage | None) -> list[str]:
             "that figure at all. \"Agents found\" beside it is a count across "
             "every region."
         )
+    if coverage.unretained_regions:
+        named = ", ".join(_e(r) for r in coverage.unretained_regions)
+        many = len(coverage.unretained_regions) != 1
+        items.append(
+            f"{named} {'appear' if many else 'appears'} above because agents "
+            f"were discovered there, but no collection from "
+            f"{'those regions' if many else 'that region'} is still retained. "
+            "Telemetry is pruned after ninety days and the register is not, so "
+            f"the figures beside {'those agents' if many else 'that agent'} "
+            "come from a scan that no longer exists — they are the last thing "
+            "we saw rather than a description of this week."
+        )
     if coverage.regions:
         named = ", ".join(_e(r) for r in coverage.regions)
         items.append(
@@ -503,6 +515,14 @@ class Coverage:
     scan of us-east-1 — so "no unsanctioned agents found" is a claim about one
     region, and a report that does not name it is making a claim about the
     account that nobody checked."""
+
+    unretained_regions: tuple[str, ...] = ()
+    """Regions the register holds agents from and we hold no telemetry for.
+
+    Telemetry is pruned after ninety days; the register is not, because an
+    agent discovered last year is still running. The gap between those two is
+    a region whose agents are listed with figures from a scan that no longer
+    exists, and a reader has no way to tell those rows from this week's."""
 
     bulk_senders: int = 0
     """Internal destinations with a gateway's traffic shape that were not asked

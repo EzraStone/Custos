@@ -30,6 +30,10 @@ EXPECTED_ONLY_IN_SERVED = {
     # render has no notion of: it is one region by construction.
     "missing_in",
     "parse_by_region",
+    # A region whose telemetry has been pruned while its agents remain. The
+    # CLI renders the scan it just ran, so every agent in that document came
+    # from telemetry that exists — there is no such region to disclose.
+    "unretained_regions",
 }
 EXPECTED_ONLY_IN_CLI: set[str] = set()
 
