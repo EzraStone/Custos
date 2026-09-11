@@ -127,3 +127,53 @@ describe("which region a question is about", () => {
     expect(screen.queryByText(/·/)).toBeNull();
   });
 });
+
+
+describe("destinations that were not asked about", () => {
+  it("says so when there is nothing else to say", () => {
+    // The case this exists for. Nine ruled out and none asked looks, in a
+    // console that renders only questions, exactly like an account with
+    // nothing to find.
+    render(
+      <Gateways
+        candidates={[]}
+        declined={9}
+        operator="ezra@custos.dev"
+        busy={null}
+        error={null}
+        onDeclare={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/9 other destinations had this shape/)).toBeInTheDocument();
+    expect(screen.getByText(/log collector or a backup service/)).toBeInTheDocument();
+  });
+
+  it("reads as one when there is one", () => {
+    render(
+      <Gateways
+        candidates={[]}
+        declined={1}
+        operator="ezra"
+        busy={null}
+        error={null}
+        onDeclare={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/1 other destination had this shape/)).toBeInTheDocument();
+    expect(screen.getByText(/the workload reaching it talks to nothing else/))
+      .toBeInTheDocument();
+  });
+
+  it("still says so beside the questions there are", () => {
+    show({ declined: 3 });
+    expect(screen.getByText(/3 other destinations had this shape/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /yes, it is ours/i })).toBeInTheDocument();
+  });
+
+  it("stays silent when nothing was ruled out", () => {
+    const { container } = render(
+      <Gateways candidates={[]} operator="ezra" busy={null} error={null} onDeclare={vi.fn()} />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+});

@@ -35,6 +35,7 @@ export function App() {
   const [diff, setDiff] = useState<DiffResponse | null>(null);
   const [registerRevision, setRegisterRevision] = useState<string | undefined>();
   const [candidates, setCandidates] = useState<GatewayCandidate[]>([]);
+  const [declined, setDeclined] = useState(0);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [declaring, setDeclaring] = useState<string | null>(null);
   const [declareError, setDeclareError] = useState<string | null>(null);
@@ -127,6 +128,7 @@ export function App() {
       setScans("scans" in history ? history.scans : []);
       setDiff(changes);
       setCandidates("candidates" in gateways ? gateways.candidates : []);
+      setDeclined("declined" in gateways ? (gateways.declined ?? 0) : 0);
       setReviews("reviews" in maybes ? maybes.reviews : []);
       if (status) setHealth(status);
     } catch (caught) {
@@ -440,6 +442,7 @@ export function App() {
 
       <Gateways
         candidates={candidates}
+        declined={declined}
         operator={session.canSanction(auth) ? auth.operator : null}
         busy={declaring}
         error={declareError}

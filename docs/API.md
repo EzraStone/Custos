@@ -273,8 +273,10 @@ Internal destinations that behave like model endpoints.
       "principals": ["arn:aws:iam::447120043318:role/agent-via-gateway"],
       "blind_principals": ["arn:aws:iam::447120043318:role/agent-via-gateway"],
       "question": "10.0.7.40 received 54.4MB from a workload that never reaches a model provider we recognise, and returned 12.8MB — a ratio of 4.3:1. Is it a model gateway?",
+      "interleave": 0.98,
       "scan_id": 12 }
-  ]
+  ],
+  "declined": 5
 }
 ```
 
@@ -296,6 +298,21 @@ Drawn from the most recent scan that produced any, not the most recent scan. A
 gateway that was quiet for an hour is still a gateway, and an empty list
 because nothing used it reads as "we looked and there is nothing" — a different
 and much more reassuring claim.
+
+`interleave` is how often the workloads reaching an address also reached
+another internal service in the same minute. It is the half of the evidence
+that decides: "sends far more than it receives" describes a backup service
+too, and what makes a gateway the likely answer is that the workloads using it
+are running a loop.
+
+`declined` counts internal destinations that had the same traffic shape and
+were **not** asked about, because the workloads reaching them reach nothing
+else — a log collector, a backup agent, a metrics pusher. The rule can be
+wrong: a gateway that also proxies its workload's tool calls would be the only
+destination that workload reaches. So an empty `candidates` list with a
+non-zero `declined` is a different claim from an empty list with zero, and a
+client that renders both as nothing is reproducing the exact silence this
+endpoint exists to break.
 
 ## `GET /v1/endpoints`
 

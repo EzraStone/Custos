@@ -185,6 +185,17 @@ export interface GatewayCandidate {
 export interface CandidatesResponse {
   account_id: string;
   candidates: GatewayCandidate[];
+  /**
+   * Internal destinations that had a gateway's traffic shape and were not
+   * asked about, because the workloads reaching them reach nothing else — the
+   * shape a log collector or a backup service has.
+   *
+   * Shown because an empty question list means two different things. "We
+   * looked and there is nothing" is reassuring; "we looked, found nine, and
+   * ruled out all nine on a rule that can be wrong" is not, and a console that
+   * renders both as blank space is the silence a hidden gateway produces.
+   */
+  declined?: number;
 }
 
 export interface DeclaredEndpoint {

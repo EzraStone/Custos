@@ -24,18 +24,31 @@ import type { GatewayCandidate } from "../api/types";
  */
 export function Gateways({
   candidates,
+  declined = 0,
   operator,
   busy,
   error,
   onDeclare,
 }: {
   candidates: GatewayCandidate[];
+  /**
+   * Destinations with this shape that were not asked about, because the
+   * workloads reaching them reach nothing else.
+   *
+   * Rendered even when there are no questions, which is the whole reason it
+   * is here. "We looked and there is nothing" and "we found nine and ruled
+   * out all nine on a rule that can be wrong" are different claims, and until
+   * this existed the console drew them both as empty space.
+   */
+  declined?: number;
   operator: string | null;
   busy: string | null;
   error: string | null;
   onDeclare: (candidate: GatewayCandidate, note: string) => void;
 }) {
-  if (candidates.length === 0) return null;
+  if (candidates.length === 0) {
+    return declined > 0 ? <Declined count={declined} /> : null;
+  }
 
   return (
     <section className="gateways">
@@ -56,6 +69,8 @@ export function Gateways({
         </div>
       ) : null}
 
+      {declined > 0 ? <DeclinedNote count={declined} /> : null}
+
       <ul className="candidates">
         {candidates.map((candidate) => (
           <Candidate
@@ -67,6 +82,35 @@ export function Gateways({
           />
         ))}
       </ul>
+    </section>
+  );
+}
+
+function DeclinedNote({ count }: { count: number }) {
+  return (
+    <p className="muted">
+      {count} other {count === 1 ? "destination" : "destinations"} had this
+      shape and {count === 1 ? "was" : "were"} not asked about:{" "}
+      {count === 1 ? "the workload" : "the workloads"} reaching{" "}
+      {count === 1 ? "it talks" : "them talk"} to nothing else, which is what a
+      log collector or a backup service looks like.
+    </p>
+  );
+}
+
+/**
+ * The same disclosure when there is nothing to ask.
+ *
+ * This is the case it exists for. An account with no questions and nine ruled
+ * out looks, in a console that renders only questions, exactly like an account
+ * with nothing to find — which is the artefact a hidden gateway produces and
+ * the thing this whole section is here to prevent.
+ */
+function Declined({ count }: { count: number }) {
+  return (
+    <section className="gateways">
+      <h2>Nothing to ask about this week</h2>
+      <DeclinedNote count={count} />
     </section>
   );
 }

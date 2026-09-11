@@ -1145,3 +1145,15 @@ def test_a_declaration_with_no_region_says_it_applies_everywhere(client):
     page = client.get("/v1/report", headers=AUTH).text
 
     assert "in every region" in page
+
+
+def test_the_candidates_route_says_how_many_it_declined_to_ask_about(client):
+    """An empty question list means two different things. "We looked and there
+    is nothing" is reassuring; "we found nine and ruled out all nine on a rule
+    that can be wrong" is not, and the console draws both as empty space unless
+    it is told."""
+    body = client.get("/v1/gateway-candidates", headers=AUTH).json()
+    assert body["declined"] == 0
+
+    client.post("/v1/batches", json=batch(), headers=AUTH)
+    assert "declined" in client.get("/v1/gateway-candidates", headers=AUTH).json()

@@ -516,9 +516,18 @@ def create_app(
         /v1/endpoints is where their answer goes.
         """
         account_id = scope(principal, account)
+        scans = ScanStore(app.state.db)
         return {
             "account_id": account_id,
             "candidates": _open_questions(account_id),
+            # Destinations with a gateway's traffic shape that were not asked
+            # about, because the workloads reaching them reach nothing else.
+            # An empty question list means something different depending on
+            # this number, and the console shows nothing at all when the list
+            # is empty — which is the silence a hidden gateway produces.
+            "declined": sum(
+                s.bulk_senders for s in scans.latest_scan_per_region(account_id)
+            ),
         }
 
     @app.get("/v1/endpoints")
