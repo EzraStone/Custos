@@ -327,17 +327,41 @@ func TestNoInternalTrafficIsNotAFinding(t *testing.T) {
 	}
 }
 
+// gatewayTraffic is one workload calling peer and acting on what comes back.
+//
+// The database leg is not decoration. A workload whose only private
+// destination is one address is a log shipper, and preflight stopped naming
+// those - so a fixture without a tool loop tests a shape no agent has.
 func gatewayTraffic(peer string, out, back int64) []wire.FlowRecord {
+	records := oneWayTraffic("eni-1", peer, out, back)
+	for i := 0; i < 20; i++ {
+		records = append(records,
+			wire.FlowRecord{
+				InterfaceID: "eni-1", Direction: wire.Egress, DstAddr: "10.0.9.44",
+				DstPort: 5432, Bytes: 4_000, SrcAddr: "10.0.1.5", SrcPort: 52000 + i,
+			},
+			wire.FlowRecord{
+				InterfaceID: "eni-1", Direction: wire.Ingress, SrcAddr: "10.0.9.44",
+				SrcPort: 5432, Bytes: 30_000, DstAddr: "10.0.1.5", DstPort: 52000 + i,
+			},
+		)
+	}
+	return records
+}
+
+// oneWayTraffic is a workload that talks to exactly one address: a log
+// shipper, a backup agent, a metrics pusher.
+func oneWayTraffic(iface, peer string, out, back int64) []wire.FlowRecord {
 	var records []wire.FlowRecord
 	for i := 0; i < 40; i++ {
 		records = append(records,
 			wire.FlowRecord{
-				Direction: wire.Egress, DstAddr: peer, DstPort: 443, Bytes: out,
-				SrcAddr: "10.0.1.5", SrcPort: 41000 + i,
+				InterfaceID: iface, Direction: wire.Egress, DstAddr: peer,
+				DstPort: 443, Bytes: out, SrcAddr: "10.0.1.5", SrcPort: 41000 + i,
 			},
 			wire.FlowRecord{
-				Direction: wire.Ingress, SrcAddr: peer, SrcPort: 443, Bytes: back,
-				DstAddr: "10.0.1.5", DstPort: 41000 + i,
+				InterfaceID: iface, Direction: wire.Ingress, SrcAddr: peer,
+				SrcPort: 443, Bytes: back, DstAddr: "10.0.1.5", DstPort: 41000 + i,
 			},
 		)
 	}
@@ -782,5 +806,44 @@ func TestOtherRegionsDoNotBlockAScan(t *testing.T) {
 	}})
 	if !report.Ready() {
 		t.Fatal("a multi-region account was refused a scan")
+	}
+}
+
+// TestALogShipperIsNotNamedAsAGateway: the loudest workload in most accounts
+// sends half a gigabyte to one collector and gets acknowledgements back. It
+// has exactly the shape this check looks for, and naming it is how a customer
+// learns on day one that the warning means nothing.
+func TestALogShipperIsNotNamedAsAGateway(t *testing.T) {
+	records := append(modelTraffic(1), oneWayTraffic("eni-9", "10.0.8.10", 400_000, 6_000)...)
+	result := find(t, run(good(), stubFlows{records: records}), "possible model gateway")
+	if result.Status != Pass {
+		t.Fatalf("named a log shipper: %+v", result)
+	}
+	if !strings.Contains(result.Detail, "1 one-way sender") {
+		t.Fatalf("declining to name it was not disclosed: %q", result.Detail)
+	}
+}
+
+// TestTheLoudestSuspectIsNamedFirst: the list is cut at three, and it used to
+// be cut alphabetically - which throws away the question worth asking to keep
+// one about 10.0.0.7.
+func TestTheLoudestSuspectIsNamedFirst(t *testing.T) {
+	records := modelTraffic(1)
+	records = append(records, gatewayTraffic("10.0.9.90", 400_000, 9_000)...)
+	records = append(records, gatewayTraffic("10.0.1.10", 100_000, 9_000)...)
+
+	result := find(t, run(good(), stubFlows{records: records}), "possible model gateway")
+	if !strings.HasPrefix(result.Detail, "10.0.9.90") {
+		t.Fatalf("the loudest was not first: %q", result.Detail)
+	}
+}
+
+// TestTheRemedySaysWhatMadeItASuspect: "sends more than it receives" describes
+// a backup service too. The half that decides is the loop.
+func TestTheRemedySaysWhatMadeItASuspect(t *testing.T) {
+	records := append(modelTraffic(1), gatewayTraffic("10.0.7.40", 140_000, 9_000)...)
+	result := find(t, run(good(), stubFlows{records: records}), "possible model gateway")
+	if !strings.Contains(result.Remedy, "tool loop") {
+		t.Fatalf("remedy does not say what made it a suspect: %q", result.Remedy)
 	}
 }

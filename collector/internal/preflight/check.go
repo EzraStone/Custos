@@ -327,48 +327,118 @@ func checkForGateway(report *Report, records []wire.FlowRecord) {
 
 	out := map[string]int64{}
 	back := map[string]int64{}
+	// Which interfaces reach each peer, and every private peer each interface
+	// reaches. The second is the tool loop: a workload whose only private
+	// destination is one address is a log shipper or a backup agent, and that
+	// address cannot be its model endpoint because an agent that calls no
+	// tools has nothing to act through.
+	reachedBy := map[string]map[string]bool{}
+	peersOf := map[string]map[string]bool{}
+
 	for _, r := range records {
-		peer, counter := r.DstAddr, out
+		peer := r.DstAddr
 		if r.Direction == wire.Ingress {
-			peer, counter = r.SrcAddr, back
+			peer = r.SrcAddr
 		}
 		addr, err := netip.ParseAddr(peer)
 		if err != nil || !addr.IsPrivate() {
 			continue
 		}
+		// Every private peer counts towards the loop, datastore ports
+		// included: a database is a tool an agent acts through.
+		if peersOf[r.InterfaceID] == nil {
+			peersOf[r.InterfaceID] = map[string]bool{}
+		}
+		peersOf[r.InterfaceID][peer] = true
+
 		// Ports a model API would plausibly be behind. A datastore port is a
 		// datastore whatever the byte ratio looks like.
 		port := r.DstPort
+		counter := out
 		if r.Direction == wire.Ingress {
-			port = r.SrcPort
+			port, counter = r.SrcPort, back
 		}
 		if port != 443 && port != 8443 && port != 80 && port != 8000 && port != 8080 {
 			continue
 		}
 		counter[peer] += r.Bytes
+		if reachedBy[peer] == nil {
+			reachedBy[peer] = map[string]bool{}
+		}
+		reachedBy[peer][r.InterfaceID] = true
 	}
 
-	var suspects []string
+	type suspect struct {
+		peer string
+		sent int64
+		got  int64
+	}
+	var suspects []suspect
+	declined := 0
 	for peer, sent := range out {
 		received := back[peer]
 		if sent < minBytes || float64(sent)/math.Max(float64(received), 1) < minRatio {
 			continue
 		}
-		suspects = append(suspects, fmt.Sprintf("%s (%.1fMB out, %.1fMB back)",
-			peer, float64(sent)/1e6, float64(received)/1e6))
+		if !inALoop(peer, reachedBy, peersOf) {
+			declined++
+			continue
+		}
+		suspects = append(suspects, suspect{peer: peer, sent: sent, got: received})
 	}
 	if len(suspects) == 0 {
+		if declined > 0 {
+			report.add("possible model gateway", Pass,
+				fmt.Sprintf("none; %d one-way sender(s) not named", declined),
+				"")
+		}
 		return
 	}
-	sort.Strings(suspects)
+
+	// Loudest first. The list is cut at three and an alphabetical cut throws
+	// away the question worth asking to keep one about 10.0.0.7.
+	sort.Slice(suspects, func(i, j int) bool {
+		if suspects[i].sent != suspects[j].sent {
+			return suspects[i].sent > suspects[j].sent
+		}
+		return suspects[i].peer < suspects[j].peer
+	})
 	if len(suspects) > 3 {
 		suspects = suspects[:3]
 	}
 
-	report.add("possible model gateway", Warn, strings.Join(suspects, "; "),
-		"these send far more than they receive, which is the shape of model "+
-			"traffic - if any is a self-hosted gateway, declare it with "+
+	named := make([]string, 0, len(suspects))
+	for _, s := range suspects {
+		named = append(named, fmt.Sprintf("%s (%.1fMB out, %.1fMB back)",
+			s.peer, float64(s.sent)/1e6, float64(s.got)/1e6))
+	}
+
+	detail := strings.Join(named, "; ")
+	if declined > 0 {
+		detail += fmt.Sprintf("; %d one-way sender(s) not named", declined)
+	}
+	report.add("possible model gateway", Warn, detail,
+		"these send far more than they receive and the workloads using them "+
+			"reach other internal services too, which is the shape of a tool "+
+			"loop - if any is a self-hosted gateway, declare it with "+
 			"`custos declare` or every agent behind it stays invisible")
+}
+
+// inALoop reports whether anything reaching peer also reaches somewhere else.
+//
+// The cheap form of the rule the control plane applies per window. Preflight
+// has no windowing and does not need it: an interface whose only private
+// destination in the whole sample is one address is not running a tool loop,
+// whatever the timing looks like.
+func inALoop(peer string, reachedBy, peersOf map[string]map[string]bool) bool {
+	for iface := range reachedBy[peer] {
+		for other := range peersOf[iface] {
+			if other != peer {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // checkDestinationNames reports how much of the scope an operator will be able
