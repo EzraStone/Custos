@@ -838,7 +838,12 @@ def create_app(
         ) if latest else None
 
         diff = ScanDiff()
-        previous = scans.latest_scan_before(account_id, latest.id) if latest else None
+        # Against the same region's previous scan. The register spans every
+        # region but a scan is one region's window, so comparing it with
+        # whichever region happened to be collected before it reports one
+        # region's workloads as having appeared and the other's as having
+        # disappeared, alternately, for ever.
+        previous = scans.previous_in_same_region(account_id, latest.id) if latest else None
         if latest and previous:
             diff = compare(
                 register.agents,

@@ -708,3 +708,78 @@ def test_drift_in_one_region_is_still_found_and_says_which():
     _, found = detect_from_history("a", history, region="us-east-1")
     assert [f.kind for f in found] == ["new_tool"]
     assert found[0].region == "us-east-1"
+
+
+def test_two_regions_do_not_report_each_other_as_appearing_and_disappearing():
+    """A scan is one region's window. Comparing it against whichever region
+    happened to be collected before it reports every workload in one as having
+    appeared and every workload in the other as having disappeared — alternately,
+    every week, for ever.
+
+    That is the diff a customer reads first and the delivery a channel gets
+    muted for.
+    """
+    from datetime import timedelta
+
+    from custos.register.model import Agent, Identity, Provenance, Source, Status
+    from custos.register.store import agent_id
+    from custos.store.agents import AgentStore
+    from custos.store.db import open_database
+    from custos.store.scans import ScanStore
+
+    conn = open_database()
+    agents, scans = AgentStore(conn), ScanStore(conn)
+    at = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+
+    def stored(name):
+        principal = f"arn:aws:iam::{ACCOUNT}:role/{name}"
+        return agents.upsert(Agent(
+            id=agent_id(ACCOUNT, principal), first_seen=at, last_seen=at,
+            status=Status.DISCOVERED,
+            provenance=Provenance(source=Source.DISCOVERED, confidence=0.99,
+                                  observed_principal=principal, evidence=["bytes"]),
+            identity=Identity(principal=principal, account_id=ACCOUNT),
+        ))
+
+    def scan_of(region, hour, agent):
+        batch = scans.record_batch(
+            account_id=ACCOUNT, region=region, window_start=at + timedelta(hours=hour),
+            window_end=at + timedelta(hours=hour + 1), collector="t",
+            received_at=at + timedelta(hours=hour + 1), flow_records=1, requests=0,
+            have_alb_logs=True,
+        )
+        scan_id = scans.record_scan(
+            batch_id=batch.id, account_id=ACCOUNT,
+            started_at=at + timedelta(hours=hour), principals_seen=1, agents_found=1,
+            review_candidates=0, coverage=1.0, truncated=False,
+            catalogue_revision="r", regions=(region,),
+        )
+        scans.record_observation(
+            scan_id=scan_id, agent_id=agent.id,
+            observed_at=at + timedelta(hours=hour + 1), confidence=0.99,
+            model_egress=10, model_ingress=1, episodes=1, calls_per_hour=4.0,
+            tools={"10.0.4.21"}, active_hours={12: 1.0}, blast_radius="read",
+            region=region,
+        )
+        return scan_id
+
+    east, west = stored("east-only"), stored("west-only")
+    scan_of("us-east-1", 0, east)
+    scan_of("eu-west-1", 1, west)
+    latest = scan_of("us-east-1", 2, east)
+    conn.commit()
+
+    previous = scans.previous_in_same_region(ACCOUNT, latest)
+    assert previous is not None, "the same region's earlier scan was not found"
+
+    from custos.diff import compare
+
+    diff = compare(
+        {a.id: a for a in agents.list_for_account(ACCOUNT)},
+        scans.observations_for_scan(latest),
+        scans.observations_for_scan(previous.id),
+        previous_scan_id=previous.id, current_scan_id=latest,
+    )
+    assert [c.kind for c in diff.changes] == [], (
+        f"one region's scan invented changes about another's: {diff.changes}"
+    )

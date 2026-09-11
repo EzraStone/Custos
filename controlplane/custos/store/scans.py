@@ -266,21 +266,50 @@ class ScanStore:
         scans = self.scans_for(account_id, limit=1)
         return scans[0] if scans else None
 
-    def latest_scan_before(self, account_id: str, scan_id: int) -> ScanRecord | None:
+    def latest_scan_before(
+        self, account_id: str, scan_id: int, region: str | None = None
+    ) -> ScanRecord | None:
         """The most recent scan preceding `scan_id`.
 
         Used to pick the comparison baseline during ingestion, where the
         current scan row already exists. Taking `latest_scan` there would
         compare a scan against itself and report that nothing ever changes.
+
+        `region` restricts it to the same region's previous scan, which is the
+        only comparison that means anything. A scan of eu-west-1 compared
+        against the last scan of us-east-1 reports every workload in one as
+        having appeared and every workload in the other as having disappeared,
+        every time either is collected.
         """
+        where, params = "s.account_id = ? AND s.id < ?", [account_id, scan_id]
+        if region is not None:
+            where += " AND b.region = ?"
+            params.append(region)
         row = self.conn.execute(
-            "SELECT * FROM scans WHERE account_id = ? AND id < ? "
-            "ORDER BY started_at DESC, id DESC LIMIT 1",
-            (account_id, scan_id),
+            f"SELECT s.* FROM scans s JOIN batches b ON b.id = s.batch_id "
+            f"WHERE {where} ORDER BY s.started_at DESC, s.id DESC LIMIT 1",
+            tuple(params),
         ).fetchone()
         if row is None:
             return None
         return _scan(row)
+
+    def previous_in_same_region(self, account_id: str, scan_id: int) -> ScanRecord | None:
+        """The scan before `scan_id` that covered the same region.
+
+        A named method rather than a region argument at the call site, because
+        the caller that needs this has a scan and not a region — and reaching
+        for the region through the scan record is how the served report ended
+        up describing an account with one region's figures.
+        """
+        region = self.conn.execute(
+            "SELECT b.region AS region FROM scans s JOIN batches b ON b.id = s.batch_id "
+            "WHERE s.id = ?",
+            (scan_id,),
+        ).fetchone()
+        if region is None:
+            return None
+        return self.latest_scan_before(account_id, scan_id, region=region["region"])
 
     def observations_for_scan(self, scan_id: int) -> dict[str, dict]:
         """Observations from one scan, keyed by agent id."""

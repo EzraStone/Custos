@@ -328,7 +328,13 @@ def ingest(
 
         # Captured before this scan's observations are written, so the
         # comparison is against the previous scan rather than against itself.
-        previous = scans.latest_scan_before(batch.account_id, scan_id)
+        # The same region's previous scan. Comparing eu-west-1 against the
+        # last scan of us-east-1 reports every workload in one as having
+        # appeared and every workload in the other as having disappeared —
+        # every time either region is collected, for ever.
+        previous = scans.latest_scan_before(
+            batch.account_id, scan_id, region=batch.region
+        )
         previous_obs = (
             scans.observations_for_scan(previous.id) if previous is not None else {}
         )
