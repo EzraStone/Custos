@@ -282,6 +282,22 @@ Three limitations, all of them real:
   common cases, and the honest claim is that the detector now survives the
   obvious ones rather than that it survives a real estate.
 
+One thing the noise is *not*: classifier stress. Every one of these workloads
+scores at the floor — 0.039 against the agents' 0.95 and up — and they were
+checked rather than assumed, because two of the three properties the
+decoupling signal reads as agent-shaped are true of them: no inbound requests,
+machine-triggered bursts. What saves it is that they make no model call at
+all, so the signals that would carry them have nothing to measure. That is the
+classifier being right for the right reason rather than by luck, and the
+assertion is in `a0/tests/test_questions.py` so that if it stops being true the
+number moves there first.
+
+G0 is unchanged by their existence: 0.260 on the base corpus and 0.142 on the
+stress corpus, both still reproduced by `make experiment` and `make stress`.
+The noise is off by default for exactly that reason — folding non-agents that
+were never in question into the negative set would improve precision on paper
+and nothing in reality.
+
 Reproduce with `make questions`. CI prints it on every build and
 `a0/tests/test_questions.py` fails the build if the gateway stops ranking
 first.

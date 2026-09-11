@@ -76,3 +76,40 @@ def test_noise_alone_asks_nothing_at_all():
     """No gateway, seven services that look like one. Every question here
     would be a question a customer answers no to, and there should be none."""
     assert run(spec=CorpusSpec(noise=True)).asked == ()
+
+
+def test_the_noise_produces_no_agents_either():
+    """The noise exists to measure the gateway detector, not the classifier —
+    but it is worth knowing which, because these workloads have two of the
+    three properties the decoupling signal reads as agent-shaped: no inbound
+    requests, machine-triggered bursts.
+
+    They score at the floor because they make no model call, so the signals
+    that would carry them have nothing to measure. That is the classifier
+    being correct for the right reason rather than by luck, and if it ever
+    stops being true the number moves here first.
+    """
+    from custos.classify import classify_all, sessionize
+    from custos.pipeline import to_scan_input
+
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+
+    inp = to_scan_input(build_batch(corpus.build(CorpusSpec(noise=True))))
+    telemetry = sessionize(
+        inp.records, inp.principal_by_eni, inp.address_by_eni, inp.requests,
+        origin=inp.start, interval=inp.interval,
+    )
+    noise = {
+        "log-forwarder", "backup-agent", "metrics-push", "ci-publisher",
+        "clickstream", "image-pipeline", "contract-ingest",
+    }
+    scored = {
+        v.principal.rsplit("/", 1)[-1]: v
+        for v in classify_all(telemetry)
+        if v.principal.rsplit("/", 1)[-1] in noise
+    }
+    assert set(scored) == noise, f"the noise was not scored at all: {sorted(scored)}"
+    for name, verdict in scored.items():
+        assert str(verdict.disposition) == "not_agent", f"{name} is {verdict.disposition}"
+        assert verdict.confidence < 0.1, f"{name} scored {verdict.confidence:.3f}"
