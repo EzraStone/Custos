@@ -211,6 +211,83 @@ The weights were not retuned to widen it. They were already fitted on synthetic
 traffic; fitting them again on more synthetic traffic would improve the metric
 and nothing else.
 
+## Finding 8 — the gateway questions were measured and were worthless
+
+The detector that asks a customer "is this internal address your model
+gateway?" had no number attached to it, and the result quoted in its place —
+that it asks nothing at all on the base corpus and finds the real gateway
+first on the stress corpus — was a statement about the corpus. Neither corpus
+contained a single internal destination that ordinary infrastructure floods,
+so there was no opportunity to ask a bad question.
+
+Seven were added: a log collector, a backup service, a metrics pushgateway, an
+artifact registry, an event proxy, a thumbnailer and a document extractor.
+Every one is a real thing a real account runs and every one has the shape the
+detector looks for — private address, a great deal of egress, an
+acknowledgement coming back.
+
+**The detector asked nine questions, showed five, and none of the five was the
+gateway. It ranked eighth.**
+
+| | address | egress | ratio | answer |
+|---|---|---|---|---|
+| 1 | backup service | 4406MB | 57:1 | no |
+| 2 | thumbnailer | 1604MB | 5.7:1 | no |
+| 3 | artifact registry | 867MB | 53:1 | no |
+| 4 | document extractor | 704MB | 7.8:1 | no |
+| 5 | log collector | 548MB | 34:1 | no |
+| … | | | | |
+| 8 | **the gateway** | **54MB** | **4.3:1** | **yes** |
+
+The ranking rule — most blind workloads first, then volume — was written
+against a corpus where the gateway was the only internal destination with that
+shape, so nothing could outrank it. That is not a property of gateways. It is
+a property of a corpus with nothing else in it.
+
+**Neither volume nor ratio separates them.** The gateway is the *smallest*
+thing on the list, and its ratio sits between the thumbnailer's and the
+document extractor's. Any threshold on either number that excludes a backup
+service also excludes the gateway.
+
+**What separates them is the loop.** An agent behind a gateway calls the model,
+calls a tool, and calls the model again with the result. A log shipper, a
+backup agent, a metrics pusher and an artifact publisher each talk to exactly
+one thing, forever. Measured as the fraction of a blind workload's windows at a
+destination that also reached something else, it is 0.00 for every bulk sender
+and 0.98 for the real gateway — a threshold in empty space rather than between
+two adjacent points.
+
+It is not sufficient on its own, and the corpus contains the proof: a
+thumbnailer fetches an object, transforms it and writes the result back, which
+interleaves exactly like a tool loop. What excludes those is the ratio test, on
+a window that fetches as much as it sends. Neither test alone is enough.
+
+**With both: two questions, precision 0.50, the gateway first.** The second
+question is the agent's own deploy API, which is reached in the same loop — and
+nothing on the wire says which of two addresses in a loop is the model. That is
+a fair question rather than a failure.
+
+Three limitations, all of them real:
+
+- **A gateway that also proxies its workload's tool calls is excluded by this.**
+  It would be the only destination that workload reaches. The count of
+  destinations declined for that reason is carried into the report, because a
+  silent filter in front of the questions makes a clean-looking empty report
+  easier to produce, which is the thing the questions exist to prevent.
+- **A workload whose tool results are as large as its transcripts is masked**,
+  because the ratio test runs on window totals rather than per destination. The
+  wire does not carry bytes per destination. This is what removed the
+  thumbnailer, and it would remove an agent with the same profile.
+- **Seven synthetic services are not an account.** They were chosen to be the
+  common cases, and the honest claim is that the detector now survives the
+  obvious ones rather than that it survives a real estate.
+
+Reproduce with `make questions`. CI prints it on every build and
+`a0/tests/test_questions.py` fails the build if the gateway stops ranking
+first.
+
+---
+
 ---
 
 ## Why this result should be believed, and where it should not
