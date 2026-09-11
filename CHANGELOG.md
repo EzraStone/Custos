@@ -29,6 +29,53 @@ this system hides an agent, and a hidden agent is a gap somebody can be told
 about. This one invents them, in a document whose whole value is that a
 security team believes it.
 
+### Two reports, and the caveats were in one of them
+
+There are two paths to a report. `custos scan` renders one from the scan it
+just ran; `GET /v1/report` renders one from the store a week later, and that is
+the copy a customer opens and forwards to their security team.
+
+Three things were in the first and not the second, all for the same reason —
+the figure was computed at scan time, used immediately, and never stored:
+
+- the count of public IPv6 destinations reached, which is the one disclosure
+  standing between "no findings" and "no findings, and a model endpoint reached
+  over IPv6 would not have produced one"
+- the records AWS itself dropped before we read them, which is the difference
+  between "this account is quiet" and "we were handed less than happened"
+- the entire behaviour section: an agent reaching something it has never
+  reached, which is the part of this product that only exists because there is
+  a week between scans
+
+Nothing failed in any of those cases. The disclosure simply was not in the
+document anybody keeps.
+
+Two meta-tests now compare the two construction sites rather than the two
+documents — the caveats inside the coverage block, and the sections each report
+is rendered with — and a third catches the other direction, a section the
+renderer handles for a caller that does not exist. Fields that legitimately
+differ are named with their reason.
+
+The same kind of gap existed between `make check` and CI: CI linted the console
+and the local gate did not, so a warning that fails the build arrived only
+after a push. A test compares those two files now as well.
+
+### A schema comment that would have broken an upgrade
+
+SQLite's ALTER TABLE rewrites the stored CREATE TABLE text, and a comment
+inside the parentheses makes DROP COLUMN and RENAME COLUMN fail with
+"incomplete input". The `scans` table carried four.
+
+Nothing in the suite could have found it: the schema is created fresh in every
+test and only an existing database is ever altered, so it fails on a customer's
+file, during an upgrade, in a migration that worked everywhere it was tried.
+
+Found while writing an upgrade test that removes every additive column from a
+current database and reopens it — which is what a customer's upgrade does, and
+what the previous test only did for one table. A second test then runs a real
+ingest against the upgraded file, because columns arriving is not the same as
+the code that writes them working.
+
 ### Half the account, alternating
 
 The same shape again, in the two lists a person is supposed to act on. Gateway
