@@ -47,6 +47,16 @@ not scored at all rather than scored badly — the signals that would score it
 have nothing to measure — and it surfaces as a question about an undeclared
 address instead. Declaring the gateway recovers it completely.
 
+**The questions have a number too, and the first measurement was 0.00.** The
+detector that asks "is this internal address your model gateway?" had never
+been scored against a corpus containing anything it could get wrong. Seven
+ordinary services were added — a log collector, a backup agent, a metrics
+pushgateway, a thumbnailer — and it asked nine questions, showed five, and
+ranked the real gateway eighth. It asks two now and the gateway is first;
+`make questions` reproduces it and CI prints it on every build. The fix is in
+[docs/A0-FINDINGS.md](docs/A0-FINDINGS.md) under Finding 8, with the three
+limitations that are still true.
+
 The result and its limitations are in [docs/A0-FINDINGS.md](docs/A0-FINDINGS.md).
 Two signals the original specification expected to carry the classifier were
 measured and rejected; the finding that matters most is that the specification's
@@ -56,6 +66,7 @@ headline signal is not implementable at all, and what replaces it is better.
 make setup       # virtualenv, both Python packages
 make check       # lint and test everything
 make experiment  # run A0, print the G0 verdict, write a sample scan report
+make questions   # score the gateway detector against the noise corpus
 ```
 
 ## The loop, end to end
