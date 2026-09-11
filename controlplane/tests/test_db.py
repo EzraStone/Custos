@@ -270,3 +270,115 @@ def test_a_fresh_database_is_already_the_current_shape():
     assert _unique_columns(open_database(), "batches") == [
         "account_id", "region", "window_start", "window_end",
     ]
+
+
+def test_every_added_column_reaches_a_database_that_predates_it(tmp_path):
+    """The test above proves it for `scans`, by writing out the v2 shape of
+    that one table. Every other table's added columns were only ever checked
+    against a database that already had them, which proves nothing.
+
+    This takes a current database, removes every column in the list, puts a row
+    in each affected table, and reopens it — which is the upgrade a customer
+    performs, with their register already in the file.
+    """
+    import sqlite3
+
+    from custos.store.db import open_database
+    from custos.store.schema import ADDED_COLUMNS
+
+    path = tmp_path / "old.db"
+    open_database(path).close()
+
+    raw = sqlite3.connect(path)
+    raw.execute("PRAGMA foreign_keys = OFF")
+    for table, column, _ in ADDED_COLUMNS:
+        raw.execute(f"ALTER TABLE {table} DROP COLUMN {column}")
+    # A row per affected table, because an empty table would accept anything
+    # and prove nothing about a customer with a year of history.
+    raw.execute(
+        "INSERT INTO batches (id, account_id, window_start, window_end, received_at) "
+        "VALUES (1, '1', '2026-08-10T12:00:00+00:00', '2026-08-10T13:00:00+00:00', 'then')"
+    )
+    raw.execute(
+        "INSERT INTO scans (id, batch_id, account_id, started_at) "
+        "VALUES (1, 1, '1', '2026-08-10T12:00:00+00:00')"
+    )
+    raw.execute(
+        "INSERT INTO agents (id, account_id, principal, status, first_seen, last_seen, "
+        "source, confidence, evidence) VALUES ('agt_1', '1', 'role/x', 'discovered', "
+        "'2026-08-10T12:00:00+00:00', '2026-08-10T12:00:00+00:00', 'discovered', 0.9, '[]')"
+    )
+    raw.execute(
+        "INSERT INTO observations (scan_id, agent_id, observed_at) "
+        "VALUES (1, 'agt_1', '2026-08-10T12:00:00+00:00')"
+    )
+    raw.execute(
+        "INSERT INTO declared_endpoints (account_id, value, kind, declared_by, declared_at) "
+        "VALUES ('1', '10.0.7.0/24', 'range', 'ezra', '2026-08-10T12:00:00+00:00')"
+    )
+    raw.execute(
+        "INSERT INTO gateway_candidates (scan_id, account_id, address, egress, ingress, "
+        "principals, blind, question) VALUES (1, '1', '10.0.7.40', 5, 1, '[]', '[]', 'q?')"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = open_database(path)
+    conn.row_factory = sqlite3.Row
+    for table, column, _ in ADDED_COLUMNS:
+        columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        assert column in columns, f"{table}.{column} never reached an existing database"
+
+    for table in ("batches", "scans", "agents", "observations",
+                  "declared_endpoints", "gateway_candidates"):
+        n = conn.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()["n"]  # noqa: S608
+        assert n == 1, f"the upgrade lost {table}'s row"
+
+
+def test_an_upgraded_database_can_still_take_a_scan(tmp_path):
+    """Columns arriving is not the same as the code that writes them working.
+    A default of '[]' read back through a hydrator expecting a mapping is a
+    migration that passes its own test and fails on the first ingest.
+    """
+    import sqlite3
+
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+
+    from custos.pipeline import ingest
+    from custos.store.db import open_database
+    from custos.store.schema import ADDED_COLUMNS
+
+    path = tmp_path / "upgrade.db"
+    open_database(path).close()
+    raw = sqlite3.connect(path)
+    for table, column, _ in ADDED_COLUMNS:
+        raw.execute(f"ALTER TABLE {table} DROP COLUMN {column}")
+    raw.commit()
+    raw.close()
+
+    conn = open_database(path)
+    batch = build_batch(corpus.build(corpus.CorpusSpec(days=1)), region="us-east-1")
+    outcome = ingest(conn, batch)
+    assert outcome.result.register.agents, "an upgraded database took no agents"
+
+
+def test_no_table_carries_a_comment_inside_its_definition():
+    """SQLite's ALTER TABLE rewrites the stored CREATE TABLE text, and a
+    comment inside the parentheses makes DROP COLUMN and RENAME COLUMN fail
+    with "incomplete input".
+
+    It fails on a customer's database, during an upgrade, in a migration that
+    worked everywhere it was tested — because the schema is created fresh in
+    every test and only an existing database is ever altered. The `scans` table
+    had four such comments and they cost this file two hours.
+    """
+    import re
+
+    from custos.store.schema import BATCHES_TABLE, SCHEMA
+
+    for body in re.finditer(r"CREATE TABLE[^(]*\((.*?)\n\);", SCHEMA + BATCHES_TABLE, re.S):
+        assert "--" not in body.group(1), (
+            "a comment inside a CREATE TABLE body breaks ALTER TABLE; put it "
+            "above the statement"
+        )

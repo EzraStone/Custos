@@ -119,6 +119,17 @@ CREATE TABLE IF NOT EXISTS schema_version (
 -- One row per scan run over a batch. Kept separate from batches because the
 -- same telemetry can be re-classified by a newer classifier, and comparing
 -- those runs is how a classifier change is evaluated against real traffic.
+--
+-- scope_named and scope_total are how much of this scan's approval scope could
+-- be named rather than shown as an address. Recorded per scan because it is a
+-- property of the account's tagging on that day, and because a scope that got
+-- less readable is worth noticing.
+--
+-- No comments inside the parentheses below, here or in any other table.
+-- SQLite's ALTER TABLE rewrites the stored CREATE TABLE text, and a comment in
+-- the body makes DROP COLUMN and RENAME COLUMN fail with "incomplete input" —
+-- on a customer's database, during an upgrade, in a migration that worked
+-- everywhere it was tested.
 CREATE TABLE IF NOT EXISTS scans (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     batch_id            INTEGER NOT NULL REFERENCES batches(id),
@@ -133,11 +144,6 @@ CREATE TABLE IF NOT EXISTS scans (
     coverage            REAL    NOT NULL DEFAULT 0.0,
     truncated           INTEGER NOT NULL DEFAULT 0,
     catalogue_revision  TEXT    NOT NULL DEFAULT '',
-
-    -- How much of this scan's approval scope could be named rather than shown
-    -- as an address. Recorded per scan because it is a property of the
-    -- account's tagging on that day, and because a scope that got less
-    -- readable is worth noticing.
     scope_named         INTEGER NOT NULL DEFAULT 0,
     scope_total         INTEGER NOT NULL DEFAULT 0
 );
