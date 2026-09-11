@@ -610,3 +610,101 @@ def test_a_declined_destination_reaches_the_served_report(client):
 
     page = client.get("/v1/report", headers=AUTH).text
     assert "had the traffic shape of a model gateway" in page
+
+
+def test_a_new_region_does_not_report_every_service_in_it_as_drift():
+    """The first scan of a second region sees an agent reaching that region's
+    internal services for the first time. That is a change in our coverage, and
+    reporting it as "reached three things for the first time in 30 scans" is a
+    finding about us delivered as a finding about the customer.
+
+    Written against the store rather than through the pipeline because the
+    corpus generates the same destinations in every region, so a batch of it
+    relabelled as eu-west-1 cannot produce a new tool at all — a pipeline test
+    here would pass whether the bug was present or not, which is what the
+    first draft of it did.
+    """
+    from datetime import timedelta
+
+    from custos.register.model import Agent, Identity, Provenance, Source, Status
+    from custos.register.store import agent_id
+    from custos.store.agents import AgentStore
+    from custos.store.db import open_database
+    from custos.store.scans import ScanStore
+
+    conn = open_database()
+    client = TestClient(create_app(conn=conn, tokens=TokenStore({"tok": ACCOUNT})))
+
+    principal = f"arn:aws:iam::{ACCOUNT}:role/two-region"
+    at = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+    stored = AgentStore(conn).upsert(Agent(
+        id=agent_id(ACCOUNT, principal), first_seen=at, last_seen=at,
+        status=Status.DISCOVERED,
+        provenance=Provenance(source=Source.DISCOVERED, confidence=0.99,
+                              observed_principal=principal, evidence=["bytes"]),
+        identity=Identity(principal=principal, account_id=ACCOUNT),
+    ))
+
+    scans = ScanStore(conn)
+    batch = scans.record_batch(
+        account_id=ACCOUNT, region="us-east-1", window_start=at,
+        window_end=at + timedelta(hours=1), collector="t",
+        received_at=at + timedelta(hours=1), flow_records=1, requests=0,
+        have_alb_logs=True,
+    )
+    scan_id = scans.record_scan(
+        batch_id=batch.id, account_id=ACCOUNT, started_at=at, principals_seen=1,
+        agents_found=1, review_candidates=0, coverage=1.0, truncated=False,
+        catalogue_revision="r", regions=("us-east-1",),
+    )
+    for hour in range(8):
+        scans.record_observation(
+            scan_id=scan_id, agent_id=stored.id,
+            observed_at=at + timedelta(hours=hour), confidence=0.99,
+            model_egress=10, model_ingress=1, episodes=1, calls_per_hour=4.0,
+            tools={"10.0.4.21"}, active_hours={12: 1.0}, blast_radius="read",
+            region="us-east-1",
+        )
+    conn.commit()
+
+    before = client.get(f"/v1/agents/{stored.id}/drift", headers=AUTH).json()
+    assert before["baseline"]["established"], "the baseline was never established"
+    assert before["drift"] == []
+
+    # The first look at eu-west-1. Different services, because they are a
+    # different region's services.
+    scans.record_observation(
+        scan_id=scan_id, agent_id=stored.id,
+        observed_at=at + timedelta(hours=9), confidence=0.99,
+        model_egress=10, model_ingress=1, episodes=1, calls_per_hour=4.0,
+        tools={"10.1.4.21", "10.1.9.44"}, active_hours={12: 1.0},
+        blast_radius="read", region="eu-west-1",
+    )
+    conn.commit()
+
+    after = client.get(f"/v1/agents/{stored.id}/drift", headers=AUTH).json()
+    invented = [d for d in after["drift"] if d["kind"] == "new_tool"]
+    assert invented == [], f"the first scan of a new region invented drift: {invented}"
+
+
+def test_drift_in_one_region_is_still_found_and_says_which():
+    """The other half. Narrowing the baseline must not narrow it to nothing:
+    an agent that starts reaching something new in the region it has always run
+    in is exactly what this detects, and the finding has to name the region or
+    nobody knows which deployment to look at."""
+    from datetime import timedelta
+
+    from custos.baseline import detect_from_history
+
+    at = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+    history = [
+        {"tools": {"10.0.4.21"}, "calls_per_hour": 4.0,
+         "observed_at": at + timedelta(hours=h), "region": "us-east-1"}
+        for h in range(8)
+    ]
+    history.append({"tools": {"10.0.4.21", "10.0.9.44"}, "calls_per_hour": 4.0,
+                    "observed_at": at + timedelta(hours=9), "region": "us-east-1"})
+
+    _, found = detect_from_history("a", history, region="us-east-1")
+    assert [f.kind for f in found] == ["new_tool"]
+    assert found[0].region == "us-east-1"

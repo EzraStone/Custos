@@ -371,6 +371,11 @@ def ingest(
                 tools=observation["tools"],
                 active_hours=active_hours,
                 blast_radius=observation["blast_radius"],
+                # Which region this observation is of. A baseline built from
+                # an agent's observations in two regions interleaved is two
+                # trends sampled alternately, and the step between them reads
+                # as drift that nothing did.
+                region=batch.region,
             )
 
         diff = compare(
@@ -384,8 +389,15 @@ def ingest(
         # baseline it builds.
         drift: list[Drift] = []
         for agent_id in current_obs:
+            # This region's history, not the agent's. The first scan of a
+            # second region would otherwise report every service that region
+            # uses as a tool reached "for the first time in 30 scans" — a
+            # finding about a change in our coverage, delivered as a finding
+            # about the customer's workload.
             _, findings = detect_from_history(
-                agent_id, scans.observation_history(agent_id)
+                agent_id,
+                scans.observation_history(agent_id, region=batch.region),
+                region=batch.region,
             )
             drift.extend(findings)
         drift.sort(key=lambda d: d.severity)

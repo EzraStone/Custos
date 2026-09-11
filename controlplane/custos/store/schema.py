@@ -22,7 +22,7 @@ agent's apparent spend and reach.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 # Columns added after a table was first written, applied by ALTER on databases
 # that already exist. The schema below is applied with CREATE TABLE IF NOT
@@ -55,6 +55,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     # so an agent running in three was showing a third of its cost.
     ("agents", "region_spend", "TEXT NOT NULL DEFAULT '{}'"),
     ("agents", "region_reach", "TEXT NOT NULL DEFAULT '{}'"),
+    ("observations", "region", "TEXT NOT NULL DEFAULT ''"),
     # Which region a declaration applies to. Empty means every region, which
     # is right for a public provider range and dangerous for a private one:
     # 10.0.7.40 is a different host in every region an account runs in.
@@ -279,7 +280,8 @@ CREATE TABLE IF NOT EXISTS observations (
     calls_per_hour    REAL    NOT NULL DEFAULT 0.0,
     tools             TEXT    NOT NULL DEFAULT '[]',
     active_hours      TEXT    NOT NULL DEFAULT '{}',
-    blast_radius      TEXT    NOT NULL DEFAULT 'read'
+    blast_radius      TEXT    NOT NULL DEFAULT 'read',
+    region            TEXT    NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS observations_by_agent ON observations (agent_id, observed_at DESC);
 

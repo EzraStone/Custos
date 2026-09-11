@@ -130,3 +130,36 @@ def test_an_agent_with_no_prior_hours_does_not_report_hour_drift():
     baseline = build("agt_1", [obs(hours=(), day=i) for i in range(10)])
     found = detect(baseline, obs(hours=(3,)), T0)
     assert not any(d.kind is DriftKind.OFF_PATTERN_HOURS for d in found)
+
+
+# --- a baseline belongs to a region -------------------------------------------
+#
+# An agent's behaviour in us-east-1 is a trend. The same agent's observations
+# in us-east-1 and eu-west-1 interleaved are two trends sampled alternately,
+# and the step between them reads as drift that nothing did.
+
+def test_drift_carries_the_region_it_was_found_in():
+    """"Reached a new datastore" is not actionable until somebody knows which
+    of three deployments did it."""
+    history = [
+        {"tools": {"billing-api"}, "calls_per_hour": 10.0, "observed_at": T0}
+        for _ in range(6)
+    ]
+    history.append({"tools": {"billing-api", "new-thing"}, "calls_per_hour": 10.0,
+                    "observed_at": T0})
+
+    _, findings = detect_from_history("a", history, region="eu-west-1")
+    assert findings
+    assert all(f.region == "eu-west-1" for f in findings)
+
+
+def test_a_finding_with_no_region_still_works():
+    """An older collector sends none, and a drift finding is still a finding."""
+    history = [
+        {"tools": {"billing-api"}, "calls_per_hour": 10.0, "observed_at": T0}
+        for _ in range(6)
+    ]
+    history.append({"tools": {"billing-api", "new"}, "calls_per_hour": 10.0,
+                    "observed_at": T0})
+    _, findings = detect_from_history("a", history)
+    assert findings and findings[0].region == ""

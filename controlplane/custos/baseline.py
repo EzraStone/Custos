@@ -74,6 +74,14 @@ class Drift:
     agent_id: str
     observed_at: datetime
     detail: str
+    region: str = ""
+    """Which region this is drift in.
+
+    A baseline is per region, because an agent's behaviour in us-east-1 is a
+    trend and the same agent's observations in two regions interleaved are two
+    trends sampled alternately. Carried onto the finding so an operator knows
+    where to look — "reached a new datastore" is not actionable until somebody
+    knows which of three deployments did it."""
 
     @property
     def severity(self) -> int:
@@ -141,7 +149,12 @@ def build(agent_id: str, history: list[dict]) -> Baseline:
     return baseline
 
 
-def detect(baseline: Baseline, observation: dict, observed_at: datetime) -> list[Drift]:
+def detect(
+    baseline: Baseline,
+    observation: dict,
+    observed_at: datetime,
+    region: str = "",
+) -> list[Drift]:
     """Compare one observation against a baseline.
 
     Returns nothing when the baseline is not established. That is the correct
@@ -156,6 +169,7 @@ def detect(baseline: Baseline, observation: dict, observed_at: datetime) -> list
     if new_tools:
         findings.append(Drift(
             kind=DriftKind.NEW_TOOL, agent_id=baseline.agent_id, observed_at=observed_at,
+            region=region,
             detail=(
                 f"reached {', '.join(sorted(new_tools)[:4])} for the first time in "
                 f"{baseline.observations} scans"
@@ -167,7 +181,7 @@ def detect(baseline: Baseline, observation: dict, observed_at: datetime) -> list
     if baseline.calls_per_hour_p95 > 0 and rate > ceiling:
         findings.append(Drift(
             kind=DriftKind.VOLUME_SPIKE, agent_id=baseline.agent_id,
-            observed_at=observed_at,
+            observed_at=observed_at, region=region,
             detail=(
                 f"made {rate:.1f} calls per hour against a usual high of "
                 f"{baseline.calls_per_hour_p95:.1f}"
@@ -181,7 +195,7 @@ def detect(baseline: Baseline, observation: dict, observed_at: datetime) -> list
             listed = ", ".join(f"{h:02d}:00" for h in sorted(new_hours)[:4])
             findings.append(Drift(
                 kind=DriftKind.OFF_PATTERN_HOURS, agent_id=baseline.agent_id,
-                observed_at=observed_at,
+                observed_at=observed_at, region=region,
                 detail=f"was active at {listed} UTC, outside its usual hours",
             ))
 
@@ -190,7 +204,10 @@ def detect(baseline: Baseline, observation: dict, observed_at: datetime) -> list
 
 
 def detect_from_history(
-    agent_id: str, history: list[dict], observed_at: datetime | None = None
+    agent_id: str,
+    history: list[dict],
+    observed_at: datetime | None = None,
+    region: str = "",
 ) -> tuple[Baseline, list[Drift]]:
     """Build a baseline from all but the latest observation, then test it.
 
@@ -204,4 +221,4 @@ def detect_from_history(
     *earlier, latest = history
     baseline = build(agent_id, earlier)
     at = observed_at or latest.get("observed_at")
-    return baseline, detect(baseline, latest, at)
+    return baseline, detect(baseline, latest, at, region=region)

@@ -200,14 +200,17 @@ class ScanStore:
         tools: set[str],
         active_hours: dict[int, float],
         blast_radius: str,
+        region: str = "",
     ) -> None:
         self.conn.execute(
             "INSERT INTO observations (scan_id, agent_id, observed_at, confidence, "
             "model_egress, model_ingress, episodes, calls_per_hour, tools, "
-            "active_hours, blast_radius) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "active_hours, blast_radius, region) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (scan_id, agent_id, iso(observed_at), confidence, model_egress,
              model_ingress, episodes, calls_per_hour, dumps(tools),
-             dumps({str(k): v for k, v in active_hours.items()}), blast_radius),
+             dumps({str(k): v for k, v in active_hours.items()}), blast_radius,
+             region),
         )
 
     def scans_for(self, account_id: str, limit: int = 20) -> list[ScanRecord]:
@@ -291,18 +294,29 @@ class ScanStore:
             out[row["agent_id"]] = record
         return out
 
-    def observation_history(self, agent_id: str, limit: int = 30) -> list[dict]:
+    def observation_history(
+        self, agent_id: str, limit: int = 30, region: str | None = None
+    ) -> list[dict]:
         """Most recent observations for one agent, oldest first.
 
         Oldest first because every consumer is computing a trend, and reversing
         a list at each call site is how an off-by-one gets into a baseline.
+
+        `region` narrows it to one region's history, which is what a baseline
+        wants. An agent's behaviour in us-east-1 is a trend; the same agent's
+        observations in us-east-1 and eu-west-1 interleaved are two trends
+        sampled alternately, and the difference between them reads as drift.
         """
+        where, params = "agent_id = ?", [agent_id]
+        if region is not None:
+            where += " AND region = ?"
+            params.append(region)
         rows = [
             dict(row)
             for row in self.conn.execute(
-                "SELECT * FROM observations WHERE agent_id = ? "
+                f"SELECT * FROM observations WHERE {where} "
                 "ORDER BY observed_at DESC, id DESC LIMIT ?",
-                (agent_id, limit),
+                (*params, limit),
             )
         ]
         for row in rows:

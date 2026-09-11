@@ -327,7 +327,21 @@ def create_app(
 
         scans = ScanStore(app.state.db)
         history = scans.observation_history(agent_id)
-        baseline, drift = detect_from_history(agent_id, history)
+
+        # One baseline per region. An agent's behaviour in us-east-1 is a
+        # trend; its observations in two regions interleaved are two trends
+        # sampled alternately, and the step between them reads as drift that
+        # nothing did. The first scan of a second region is the worst case —
+        # every service that region uses is new to a mixed baseline.
+        drift, tools, established = [], set(), False
+        for region in sorted({row.get("region", "") for row in history}):
+            per_region = [row for row in history if row.get("region", "") == region]
+            baseline, found = detect_from_history(
+                agent_id, per_region, region=region
+            )
+            drift.extend(found)
+            tools |= baseline.tool_set
+            established = established or baseline.established
 
         return {
             "agent_id": agent_id,
@@ -341,16 +355,21 @@ def create_app(
                     # question gets answered and an accusation gets argued with.
                     "question": d.question,
                     "detail": d.detail,
+                    # Which deployment did it. "Reached a new datastore" is not
+                    # actionable until somebody knows which of three regions.
+                    "region": d.region,
                 }
                 for d in sorted(drift, key=lambda d: (d.severity, str(d.kind)))
             ],
             "baseline": {
-                "tools": sorted(baseline.tool_set),
-                "observations": baseline.observations,
+                "tools": sorted(tools),
+                "observations": len(history),
                 # Whether there is enough history for drift to mean anything.
                 # A caller showing drift from an unestablished baseline is
-                # showing noise with a confident label on it.
-                "established": baseline.established,
+                # showing noise with a confident label on it. True when any
+                # region has enough: drift is reported from the regions that
+                # do, and a region with two observations contributes none.
+                "established": established,
             },
         }
 
