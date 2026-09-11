@@ -146,6 +146,18 @@ export interface DriftItem {
   /** The phrasing to show. A question gets answered; an accusation gets argued with. */
   question: string;
   detail: string;
+  /**
+   * Which region this is drift in.
+   *
+   * A baseline is per region, because an agent's behaviour in us-east-1 is a
+   * trend and its observations in two regions interleaved are two trends
+   * sampled alternately. Shown because "reached a new datastore" sends its
+   * owner looking in all three deployments until it says which one did it.
+   *
+   * Optional: a control plane older than the field sends none, and so does an
+   * observation recorded before regions existed.
+   */
+  region?: string;
 }
 
 export interface DriftResponse {

@@ -435,8 +435,13 @@ def _drift_section(drift: list[Drift], agents: dict[str, Agent]) -> str:
         agent = agents.get(d.agent_id)
         name = _short_principal(agent.identity.principal) if agent else d.agent_id
         owner = (agent.identity.owner_team if agent else "") or "unattributed"
+        # Which deployment. An agent running in three regions has three, and
+        # "reached a new datastore" sends its owner looking in all of them
+        # until it says which one did it.
+        where = f' <span class="muted">in {_e(d.region)}</span>' if d.region else ""
         rows.append(
-            f'<li class="change"><span class="what">{_e(name)} {_e(d.question)}</span>'
+            f'<li class="change"><span class="what">{_e(name)} {_e(d.question)}'
+            f'{where}</span>'
             f'<span class="who">{_e(owner)}</span></li>'
         )
 

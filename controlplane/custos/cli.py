@@ -60,7 +60,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
         print()
         print("Behaviour worth asking about:")
         for finding in outcome.drift:
-            print(f"  {finding.question}")
+            where = f" [{finding.region}]" if finding.region else ""
+            print(f"  {finding.question}{where}")
 
     if args.notify:
         _deliver(conn, outcome, batch.account_id)

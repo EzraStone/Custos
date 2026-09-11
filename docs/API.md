@@ -458,7 +458,8 @@ How one agent's behaviour compares with its own history.
   "drift": [
     { "kind": "new_tool", "observed_at": "2026-08-20T09:00:00+00:00",
       "question": "finance-close reached rds 10.0.9.45 for the first time. Is that expected?",
-      "detail": "finance-close reached rds 10.0.9.45 for the first time" }
+      "detail": "finance-close reached rds 10.0.9.45 for the first time",
+      "region": "us-east-1" }
   ],
   "baseline": { "tools": ["billing-api 10.0.4.21"], "observations": 13, "established": true }
 }
@@ -469,6 +470,18 @@ owner, and an account-wide list of those is a list nobody owns.
 
 `question` is the phrasing to show. Every drift finding is put as a question
 because a question gets answered and an accusation gets argued with.
+
+`region` is which deployment drifted, and there is one baseline per region. An
+agent's behaviour in us-east-1 is a trend; its observations in two regions
+interleaved are two trends sampled alternately, and the step between them reads
+as a change in the workload — most visibly on the first scan of a second
+region, where every internal service that region uses is one the agent has
+never been seen reaching. A client that renders the finding without the region
+sends its owner looking in every deployment they run.
+
+`baseline.tools` is the union across regions and `baseline.established` is true
+when any one region has enough history. Findings are reported only from the
+regions that do, so a region scanned twice contributes none.
 
 `baseline.established` says whether there is enough history for any of this to
 mean something. A client that renders drift from an unestablished baseline is

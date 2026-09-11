@@ -78,9 +78,17 @@ function Body({ result }: { result: DriftResponse }) {
   return (
     <ul className="drift">
       {result.drift.map((item) => (
-        <li key={`${item.kind}-${item.observed_at}`}>
+        <li key={`${item.kind}-${item.observed_at}-${item.region ?? ""}`}>
           <span className="kind">{item.kind.replace(/_/g, " ")}</span>
-          <span className="question">{item.question}</span>
+          <span className="question">
+            {item.question}
+            {/*
+              Which deployment. An agent running in three regions has three
+              baselines, and the finding is against one of them — without the
+              region its owner checks all three.
+            */}
+            {item.region ? <span className="muted"> in {item.region}</span> : null}
+          </span>
         </li>
       ))}
     </ul>

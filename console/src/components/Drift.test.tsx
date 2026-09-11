@@ -84,3 +84,44 @@ describe("the behaviour section", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/could not load the baseline/i);
   });
 });
+
+
+describe("which region drifted", () => {
+  it("names it, because an agent in three regions has three baselines", async () => {
+    const load = vi.fn(async () =>
+      response({
+        drift: [{
+          kind: "new_tool",
+          observed_at: "2026-08-20T09:00:00+00:00",
+          question: "reached vectors.svc.internal. Is that expected?",
+          detail: "reached vectors.svc.internal for the first time in 30 scans",
+          region: "eu-west-1",
+        }],
+      }),
+    );
+    render(<Drift agentId="agt_1" load={load} />);
+    await userEvent.click(toggle());
+
+    expect(await screen.findByText(/eu-west-1/)).toBeInTheDocument();
+  });
+
+  it("says nothing when the finding carries no region", async () => {
+    // An observation recorded before regions existed has none, and a bare
+    // "in" with nothing after it is worse than no region at all.
+    const load = vi.fn(async () =>
+      response({
+        drift: [{
+          kind: "new_tool",
+          observed_at: "2026-08-20T09:00:00+00:00",
+          question: "reached vectors.svc.internal. Is that expected?",
+          detail: "reached it for the first time",
+        }],
+      }),
+    );
+    render(<Drift agentId="agt_1" load={load} />);
+    await userEvent.click(toggle());
+
+    expect(await screen.findByText(/is that expected\?/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^ in /)).toBeNull();
+  });
+});
