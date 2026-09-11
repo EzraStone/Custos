@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { GatewayCandidate } from "../api/types";
-import { Gateways } from "./Gateways";
+import { Gateways, questionKey } from "./Gateways";
 
 function candidate(overrides: Partial<GatewayCandidate> = {}): GatewayCandidate {
   return {
@@ -175,5 +175,45 @@ describe("destinations that were not asked about", () => {
       <Gateways candidates={[]} operator="ezra" busy={null} error={null} onDeclare={vi.fn()} />,
     );
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+
+describe("the same address in two regions", () => {
+  // 10.0.7.40 in us-east-1 and 10.0.7.40 in eu-west-1 are two different hosts,
+  // two separate questions, and two separate answers. Keying on the address
+  // alone gave them the same React key.
+  const both = [
+    candidate({ region: "us-east-1" }),
+    candidate({ region: "eu-west-1" }),
+  ];
+
+  it("asks both", () => {
+    render(
+      <Gateways
+        candidates={both}
+        operator="ezra@custos.dev"
+        busy={null}
+        error={null}
+        onDeclare={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/us-east-1/)).toBeInTheDocument();
+    expect(screen.getByText(/eu-west-1/)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /yes, it is ours/i })).toHaveLength(2);
+  });
+
+  it("marks only the one being answered as busy", () => {
+    render(
+      <Gateways
+        candidates={both}
+        operator="ezra@custos.dev"
+        busy={questionKey(both[0])}
+        error={null}
+        onDeclare={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByRole("button", { name: /recording/i })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: /yes, it is ours/i })).toHaveLength(1);
   });
 });

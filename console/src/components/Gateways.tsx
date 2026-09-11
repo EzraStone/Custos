@@ -74,16 +74,28 @@ export function Gateways({
       <ul className="candidates">
         {candidates.map((candidate) => (
           <Candidate
-            key={candidate.address}
+            key={questionKey(candidate)}
             candidate={candidate}
             operator={operator}
-            busy={busy === candidate.address}
+            busy={busy === questionKey(candidate)}
             onDeclare={onDeclare}
           />
         ))}
       </ul>
     </section>
   );
+}
+
+/**
+ * What identifies one question.
+ *
+ * The address is not enough. 10.0.7.40 in us-east-1 and 10.0.7.40 in eu-west-1
+ * are two different hosts, two separate questions, and two separate answers —
+ * keying on the address alone gave them the same React key and put both rows
+ * into "Recording…" when one of them was answered.
+ */
+export function questionKey(candidate: GatewayCandidate): string {
+  return `${candidate.address}\u0000${candidate.region}`;
 }
 
 function DeclinedNote({ count }: { count: number }) {

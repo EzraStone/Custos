@@ -16,7 +16,7 @@ import { AccountPicker } from "./components/AccountPicker";
 import { Changes } from "./components/Changes";
 import { Filters } from "./components/Filters";
 import { Finding } from "./components/Finding";
-import { Gateways } from "./components/Gateways";
+import { Gateways, questionKey } from "./components/Gateways";
 import { GrantDialog } from "./components/GrantDialog";
 import { Reviews } from "./components/Reviews";
 import { Scans } from "./components/Scans";
@@ -218,7 +218,10 @@ export function App() {
    */
   async function declareGateway(candidate: GatewayCandidate, note: string) {
     if (!client) return;
-    setDeclaring(candidate.address);
+    // Keyed by address *and* region. The same private address in two regions
+    // is two different hosts and two separate questions, and keying on the
+    // address alone put both rows into "Recording…" when one was answered.
+    setDeclaring(questionKey(candidate));
     setDeclareError(null);
     try {
       await client.declareEndpoint(
