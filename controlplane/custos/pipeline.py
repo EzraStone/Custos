@@ -21,6 +21,7 @@ from .catalog import is_ipv6
 from .classify import Disposition
 from .declared import Declared
 from .diff import ScanDiff, compare
+from .gateway import bulk_senders
 from .gateway import candidates as gateway_candidates
 from .reach import IamCapability
 from .report import Coverage
@@ -190,7 +191,12 @@ def _regions(batch: Batch) -> tuple[str, ...]:
     return (batch.region,) if batch.region else ()
 
 
-def _coverage(batch: Batch, scope: tuple[int, int] = (0, 0), ipv6: int = 0) -> Coverage:
+def _coverage(
+    batch: Batch,
+    scope: tuple[int, int] = (0, 0),
+    ipv6: int = 0,
+    declined: int = 0,
+) -> Coverage:
     """Build the report's coverage summary from what the collector reported.
 
     A batch carrying no collection statistics gets the default, which renders
@@ -205,7 +211,7 @@ def _coverage(batch: Batch, scope: tuple[int, int] = (0, 0), ipv6: int = 0) -> C
         # about its own reading.
         return Coverage(
             scope_named=scope[0], scope_total=scope[1], ipv6_destinations=ipv6,
-            regions=_regions(batch),
+            regions=_regions(batch), bulk_senders=declined,
         )
     return Coverage(
         parsed_fraction=stats.parsed_fraction,
@@ -218,6 +224,7 @@ def _coverage(batch: Batch, scope: tuple[int, int] = (0, 0), ipv6: int = 0) -> C
         read_errors=stats.read_errors,
         ipv6_destinations=ipv6,
         regions=_regions(batch),
+        bulk_senders=declined,
     )
 
 
@@ -300,6 +307,10 @@ def ingest(
             direction_undecided=batch.collection.direction_undecided,
             read_errors=batch.collection.read_errors,
             regions=_regions(batch),
+            # Destinations that looked like a gateway and were not asked
+            # about. Counted at scan time because the per-window destination
+            # bytes it is derived from are not kept.
+            bulk_senders=len(bulk_senders(result.telemetry)),
         )
 
         # Questions to put to the customer, from this scan's traffic. Recorded
@@ -382,7 +393,10 @@ def ingest(
     return IngestResult(
         batch=record, scan_id=scan_id, result=result,
         coverage_note=_coverage_note(batch, result),
-        coverage=_coverage(batch, (named, total), ipv6_destinations(scan_input)),
+        coverage=_coverage(
+            batch, (named, total), ipv6_destinations(scan_input),
+            declined=len(bulk_senders(result.telemetry)),
+        ),
         diff=diff, drift=drift,
     )
 

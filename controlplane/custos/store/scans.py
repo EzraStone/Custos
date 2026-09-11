@@ -50,6 +50,14 @@ class ScanRecord:
     direction_undecided: int = 0
     read_errors: int = 0
     regions: tuple[str, ...] = ()
+    bulk_senders: int = 0
+    """Internal destinations that had a gateway's traffic shape and were not
+    asked about, because the workloads reaching them reach nothing else.
+
+    A judgement, and one that can be wrong. A scan that quietly declined to
+    ask about five destinations is not the same as a scan that found none, and
+    the reason the question mechanism exists at all is that a report with
+    nothing in it is what a hidden gateway produces."""
 
     @property
     def scope_readable(self) -> float:
@@ -84,6 +92,7 @@ def _scan(row: sqlite3.Row) -> ScanRecord:
         direction_undecided=row["direction_undecided"],
         read_errors=row["read_errors"],
         regions=tuple(loads(row["regions"])),
+        bulk_senders=row["bulk_senders"],
     )
 
 
@@ -162,17 +171,19 @@ class ScanStore:
         direction_undecided: int = 0,
         read_errors: int = 0,
         regions: tuple[str, ...] = (),
+        bulk_senders: int = 0,
     ) -> int:
         cursor = self.conn.execute(
             "INSERT INTO scans (batch_id, account_id, started_at, principals_seen, "
             "agents_found, review_candidates, coverage, truncated, catalogue_revision, "
             "scope_named, scope_total, missing_fields, direction_undecided, "
-            "read_errors, regions) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "read_errors, regions, bulk_senders) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (batch_id, account_id, iso(started_at), principals_seen, agents_found,
              review_candidates, coverage, int(truncated), catalogue_revision,
              scope_named, scope_total, dumps(list(missing_fields)),
-             direction_undecided, read_errors, dumps(list(regions))),
+             direction_undecided, read_errors, dumps(list(regions)),
+             bulk_senders),
         )
         return cursor.lastrowid
 

@@ -264,6 +264,18 @@ def _format_limits(coverage: Coverage | None) -> list[str]:
             "Everything above is a statement about the regions named, not about "
             "the account."
         )
+    if coverage.bulk_senders:
+        n = coverage.bulk_senders
+        items.append(
+            f"{n:,} internal destination{'s' if n != 1 else ''} had the traffic "
+            "shape of a model gateway and "
+            f"{'were' if n != 1 else 'was'} not asked about, because the "
+            "workloads reaching "
+            f"{'them' if n != 1 else 'it'} reach nothing else — the shape a log "
+            "collector or a backup service has. That is a judgement, and a "
+            "gateway that also proxies its workload's tool calls would be "
+            "excluded by it."
+        )
     if coverage.read_errors:
         items.append(
             f"{coverage.read_errors:,} AWS read{'s' if coverage.read_errors != 1 else ''} "
@@ -477,6 +489,14 @@ class Coverage:
     scan of us-east-1 — so "no unsanctioned agents found" is a claim about one
     region, and a report that does not name it is making a claim about the
     account that nobody checked."""
+
+    bulk_senders: int = 0
+    """Internal destinations with a gateway's traffic shape that were not asked
+    about, because the workloads reaching them reach nothing else.
+
+    Stated for the same reason the gateway questions exist at all: a report
+    with no findings and no questions is exactly what an account with a hidden
+    gateway produces, so every place we chose not to ask has to be visible."""
 
     read_errors: int = 0
     """AWS reads that failed after retries while this scan was collected.

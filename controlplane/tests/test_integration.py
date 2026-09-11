@@ -593,3 +593,20 @@ def test_principals_seen_is_not_one_regions_count_beside_every_regions_agents(cl
 
     page = client.get("/v1/report", headers=AUTH).text
     assert "counts one region" in page, "the header ratio was left unexplained"
+
+
+def test_a_declined_destination_reaches_the_served_report(client):
+    """The count is computed at scan time, because the per-window destination
+    bytes behind it are not kept. If it does not survive into the report it
+    might as well not have been computed."""
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+
+    payload = build_batch(
+        corpus.build(corpus.CorpusSpec(days=1, hard=True, noise=True))
+    ).model_dump(mode="json")
+    payload["account_id"] = ACCOUNT
+    assert client.post("/v1/batches", json=payload, headers=AUTH).status_code == 202
+
+    page = client.get("/v1/report", headers=AUTH).text
+    assert "had the traffic shape of a model gateway" in page

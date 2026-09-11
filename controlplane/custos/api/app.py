@@ -801,6 +801,7 @@ def create_app(
             missing_in=_missing_in(per_region),
             direction_undecided=sum(s.direction_undecided for s in per_region),
             read_errors=sum(s.read_errors for s in per_region),
+            bulk_senders=sum(s.bulk_senders for s in per_region),
             # Every region this account has been collected in, not the
             # latest scan's. The register below holds agents from all of
             # them; labelling it with one scan's region tells a reader a

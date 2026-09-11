@@ -594,3 +594,24 @@ def test_a_single_region_report_does_not_explain_the_principal_count():
         result([agent()]), "acme", T0, coverage=Coverage(regions=("us-east-1",))
     )
     assert "counts one region" not in page
+
+
+def test_destinations_we_declined_to_ask_about_are_counted():
+    """A report with no findings and no questions is what an account with a
+    hidden gateway produces, so every place we chose not to ask has to be
+    visible — including the ones excluded by a rule that can be wrong."""
+    page = render(result([agent()]), "acme", T0, coverage=Coverage(bulk_senders=5))
+    assert "5 internal destinations had the traffic shape of a model gateway" in page
+    assert "reach nothing else" in page
+    assert "would be excluded by it" in page
+
+
+def test_declining_nothing_says_nothing():
+    page = render(result([agent()]), "acme", T0, coverage=Coverage())
+    assert "traffic shape of a model gateway" not in page
+
+
+def test_one_declined_destination_reads_as_one():
+    page = render(result([agent()]), "acme", T0, coverage=Coverage(bulk_senders=1))
+    assert "1 internal destination had the traffic shape" in page
+    assert "the workloads reaching it reach nothing else" in page
