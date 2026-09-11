@@ -34,8 +34,8 @@ EXPECTED_ONLY_IN_SERVED = {
 EXPECTED_ONLY_IN_CLI: set[str] = set()
 
 
-def _coverage_kwargs(path: Path, function: str) -> set[str]:
-    """Every keyword passed to a Coverage(...) call inside `function`."""
+def _kwargs(path: Path, function: str, called: str) -> set[str]:
+    """Every keyword passed to a `called(...)` call inside `function`."""
     tree = ast.parse(path.read_text())
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef) or node.name != function:
@@ -45,11 +45,27 @@ def _coverage_kwargs(path: Path, function: str) -> set[str]:
             if (
                 isinstance(call, ast.Call)
                 and isinstance(call.func, ast.Name)
-                and call.func.id == "Coverage"
+                and call.func.id == called
             ):
                 fields |= {kw.arg for kw in call.keywords if kw.arg}
         return fields
     raise AssertionError(f"{function} is not in {path.name} any more")
+
+
+def _coverage_kwargs(path: Path, function: str) -> set[str]:
+    return _kwargs(path, function, "Coverage")
+
+
+# What each report is rendered with. Not the same question as the coverage
+# fields above: this is whole sections of the document rather than caveats
+# inside one. `drift` was missing from the served report for months — the
+# section that says an agent started doing something it had not done before,
+# absent from the only copy that exists a week later.
+_CLI_RENDER = ("_write_report", "render")
+_SERVED_RENDER = ("get_report", "render")
+
+RENDER_ONLY_IN_CLI: set[str] = set()
+RENDER_ONLY_IN_SERVED: set[str] = set()
 
 
 def test_the_served_report_discloses_everything_the_cli_one_does():
@@ -88,3 +104,19 @@ def test_every_coverage_field_is_set_by_at_least_one_of_them():
         | _coverage_kwargs(ROOT / "api" / "app.py", "get_report")
     )
     assert fields <= filled, f"nothing ever sets {sorted(fields - filled)}"
+
+
+def test_both_reports_are_rendered_with_the_same_sections():
+    """A section passed to one render and not the other is a part of the
+    document that exists in one copy and not the other. Nothing fails when it
+    is missing: the section simply does not appear, in the copy a customer
+    forwards."""
+    cli = _kwargs(ROOT / "cli.py", *_CLI_RENDER)
+    served = _kwargs(ROOT / "api" / "app.py", *_SERVED_RENDER)
+
+    assert not (cli - served - RENDER_ONLY_IN_CLI), (
+        f"the served report has no {sorted(cli - served - RENDER_ONLY_IN_CLI)}"
+    )
+    assert not (served - cli - RENDER_ONLY_IN_SERVED), (
+        f"the CLI report has no {sorted(served - cli - RENDER_ONLY_IN_SERVED)}"
+    )

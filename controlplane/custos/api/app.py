@@ -884,6 +884,12 @@ def create_app(
             declared=_declared_labels(DeclarationStore(app.state.db), account_id),
             reviews=candidates,
             questions=questions,
+            # The section that says an agent started doing something it has
+            # not done before. It was in the report the CLI printed on the day
+            # and absent from the one a customer opens a week later, which is
+            # the copy that gets forwarded — and drift is the part of this
+            # product that only exists because there is a week in between.
+            drift=_drift_for(scans, register.agents),
         ))
 
     @app.get("/v1/agents/{agent_id}/audit")
@@ -953,6 +959,29 @@ class StatusRequest(BaseModel):
     status: str
     operator: str = Field(min_length=1)
     reason: str = ""
+
+
+def _drift_for(scans, agents: dict) -> list:
+    """Every agent's departures from its own baseline, per region.
+
+    One baseline per agent per region: an agent's behaviour in us-east-1 is a
+    trend, and its observations in two regions interleaved are two trends
+    sampled alternately.
+
+    Ordered by severity so the report's section leads with the finding worth
+    acting on, the same way the scan-time path does.
+    """
+    from ..baseline import detect_from_history
+
+    found = []
+    for agent_id in agents:
+        history = scans.observation_history(agent_id)
+        for region in sorted({row.get("region", "") for row in history}):
+            per_region = [row for row in history if row.get("region", "") == region]
+            _, drift = detect_from_history(agent_id, per_region, region=region)
+            found.extend(drift)
+    found.sort(key=lambda d: d.severity)
+    return found
 
 
 def _parse_by_region(per_region: list) -> tuple[tuple[str, float], ...]:

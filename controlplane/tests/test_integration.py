@@ -813,3 +813,62 @@ def test_the_served_report_discloses_ipv6_blindness_like_the_cli_one(client):
 
     page = client.get("/v1/report", headers=AUTH).text
     assert "were IPv6" in page, "the served report never mentions the IPv6 blind spot"
+
+
+def test_the_served_report_carries_the_behaviour_section():
+    """Drift is the part of this product that only exists because there is a
+    week between scans, and the served report — the one that exists a week
+    later — was rendered without it."""
+    from datetime import timedelta
+
+    from custos.register.model import Agent, Identity, Provenance, Source, Status
+    from custos.register.store import agent_id
+    from custos.store.agents import AgentStore
+    from custos.store.db import open_database
+    from custos.store.scans import ScanStore
+
+    conn = open_database()
+    client = TestClient(create_app(conn=conn, tokens=TokenStore({"tok": ACCOUNT})))
+    at = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+    principal = f"arn:aws:iam::{ACCOUNT}:role/drifter"
+    stored = AgentStore(conn).upsert(Agent(
+        id=agent_id(ACCOUNT, principal), first_seen=at, last_seen=at,
+        status=Status.DISCOVERED,
+        provenance=Provenance(source=Source.DISCOVERED, confidence=0.99,
+                              observed_principal=principal, evidence=["bytes"]),
+        identity=Identity(principal=principal, account_id=ACCOUNT),
+    ))
+
+    scans = ScanStore(conn)
+    batch = scans.record_batch(
+        account_id=ACCOUNT, region="us-east-1", window_start=at,
+        window_end=at + timedelta(hours=1), collector="t",
+        received_at=at + timedelta(hours=1), flow_records=1, requests=0,
+        have_alb_logs=True,
+    )
+    scan_id = scans.record_scan(
+        batch_id=batch.id, account_id=ACCOUNT, started_at=at, principals_seen=1,
+        agents_found=1, review_candidates=0, coverage=1.0, truncated=False,
+        catalogue_revision="r", regions=("us-east-1",),
+    )
+    for hour in range(8):
+        scans.record_observation(
+            scan_id=scan_id, agent_id=stored.id,
+            observed_at=at + timedelta(hours=hour), confidence=0.99,
+            model_egress=10, model_ingress=1, episodes=1, calls_per_hour=4.0,
+            tools={"billing-api 10.0.4.21"}, active_hours={12: 1.0},
+            blast_radius="read", region="us-east-1",
+        )
+    scans.record_observation(
+        scan_id=scan_id, agent_id=stored.id,
+        observed_at=at + timedelta(hours=9), confidence=0.99,
+        model_egress=10, model_ingress=1, episodes=1, calls_per_hour=4.0,
+        tools={"billing-api 10.0.4.21", "vectors 10.0.6.30"},
+        active_hours={12: 1.0}, blast_radius="read", region="us-east-1",
+    )
+    conn.commit()
+
+    page = client.get("/v1/report", headers=AUTH).text
+    assert "Behaviour worth asking about" in page
+    assert "vectors 10.0.6.30" in page
+    assert "in us-east-1" in page
