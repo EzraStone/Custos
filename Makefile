@@ -32,7 +32,8 @@ check: lint test ## Everything CI runs
 
 lint: ## Lint Python, vet Go, typecheck the console
 	$(RUFF) check controlplane a0
-	@if [ -d console/node_modules ]; then cd console && npm run typecheck --silent; fi
+	@if [ -d console/node_modules ]; then \
+	  cd console && npm run typecheck --silent && npm run lint --silent; fi
 	@if [ -d collector ] && [ -f collector/go.mod ]; then \
 	  cd collector && gofmt -l . && go vet ./...; fi
 	@if [ -d checkpoint ] && [ -f checkpoint/go.mod ]; then \
