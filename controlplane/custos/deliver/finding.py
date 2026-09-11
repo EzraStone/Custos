@@ -58,6 +58,14 @@ class Finding:
     blast_radius: BlastRadius = BlastRadius.READ
     observed_at: datetime | None = None
     evidence: tuple[str, ...] = field(default_factory=tuple)
+    region: str = ""
+    """Which region this is about, when it is about one.
+
+    Empty for anything account-wide. Present on drift, because drift is
+    measured against a per-region baseline: the same agent reaching something
+    new in us-east-1 and in eu-west-1 is two findings about two deployments,
+    and without this they share a fingerprint and the second is suppressed as
+    a repeat of the first."""
 
     @property
     def fingerprint(self) -> str:
@@ -67,8 +75,15 @@ class Finding:
         escalation observed on three consecutive scans is one finding, and
         including anything that varies between scans would defeat suppression
         entirely — which is the same as having none.
+
+        The region is appended only when there is one, so every finding that
+        has never had a region keeps the fingerprint it has. Changing those
+        would re-deliver everything an account has already been told, once,
+        for nothing.
         """
         material = f"{self.account_id}\x00{self.principal}\x00{self.severity}\x00{self.title}"
+        if self.region:
+            material += f"\x00{self.region}"
         return hashlib.sha256(material.encode()).hexdigest()[:16]
 
     @property
@@ -124,6 +139,7 @@ def from_drift(drift: Drift, agent: Agent | None, account_id: str) -> Finding:
         owner_team=agent.identity.owner_team if agent else "",
         blast_radius=agent.reach.blast_radius if agent else BlastRadius.READ,
         observed_at=drift.observed_at,
+        region=drift.region,
     )
 
 

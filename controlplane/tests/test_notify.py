@@ -157,3 +157,41 @@ def test_plaintext_endpoints_are_refused():
 
 def test_no_configuration_means_no_channels():
     assert from_env(lambda _: None) == []
+
+
+# --- drift in two regions is two findings -------------------------------------
+
+def test_the_same_drift_in_two_regions_is_not_one_finding():
+    """Baselines are per region, so an agent reaching something new in
+    us-east-1 and something new in eu-west-1 is two questions for two
+    deployments. Sharing a fingerprint meant the second was suppressed as a
+    repeat of the first for a fortnight."""
+    from datetime import UTC, datetime
+
+    from custos.baseline import Drift, DriftKind
+    from custos.deliver import from_drift
+
+    at = datetime(2026, 8, 10, tzinfo=UTC)
+    east = Drift(kind=DriftKind.NEW_TOOL, agent_id="a", observed_at=at,
+                 detail="reached rds", region="us-east-1")
+    west = Drift(kind=DriftKind.NEW_TOOL, agent_id="a", observed_at=at,
+                 detail="reached vectors", region="eu-west-1")
+
+    assert (
+        from_drift(east, None, "1").fingerprint
+        != from_drift(west, None, "1").fingerprint
+    )
+
+
+def test_a_finding_with_no_region_keeps_the_fingerprint_it_had():
+    """Appending an empty region would change every stored fingerprint and
+    re-deliver everything an account has already been told, once, for
+    nothing."""
+    import hashlib
+
+    from custos.deliver import Finding, Severity
+
+    finding = Finding(severity=Severity.REVIEW, title="t", detail="d",
+                      account_id="1", principal="p")
+    material = f"1\x00p\x00{Severity.REVIEW}\x00t"
+    assert finding.fingerprint == hashlib.sha256(material.encode()).hexdigest()[:16]
