@@ -320,3 +320,71 @@ def test_per_region_spend_survives_a_round_trip():
     written = store.upsert(agent)
 
     assert store.get(written.id).region_spend == {"ap-south-1": 12.5}
+
+
+# --- reach, which is one region's ---------------------------------------------
+#
+# Spend was fixed first and reach was left, with every surface saying "reach
+# from one" beside it. The underlying defect was worse than a caveat: reach was
+# replaced wholesale on every upsert, so scanning eu-west-1 erased the tools
+# observed in us-east-1 and the agent appeared to stop touching them.
+
+def _regional(store, principal, region, tools, stores=()):
+    from custos.register.model import RegionalReach
+
+    agent = make(principal=principal)
+    agent.regions = {region}
+    agent.reach = Reach(tools=set(tools), data_stores=set(stores))
+    agent.region_reach = {
+        region: RegionalReach(tools=frozenset(tools), data_stores=frozenset(stores))
+    }
+    return store.upsert(agent)
+
+
+def test_a_second_regions_scan_does_not_erase_the_firsts_reach(store):
+    _regional(store, "arn:aws:iam::1:role/x", "us-east-1", ["billing-api"])
+    kept = _regional(store, "arn:aws:iam::1:role/x", "eu-west-1", ["ticketing"])
+
+    assert kept.reach.tools == {"billing-api", "ticketing"}
+
+
+def test_rescanning_a_region_replaces_that_regions_list(store):
+    """A tool an agent stopped using should disappear from that region — and
+    only from that region. Accumulating would make reach only ever grow, which
+    is how a register fills up with services nothing has touched in months."""
+    _regional(store, "arn:aws:iam::1:role/x", "us-east-1", ["billing-api", "gone"])
+    _regional(store, "arn:aws:iam::1:role/x", "eu-west-1", ["ticketing"])
+    kept = _regional(store, "arn:aws:iam::1:role/x", "us-east-1", ["billing-api"])
+
+    assert kept.reach.tools == {"billing-api", "ticketing"}
+    assert "gone" not in kept.reach.tools
+
+
+def test_the_breakdown_survives_the_round_trip(store):
+    _regional(store, "arn:aws:iam::1:role/x", "us-east-1", ["billing-api"], ["rds"])
+    kept = _regional(store, "arn:aws:iam::1:role/x", "eu-west-1", ["ticketing"])
+
+    assert set(kept.region_reach) == {"us-east-1", "eu-west-1"}
+    assert kept.region_reach["us-east-1"].tools == frozenset({"billing-api"})
+    assert kept.region_reach["us-east-1"].data_stores == frozenset({"rds"})
+    assert kept.region_reach["eu-west-1"].tools == frozenset({"ticketing"})
+
+
+def test_data_stores_union_the_same_way(store):
+    _regional(store, "arn:aws:iam::1:role/x", "us-east-1", [], ["orders-db"])
+    kept = _regional(store, "arn:aws:iam::1:role/x", "eu-west-1", [], ["billing-db"])
+
+    assert kept.reach.data_stores == {"orders-db", "billing-db"}
+
+
+def test_an_agent_from_a_collector_that_sends_no_region_keeps_its_reach(store):
+    """An older collector sends no region, so there is no per-region breakdown
+    to union. Falling back to the scan's own reach is what keeps that agent's
+    tools from vanishing the moment this column existed."""
+    agent = make(principal="arn:aws:iam::1:role/old")
+    agent.reach = Reach(tools={"billing-api"})
+    store.upsert(agent)
+
+    agent.reach = Reach(tools={"ticketing"})
+    kept = store.upsert(agent)
+    assert kept.reach.tools == {"ticketing"}

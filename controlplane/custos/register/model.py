@@ -104,6 +104,26 @@ class Reach:
         return len(self.tools) + len(self.data_stores)
 
 
+@dataclass(frozen=True, slots=True)
+class RegionalReach:
+    """What an agent was observed touching in one region.
+
+    Separate from `Reach` because that carries two things this cannot: IAM
+    credentials and blast radius, which are properties of a role and therefore
+    account-wide. A role that can delete an S3 bucket can delete it from every
+    region it runs in.
+
+    What a workload actually reached is not account-wide. An agent running in
+    three regions talks to three sets of internal services, and a scan sees one
+    of them — so a register that replaced reach on every scan described an
+    agent as touching whatever the most recently scanned region happened to
+    show, which is a subset presented as the whole.
+    """
+
+    tools: frozenset[str] = frozenset()
+    data_stores: frozenset[str] = frozenset()
+
+
 @dataclass(slots=True)
 class Imprimatur:
     """The grant. Null while unsanctioned."""
@@ -138,6 +158,15 @@ class Agent:
     imprimatur: Imprimatur | None = None
     baseline: Baseline = field(default_factory=Baseline)
     region_spend: dict[str, float] = field(default_factory=dict)
+    region_reach: dict[str, RegionalReach] = field(default_factory=dict)
+    """What this agent reached in each region, kept per region.
+
+    `reach` above is the union of these once an agent has been through the
+    store. Keeping the breakdown is what makes the union correct on a re-scan:
+    a second look at us-east-1 replaces that region's observation rather than
+    adding to it, and a first look at eu-west-1 adds one the agent did not
+    have."""
+
     """Estimated monthly spend per region, from the last scan of each.
 
     A scan covers one region, so an agent running in three was showing a third

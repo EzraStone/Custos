@@ -22,7 +22,7 @@ agent's apparent spend and reach.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 # Columns added after a table was first written, applied by ALTER on databases
 # that already exist. The schema below is applied with CREATE TABLE IF NOT
@@ -54,6 +54,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     # Spend per region, from the last scan of each. A scan covers one region,
     # so an agent running in three was showing a third of its cost.
     ("agents", "region_spend", "TEXT NOT NULL DEFAULT '{}'"),
+    ("agents", "region_reach", "TEXT NOT NULL DEFAULT '{}'"),
     # Which region a declaration applies to. Empty means every region, which
     # is right for a public provider range and dangerous for a private one:
     # 10.0.7.40 is a different host in every region an account runs in.
@@ -252,6 +253,7 @@ CREATE TABLE IF NOT EXISTS agents (
     est_monthly_spend   REAL    NOT NULL DEFAULT 0.0,
     regions             TEXT    NOT NULL DEFAULT '[]',
     region_spend        TEXT    NOT NULL DEFAULT '{}',
+    region_reach        TEXT    NOT NULL DEFAULT '{}',
 
     credentials         TEXT    NOT NULL DEFAULT '[]',
     tools               TEXT    NOT NULL DEFAULT '[]',

@@ -24,6 +24,7 @@ from .register.model import (
     Identity,
     ModelUse,
     Provenance,
+    RegionalReach,
     Source,
     Status,
 )
@@ -193,6 +194,16 @@ def run(inp: ScanInput, register: Register | None = None) -> ScanResult:
                     if inp.region else {}
                 ),
                 reach=reach_report.reach,
+                # The same reach, filed under the region it was observed in.
+                # The store keeps one of these per region and unions them; the
+                # flat `reach` above is one scan's view, which is one region's.
+                region_reach=(
+                    {inp.region: RegionalReach(
+                        tools=frozenset(reach_report.reach.tools),
+                        data_stores=frozenset(reach_report.reach.data_stores),
+                    )}
+                    if inp.region else {}
+                ),
             )
         )
 
