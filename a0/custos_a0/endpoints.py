@@ -101,6 +101,40 @@ ARTIFACTS_S3 = Endpoint(
     EndpointClass.DATASTORE, aws_service="S3", writes=True,
 )
 
+# Internal services that ordinary infrastructure sends far more to than it
+# gets back. Every one of these is a real thing a real account runs, and every
+# one of them has the traffic shape the gateway detector looks for: a private
+# address, a lot of egress, an acknowledgement coming back. They exist so that
+# "does this ask questions about ordinary internal APIs" is a measurement
+# rather than a hope.
+LOG_COLLECTOR = Endpoint(
+    "logs-ingest.svc.internal", "10.0.8.10", 24224, EndpointClass.INTERNAL_API,
+    writes=True, eni_name="logs-ingest", eni_kind="tag",
+)
+BACKUP_SVC = Endpoint(
+    "backup.svc.internal", "10.0.8.11", 8443, EndpointClass.INTERNAL_API, writes=True,
+)
+METRICS_PUSH = Endpoint(
+    "pushgateway.svc.internal", "10.0.8.12", 9091, EndpointClass.INTERNAL_API,
+    eni_name="pushgateway", eni_kind="tag",
+)
+ARTIFACT_REGISTRY = Endpoint(
+    "artifacts.svc.internal", "10.0.8.13", 443, EndpointClass.INTERNAL_API, writes=True,
+)
+EVENT_PROXY = Endpoint(
+    "kafka-rest.svc.internal", "10.0.8.14", 8082, EndpointClass.INTERNAL_API,
+    writes=True, eni_name="kafka-rest", eni_kind="load-balancer",
+)
+# The two that a ratio ceiling does not separate. Both send something large and
+# get something substantial back, which is what a model gateway does.
+THUMBNAILER = Endpoint(
+    "imaging.svc.internal", "10.0.8.15", 8443, EndpointClass.INTERNAL_API,
+    eni_name="imaging", eni_kind="load-balancer",
+)
+DOC_EXTRACT = Endpoint(
+    "doc-extract.svc.internal", "10.0.8.16", 8443, EndpointClass.INTERNAL_API,
+)
+
 # The load balancer. Shared by every inbound-facing workload.
 ALB = Endpoint("alb-prod.elb.amazonaws.com", "10.0.1.5", 443, EndpointClass.INGRESS)
 
@@ -111,6 +145,8 @@ ALL: tuple[Endpoint, ...] = (
     MCP_GITHUB, MCP_FILES,
     BILLING_API, TICKET_API, DEPLOY_API,
     ORDERS_DB, BILLING_DB, VECTOR_DB, ARTIFACTS_S3,
+    LOG_COLLECTOR, BACKUP_SVC, METRICS_PUSH, ARTIFACT_REGISTRY, EVENT_PROXY,
+    THUMBNAILER, DOC_EXTRACT,
     ALB,
 )
 """Every endpoint the corpus can generate traffic to.
