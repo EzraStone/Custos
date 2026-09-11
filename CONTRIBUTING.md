@@ -104,8 +104,21 @@ citation pointing at nothing; an undocumented route is a capability nobody can
 use; a documented route that was removed is something an integrator builds
 against and discovers at runtime.
 
+Three more were added after the same failure happened three times:
+
+- **`test_both_reports_disclose.py`** — the two report paths have to carry the
+  same caveats and the same sections. Three disclosures lived in the report the
+  CLI prints and not in the one served a week later, which is the copy a
+  customer forwards, each because a figure was computed at scan time and never
+  stored. Nothing fails when that happens; the caveat is simply absent.
+- **`test_report_is_account_wide.py`** — the served report route may not read a
+  per-scan figure off the latest scan, because a scan is one region.
+- **`test_local_gate_matches_ci.py`** — `make check` has to run what CI runs. A
+  check that exists only in CI arrives after a push.
+
 Add one whenever you notice two places that have to agree and nothing making
-them.
+them. The shape to look for is not a bug that fails; it is a claim in one place
+that nothing obliges a second place to match.
 
 ## An account-scoped answer from a per-region row
 
