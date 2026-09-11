@@ -291,7 +291,7 @@ discovery is not a business.
 Read in this order:
 
 1. `docs/A0-FINDINGS.md` — what was measured and what it means
-2. `docs/SECURITY-INVARIANTS.md` — the five rules and the tests enforcing them
+2. `docs/SECURITY-INVARIANTS.md` — the nine rules and the tests enforcing them
 3. `CONTRIBUTING.md` — how not to break them
 4. `docs/OPERATIONS.md` — how to actually run a scan
 
