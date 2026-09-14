@@ -126,6 +126,45 @@ def test_both_reports_are_rendered_with_the_same_sections():
     )
 
 
+# The rows inside a section, rather than the section itself. Same failure with
+# a smaller blast radius: a field added to one site fills a column in the
+# document the CLI prints and leaves it empty in the one a customer keeps.
+#
+# Each entry is (dataclass, cli file, cli function, served function).
+_ROW_TYPES = (
+    ("Question", "cli.py", "_report_questions", "get_report"),
+    ("Review", "cli.py", "_reviews_with_history", "get_report"),
+)
+
+
+def test_both_reports_build_their_rows_with_the_same_fields():
+    for name, cli_file, cli_function, served_function in _ROW_TYPES:
+        cli = _kwargs(ROOT / cli_file, cli_function, name)
+        served = _kwargs(ROOT / "api" / "app.py", served_function, name)
+        assert cli == served, (
+            f"{name} is built with {sorted(cli ^ served)} in one report and "
+            "not the other. Nothing fails: the column is simply empty in one "
+            "of the two documents, and the one it is empty in is usually the "
+            "copy that gets forwarded."
+        )
+
+
+def test_every_field_on_a_report_row_is_set_by_someone():
+    """A field nothing fills renders its default for every reader, for ever,
+    while the module reads as though the document shows it."""
+    import custos.report as report
+
+    for name, cli_file, cli_function, _ in _ROW_TYPES:
+        fields = {
+            f for f in getattr(report, name).__dataclass_fields__
+            if not f.startswith("_")
+        }
+        filled = _kwargs(ROOT / cli_file, cli_function, name)
+        assert fields <= filled, (
+            f"nothing sets {sorted(fields - filled)} on {name}"
+        )
+
+
 def test_every_section_the_report_can_render_is_passed_by_someone():
     """A parameter on `render` that neither path fills is a section that never
     appears anywhere. It is not dead code — the function still renders it, for
