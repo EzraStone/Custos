@@ -313,3 +313,31 @@ func TestADescriptionStillWinsOverTheInterfaceType(t *testing.T) {
 		t.Fatalf("got %v", names)
 	}
 }
+
+// TestFreeTextStartingWithAKnownShapeIsNotParsed: SEC-23. The shapes are
+// anchored at both ends, so a person who began a note with "Amazon EKS" does
+// not have the rest of their sentence read as a cluster name.
+func TestFreeTextStartingWithAKnownShapeIsNotParsed(t *testing.T) {
+	for _, description := range []string{
+		"Amazon EKS cluster - ask Sam before deleting, see INC-4471",
+		"EFS mount target for fs-0a1b2c3d (fsmt-0e4f) DO NOT DELETE",
+		"Interface for NAT Gateway nat-0a1b2c3d (old one, being retired)",
+		"aws-K8S-i-0a1b2c3d4e5f60718 temp",
+	} {
+		iface := destEni("10.0.11.7", description)
+		if names := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.11.7"); len(names) != 0 {
+			t.Errorf("%q was parsed as %v", description, names)
+		}
+	}
+}
+
+// TestTheFilesystemIdIsNotCarried: `fs-0a1b2c3d` is not a name anybody
+// recognises, and an approver deciding about shared storage is deciding about
+// shared storage.
+func TestTheFilesystemIdIsNotCarried(t *testing.T) {
+	iface := destEni("10.0.7.11", "EFS mount target for fs-0a1b2c3d (fsmt-0e4f)")
+	names := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.7.11")
+	if names["10.0.7.11"] != "efs/efs" {
+		t.Fatalf("got %v", names)
+	}
+}

@@ -219,6 +219,14 @@ var (
 	classicELB        = regexp.MustCompile(`^ELB ([^/]+)$`)
 	vpcEndpoint       = regexp.MustCompile(`^VPC Endpoint Interface (vpce-[0-9a-f]+)$`)
 	lambdaDescription = regexp.MustCompile(`^AWS Lambda VPC ENI-(.+?)-[0-9a-f-]{36}$`)
+	// Shapes AWS writes for infrastructure that carries no tags. Anchored at
+	// both ends so a person who happened to start a note with "Amazon EKS" is
+	// not parsed as a cluster (SEC-23): a description that does not match the
+	// whole shape is not a description we recognise.
+	efsMountTarget        = regexp.MustCompile(`^EFS mount target for fs-[0-9a-f]+ \(fsmt-[0-9a-f]+\)$`)
+	eksCluster            = regexp.MustCompile(`^Amazon EKS ([A-Za-z0-9][A-Za-z0-9_-]{0,99})$`)
+	eksPod                = regexp.MustCompile(`^aws-K8S-i-[0-9a-f]+$`)
+	natGatewayDescription = regexp.MustCompile(`^Interface for NAT Gateway nat-[0-9a-f]+$`)
 )
 
 // nameOf turns an ENI into something worth showing, or returns "".
@@ -251,6 +259,24 @@ func nameOf(iface ec2types.NetworkInterface) (name, kind string) {
 		return "rds", "rds"
 	case strings.HasPrefix(description, "ElastiCache "):
 		return "elasticache", "elasticache"
+	case strings.HasPrefix(description, "RedshiftNetworkInterface"):
+		return "redshift", "redshift"
+	case strings.HasPrefix(description, "DMSNetworkInterface"):
+		return "dms", "dms"
+	case efsMountTarget.MatchString(description):
+		// The filesystem id is not carried. `fs-0a1b2c3d` is not a name
+		// anybody recognises, and an approver deciding about shared storage is
+		// deciding about shared storage.
+		return "efs", "efs"
+	case eksCluster.MatchString(description):
+		return eksCluster.FindStringSubmatch(description)[1], "eks"
+	case eksPod.MatchString(description):
+		// The EKS CNI plugin names these after the node's instance id, which
+		// is the level EKS attribution already stops at. Saying so is better
+		// than an address and honest about the limit.
+		return "eks-node", "eks"
+	case natGatewayDescription.MatchString(description):
+		return "nat-gateway", "nat-gateway"
 	}
 
 	if name, kind := byInterfaceType(iface.InterfaceType); name != "" {

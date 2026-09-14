@@ -98,6 +98,27 @@ func estate() []estateEni {
 			why:  "a Lambda in a VPC. The suffix is a full UUID, which is what anchors the parse",
 		},
 
+		{
+			iface: destEni("10.0.5.80", "RedshiftNetworkInterface"),
+			want:  "redshift",
+			why:   "a warehouse, and a plausible thing for an agent to be querying",
+		},
+		{
+			iface: destEni("10.0.5.81", "Amazon EKS prod-agents"),
+			want:  "prod-agents",
+			why:   "the cluster control plane, named after the cluster",
+		},
+		{
+			iface: destEni("10.0.5.82", "aws-K8S-i-0a1b2c3d4e5f60718"),
+			want:  "eks-node",
+			why:   "a pod ENI from the CNI plugin. Node level is where EKS attribution stops anyway",
+		},
+		{
+			iface: destEni("10.0.0.10", "Interface for NAT Gateway nat-0a1b2c3d"),
+			want:  "nat-gateway",
+			why:   "the description AWS wrote before the interface type existed",
+		},
+
 		// --- structured, and currently thrown away --------------------------
 		{
 			iface: withType(destEni("10.0.0.9", ""), ec2types.NetworkInterfaceTypeNatGateway),
@@ -199,7 +220,7 @@ func TestTheEstateHasTheTagHygieneItClaims(t *testing.T) {
 // threshold somebody picked stops meaning anything the moment it is met.
 //
 //	6 of 13 — the Name tag and four of the five AWS description shapes
-const readableFloor = 11
+const readableFloor = 16
 
 // TestScopeReadability is the measurement, and the only number in this package
 // that a customer feels directly. An entry an operator cannot read is an
