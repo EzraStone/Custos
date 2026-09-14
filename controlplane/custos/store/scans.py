@@ -83,6 +83,19 @@ class ScanRecord:
     the reason the question mechanism exists at all is that a report with
     nothing in it is what a hidden gateway produces."""
 
+    streamed_principals: int = 0
+    """Agents whose model responses were read as arriving one token at a time.
+
+    The single assumption the dollar figures are most sensitive to, inferred
+    from packet sizes rather than told to us, and forty-four times between the
+    two answers on the side that is priced highest. Stored because the report
+    served a week later has to be able to say the same thing the one printed
+    today did."""
+
+    priced_principals: int = 0
+    """How many had model traffic to price at all, which is what the number
+    above is out of."""
+
     @property
     def scope_readable(self) -> float:
         """How much of the approval scope was a name rather than an address.
@@ -117,6 +130,8 @@ def _scan(row: sqlite3.Row) -> ScanRecord:
         read_errors=row["read_errors"],
         regions=tuple(loads(row["regions"])),
         bulk_senders=row["bulk_senders"],
+        streamed_principals=row["streamed_principals"],
+        priced_principals=row["priced_principals"],
         ipv6_destinations=row["ipv6_destinations"],
         skipped_records=row["skipped_records"],
         resolved_endpoints=tuple(loads(row["resolved_endpoints"])),
@@ -202,20 +217,24 @@ class ScanStore:
         ipv6_destinations: int = 0,
         skipped_records: int = 0,
         resolved_endpoints: tuple[str, ...] = (),
+        streamed_principals: int = 0,
+        priced_principals: int = 0,
     ) -> int:
         cursor = self.conn.execute(
             "INSERT INTO scans (batch_id, account_id, started_at, principals_seen, "
             "agents_found, review_candidates, coverage, truncated, catalogue_revision, "
             "scope_named, scope_total, missing_fields, direction_undecided, "
             "read_errors, regions, bulk_senders, ipv6_destinations, "
-            "skipped_records, resolved_endpoints) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "skipped_records, resolved_endpoints, streamed_principals, "
+            "priced_principals) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (batch_id, account_id, iso(started_at), principals_seen, agents_found,
              review_candidates, coverage, int(truncated), catalogue_revision,
              scope_named, scope_total, dumps(list(missing_fields)),
              direction_undecided, read_errors, dumps(list(regions)),
              bulk_senders, ipv6_destinations, skipped_records,
-             dumps(list(resolved_endpoints))),
+             dumps(list(resolved_endpoints)), streamed_principals,
+             priced_principals),
         )
         return cursor.lastrowid
 

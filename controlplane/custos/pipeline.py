@@ -212,6 +212,19 @@ def _resolved_endpoints(batch: Batch) -> tuple[str, ...]:
     }))
 
 
+def _streamed_principals(result: ScanResult) -> int:
+    """Agents whose model responses were read as arriving one token at a time."""
+    return sum(1 for a in result.register.agents.values() if a.model.streamed)
+
+
+def _priced_principals(result: ScanResult) -> int:
+    """Agents with model traffic to price at all, which is what the count above
+    is out of. An agent behind an undeclared gateway has none, and including it
+    in the denominator would make the disclosure read as a failure to decide
+    rather than as nothing to decide about."""
+    return sum(1 for a in result.register.agents.values() if a.model.endpoints)
+
+
 def _published_endpoints(batch: Batch) -> frozenset[str]:
     """Addresses AWS called an interface endpoint for a service published by
     another account.
@@ -413,6 +426,12 @@ def ingest(
             # quiet account means, and it drives the banner printed above the
             # findings rather than below them.
             skipped_records=batch.collection.records_skipped,
+            # Which conversion this scan's dollar figures used. Inferred from
+            # packet sizes per principal, and the largest single lever on the
+            # number a budget owner acts on — so it has to reach the report
+            # served a week later, not only the one printed today.
+            streamed_principals=_streamed_principals(result),
+            priced_principals=_priced_principals(result),
         )
 
         # Questions to put to the customer, from this scan's traffic. Recorded
