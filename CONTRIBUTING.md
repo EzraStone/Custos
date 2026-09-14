@@ -115,10 +115,42 @@ Three more were added after the same failure happened three times:
   per-scan figure off the latest scan, because a scan is one region.
 - **`test_local_gate_matches_ci.py`** — `make check` has to run what CI runs. A
   check that exists only in CI arrives after a push.
+- **`test_cli_covers_the_api.py`** — every API route has a CLI equivalent or a
+  stated reason. Before a control plane is deployed the CLI is the only
+  surface, and that is the phase every customer starts in.
+- **`test_write_surfaces_agree.py`** — the API and the CLI bound their free
+  text the same way. They write the same audit rows, and a bound on one is
+  worth nothing if the other is the path a person takes.
+- **`test_model_services_agree.py`** — the collector's preflight and the
+  control plane recognise the same AWS endpoint services. If they drift,
+  `--check` promises something the scan does not deliver.
 
 Add one whenever you notice two places that have to agree and nothing making
 them. The shape to look for is not a bug that fails; it is a claim in one place
 that nothing obliges a second place to match.
+
+## A capability only one surface has
+
+There are three ways a person touches this product: the console, the API and
+the CLI. The console and the API are the same surface — the console is an API
+client — and the CLI is not.
+
+That matters because of when each one exists. The control plane is deployed
+when a customer wants continuous monitoring. Before that, through the whole
+entry motion, there is no API and no console: there is a binary, a SQLite file
+and the CLI. **Anything only the API can do is something nobody can do during
+onboarding**, which is the phase every customer is in at least once and most
+are in when the product has to prove itself.
+
+Three were found one at a time, each after the previous was fixed: the CLI
+could sanction an agent and not retire one, could write to the audit trail and
+not read it, and printed drift once at the end of the scan that found it.
+
+`tests/test_cli_covers_the_api.py` maps every route to the command covering it.
+Adding a route means adding a line to that map — either the command that covers
+it, or an exemption with the reason. A second assertion fails if the map names
+a route that no longer exists, because otherwise it passes by describing a
+surface nobody has.
 
 ## An account-scoped answer from a per-region row
 
