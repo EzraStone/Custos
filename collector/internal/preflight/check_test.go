@@ -905,3 +905,62 @@ func (twoRegions) Run(context.Context) ([]ingest.Region, error) {
 		{Name: "eu-west-1", FlowLogs: 2},
 	}, nil
 }
+
+// TestPrivateLinkModelTrafficIsReported: an account that reaches Bedrock over
+// PrivateLink looks, in a flow log, like an account with no model traffic at
+// all. The person running --check is entitled to know the agents behind it
+// will still be found.
+func TestPrivateLinkModelTrafficIsReported(t *testing.T) {
+	records := append(modelTraffic(1), gatewayTraffic("10.0.15.20", 140_000, 9_000)...)
+	report := RunWith(context.Background(), good(), stubFlows{records: records},
+		namedAs(map[string]wire.Destination{
+			"10.0.15.20": {
+				Address: "10.0.15.20", Name: "bedrock-runtime", Kind: "vpc-endpoint",
+				Service: "com.amazonaws.us-east-1.bedrock-runtime",
+			},
+		}), oneRegion{})
+
+	result := find(t, report, "model traffic over privatelink")
+	if result.Status != Pass || !strings.Contains(result.Detail, "bedrock-runtime") {
+		t.Fatalf("got %v, detail %q", result.Status, result.Detail)
+	}
+	if !strings.Contains(result.Remedy, "without anyone declaring anything") {
+		t.Fatalf("remedy does not say what it means: %q", result.Remedy)
+	}
+}
+
+// TestAnOrdinaryEndpointIsNotReportedAsModelTraffic: an S3 endpoint is an
+// endpoint too, and most accounts have one.
+func TestAnOrdinaryEndpointIsNotReportedAsModelTraffic(t *testing.T) {
+	records := append(modelTraffic(1), gatewayTraffic("10.0.5.30", 140_000, 9_000)...)
+	report := RunWith(context.Background(), good(), stubFlows{records: records},
+		namedAs(map[string]wire.Destination{
+			"10.0.5.30": {
+				Address: "10.0.5.30", Name: "s3", Kind: "vpc-endpoint",
+				Service: "com.amazonaws.us-east-1.s3",
+			},
+		}), oneRegion{})
+
+	for _, r := range report.Results {
+		if r.Name == "model traffic over privatelink" {
+			t.Fatalf("an S3 endpoint was reported as model traffic: %+v", r)
+		}
+	}
+}
+
+// namedAs is a Namer that answers from a fixed map.
+type namedNamer struct{ answers map[string]wire.Destination }
+
+func namedAs(answers map[string]wire.Destination) Namer {
+	return &namedNamer{answers: answers}
+}
+
+func (n *namedNamer) Resolve(_ context.Context, addresses []string) ([]wire.Destination, error) {
+	var out []wire.Destination
+	for _, address := range addresses {
+		if d, ok := n.answers[address]; ok {
+			out = append(out, d)
+		}
+	}
+	return out, nil
+}

@@ -495,6 +495,8 @@ func checkDestinationNames(ctx context.Context, report *Report, names Namer, rec
 		}
 	}
 
+	checkPrivateLinkModels(report, named)
+
 	switch {
 	case len(covered) == 0:
 		report.add("destination names", Warn,
@@ -724,4 +726,49 @@ func sortedKeys(set map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// modelEndpointServices are the AWS endpoint services that carry model
+// inference. The same list the control plane classifies on, duplicated here
+// because preflight runs before a control plane is in the picture at all — and
+// a test asserts the two agree.
+var modelEndpointServices = map[string]bool{
+	"bedrock-runtime":       true,
+	"bedrock-agent-runtime": true,
+	"sagemaker-runtime":     true,
+}
+
+// checkPrivateLinkModels says when this account's model traffic never leaves
+// the VPC.
+//
+// Worth saying out loud at onboarding, in both directions. It is reassuring:
+// an account that reaches Bedrock over PrivateLink looks, in a flow log, like
+// an account with no model traffic at all, and the person running --check is
+// entitled to know that the agents behind it will still be found.
+//
+// It is also a fact about their architecture that the first conversation
+// should surface. A security-conscious customer turned PrivateLink on
+// precisely so their model calls would not cross the public internet, and
+// telling them we can see those calls anyway is the difference between a
+// product that understands their setup and one that reports zero agents.
+func checkPrivateLinkModels(report *Report, named []wire.Destination) {
+	var found []string
+	for _, d := range named {
+		if d.Service == "" {
+			continue
+		}
+		last := d.Service[strings.LastIndex(d.Service, ".")+1:]
+		if modelEndpointServices[last] {
+			found = append(found, fmt.Sprintf("%s (%s)", last, d.Address))
+		}
+	}
+	if len(found) == 0 {
+		return
+	}
+	sort.Strings(found)
+	report.add("model traffic over privatelink", Pass, strings.Join(found, "; "),
+		"this account's model calls go to a private address in its own subnet "+
+			"and the flow record does not say what it is - the endpoint was "+
+			"resolved, so the agents behind it will be found without anyone "+
+			"declaring anything")
 }
