@@ -843,6 +843,11 @@ def create_app(
             direction_undecided=sum(s.direction_undecided for s in per_region),
             read_errors=sum(s.read_errors for s in per_region),
             bulk_senders=sum(s.bulk_senders for s in per_region),
+            # Which conversion each region's figures used. Summed for the same
+            # reason as the counts above: a principal belongs to one region's
+            # scan, and the assumption was made per principal.
+            streamed_principals=sum(s.streamed_principals for s in per_region),
+            priced_principals=sum(s.priced_principals for s in per_region),
             # Summed, because each region's traffic reached its own. The
             # catalogue is IPv4 only and this is the count it could not speak
             # to — the served report was silent about it entirely, so the one

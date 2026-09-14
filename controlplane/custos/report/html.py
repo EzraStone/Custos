@@ -441,6 +441,34 @@ def _limitations(
             f"{'them' if many else 'it'} is the least reliable number on this "
             "page."
         )
+    if coverage and coverage.priced_principals:
+        streamed = coverage.streamed_principals
+        whole = coverage.priced_principals - streamed
+        if streamed and whole:
+            read = (
+                f"{streamed} of {coverage.priced_principals} agents' model "
+                "responses were read as arriving one token at a time and the "
+                f"other {whole} as arriving whole"
+            )
+        elif streamed:
+            read = (
+                f"Every one of these {streamed} agents' model responses was "
+                "read as arriving one token at a time"
+                if streamed != 1
+                else "This agent's model responses were read as arriving one "
+                     "token at a time"
+            )
+        else:
+            read = "Model responses were read as arriving whole"
+        items.append(
+            f"{read}, from the size of the packets carrying them. That is the "
+            "largest single assumption behind the figures above — a streamed "
+            "response is about 175 wire bytes per output token against four "
+            "for a whole one, and output tokens are priced highest — and it "
+            "is something we inferred rather than something you told us. If "
+            "it is wrong for a workload, its figure is wrong by about forty "
+            "times."
+        )
     items.extend(_format_limits(coverage))
     if degraded:
         items.append(
@@ -602,6 +630,20 @@ class Coverage:
     is exactly what an account with no resource tags produces. Saying the count
     is what lets a reader tell those apart instead of concluding something
     about their tagging."""
+
+    streamed_principals: int = 0
+    """Agents whose model responses were read as arriving one token at a time.
+
+    The largest single lever on the dollar figures and the one nobody supplied:
+    a streamed response is around 175 wire bytes per output token against four
+    for a whole one, output tokens are priced at five times input, and a flow
+    record does not say which happened. It is inferred from the size of the
+    packets carrying the responses, which is a reading and can be wrong."""
+
+    priced_principals: int = 0
+    """How many agents had model traffic to price, which the count above is
+    out of. Zero means nothing was converted and the sentence is not worth
+    printing."""
 
     ipv6_destinations: int = 0
     """Public IPv6 addresses this scan's traffic reached and could not classify.

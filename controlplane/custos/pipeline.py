@@ -292,6 +292,8 @@ def _coverage(
     scope: tuple[int, int] = (0, 0),
     ipv6: int = 0,
     declined: int = 0,
+    streamed: int = 0,
+    priced: int = 0,
 ) -> Coverage:
     """Build the report's coverage summary from what the collector reported.
 
@@ -308,6 +310,7 @@ def _coverage(
         return Coverage(
             scope_named=scope[0], scope_total=scope[1], ipv6_destinations=ipv6,
             regions=_regions(batch), bulk_senders=declined,
+            streamed_principals=streamed, priced_principals=priced,
         )
     return Coverage(
         parsed_fraction=stats.parsed_fraction,
@@ -321,6 +324,8 @@ def _coverage(
         ipv6_destinations=ipv6,
         regions=_regions(batch),
         bulk_senders=declined,
+        streamed_principals=streamed,
+        priced_principals=priced,
     )
 
 
@@ -534,6 +539,8 @@ def ingest(
         coverage=_coverage(
             batch, (named, total), ipv6_destinations(scan_input),
             declined=len(gateways.declined),
+            streamed=_streamed_principals(result),
+            priced=_priced_principals(result),
         ),
         resolved_endpoints=_resolved_endpoints(batch),
         diff=diff, drift=drift,
