@@ -135,6 +135,24 @@ DOC_EXTRACT = Endpoint(
     "doc-extract.svc.internal", "10.0.8.16", 8443, EndpointClass.INTERNAL_API,
 )
 
+# Bedrock reached over PrivateLink.
+#
+# An interface VPC endpoint puts an ENI in the customer's own subnet, so every
+# model call goes to a private address in their VPC. The flow log's
+# `pkt-dst-aws-service` annotation is for AWS's published address ranges and
+# this is not one, so nothing in the record says what it is — the traffic looks
+# exactly like an internal API.
+#
+# The same blindness as a self-hosted gateway, arrived at from the other
+# direction, and with one difference that matters: nobody has to be asked. AWS
+# knows this ENI is the endpoint for com.amazonaws.us-east-1.bedrock-runtime
+# and will say so.
+BEDROCK_PRIVATELINK = Endpoint(
+    "bedrock-runtime.us-east-1.amazonaws.com", "10.0.15.20", 443,
+    EndpointClass.INTERNAL_API,
+    eni_name="vpce-0b3d5f7a9c1e2f40", eni_kind="vpc-endpoint",
+)
+
 # The load balancer. Shared by every inbound-facing workload.
 ALB = Endpoint("alb-prod.elb.amazonaws.com", "10.0.1.5", 443, EndpointClass.INGRESS)
 
@@ -146,7 +164,7 @@ ALL: tuple[Endpoint, ...] = (
     BILLING_API, TICKET_API, DEPLOY_API,
     ORDERS_DB, BILLING_DB, VECTOR_DB, ARTIFACTS_S3,
     LOG_COLLECTOR, BACKUP_SVC, METRICS_PUSH, ARTIFACT_REGISTRY, EVENT_PROXY,
-    THUMBNAILER, DOC_EXTRACT,
+    THUMBNAILER, DOC_EXTRACT, BEDROCK_PRIVATELINK,
     ALB,
 )
 """Every endpoint the corpus can generate traffic to.

@@ -178,7 +178,10 @@ def cmd_questions(args: argparse.Namespace) -> int:
 
     result = run(limit=args.limit)
 
-    print("Custos gateway questions — one real gateway, seven ordinary services\n")
+    print(
+        "Custos gateway questions — two real model endpoints, "
+        "seven ordinary services\n"
+    )
     header = f"{'':4}  {'address':16}{'egress':>12}{'ingress':>11}{'ratio':>9}   answer"
     print(header)
     print("-" * len(header))
@@ -188,7 +191,7 @@ def cmd_questions(args: argparse.Namespace) -> int:
         print(
             f"{i:>3}.  {c.address:16}{c.egress / 1e6:>10.1f}MB"
             f"{c.ingress / 1e6:>9.1f}MB{c.ratio:>8.1f}:1   "
-            f"{'GATEWAY' if a.real else 'no'}{cut}"
+            f"{'MODEL' if a.real else 'no'}{cut}"
         )
 
     print()
@@ -196,7 +199,7 @@ def cmd_questions(args: argparse.Namespace) -> int:
     print(
         f"shown {len(result.shown)}   worth asking "
         f"{len(result.shown) - result.wasted}   precision {result.precision:.2f}   "
-        f"real gateway at {rank}"
+        f"first real endpoint at {rank}"
     )
     if not result.found:
         print()

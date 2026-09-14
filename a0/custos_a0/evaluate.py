@@ -57,8 +57,17 @@ def run_hard(gateway_declared: bool = False) -> Result:
     headroom is left when the clean coupled/decoupled split does not hold — and
     conflating the two would quietly restate the gate.
 
-    `gateway_declared` simulates a customer who told us about their self-hosted
-    LLM gateway, which is the intended remedy for `agent_via_gateway`.
+    `gateway_declared` simulates a customer who told us about the two model
+    endpoints the built-in catalogue cannot see: their self-hosted LLM gateway,
+    and the interface VPC endpoint their Bedrock traffic goes through.
+
+    Declaring the second one is a placeholder for a fix rather than the remedy.
+    A self-hosted gateway is something only the customer knows about; a VPC
+    endpoint for `com.amazonaws.<region>.bedrock-runtime` is something AWS
+    knows about and will say, and asking a customer to declare it is asking
+    them for an answer we could have looked up. It is declared here so the
+    margin remains a statement about class separation instead of one about a
+    workload nothing could score.
 
     It goes through the same per-account declaration the product uses, not
     through `catalog.extend`. A0 measuring a mechanism that is not the one
@@ -68,11 +77,15 @@ def run_hard(gateway_declared: bool = False) -> Result:
     """
     from custos.declared import Declaration, build
 
+    from .endpoints import BEDROCK_PRIVATELINK
     from .scenarios.hard import GATEWAY
 
     corpus = corpus_mod.build(corpus_mod.CorpusSpec(hard=True))
     declared = (
-        build([Declaration(f"{GATEWAY.ip}/32", "range", "llm-gateway")])
+        build([
+            Declaration(f"{GATEWAY.ip}/32", "range", "llm-gateway"),
+            Declaration(f"{BEDROCK_PRIVATELINK.ip}/32", "range", "bedrock-privatelink"),
+        ])
         if gateway_declared
         else None
     )

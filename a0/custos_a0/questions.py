@@ -31,7 +31,11 @@ from custos.pipeline import to_scan_input
 from . import corpus as corpus_mod
 from .batchbridge import build_batch
 from .corpus import CorpusSpec
+from .endpoints import BEDROCK_PRIVATELINK
 from .scenarios.hard import GATEWAY
+
+MODEL_ADDRESSES = frozenset({GATEWAY.ip, BEDROCK_PRIVATELINK.ip})
+"""Addresses in the corpus that really do carry model traffic."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,7 +44,14 @@ class Asked:
 
     candidate: Candidate
     real: bool
-    """Whether this address is the corpus's actual model gateway."""
+    """Whether this address really is carrying model traffic.
+
+    Two of them are. The self-hosted gateway is the case the mechanism was
+    built for. The Bedrock VPC endpoint is a question worth asking for the same
+    reason and with a better answer available — AWS knows what that ENI is —
+    but until the collector looks it up, asking is the only thing that finds
+    it, and a question that finds an invisible agent is a question that
+    earned its place."""
 
     @property
     def address(self) -> str:
@@ -103,6 +114,8 @@ def run(spec: CorpusSpec | None = None, limit: int = 5) -> QuestionResult:
     # scoring has to see the candidates it dropped.
     found = candidates(telemetry, limit=1000)
     return QuestionResult(
-        asked=tuple(Asked(candidate=c, real=c.address == GATEWAY.ip) for c in found),
+        asked=tuple(
+            Asked(candidate=c, real=c.address in MODEL_ADDRESSES) for c in found
+        ),
         limit=limit,
     )

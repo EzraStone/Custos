@@ -24,6 +24,12 @@ Four workloads, each aimed at a specific assumption:
                           gateway on a private address. Invisible to the
                           built-in catalogue, which is the case
                           declaring a model endpoint exists for.
+
+    agent_via_privatelink an agent whose model calls go to Bedrock over an
+                          interface VPC endpoint. Same blindness, arrived at
+                          from the other direction — and the one case where
+                          nobody has to be asked, because AWS knows what that
+                          ENI is and will say so.
 """
 
 from __future__ import annotations
@@ -36,6 +42,7 @@ from ..endpoints import (
     ALB,
     ANTHROPIC,
     BEDROCK,
+    BEDROCK_PRIVATELINK,
     BILLING_API,
     DEPLOY_API,
     MCP_GITHUB,
@@ -187,5 +194,29 @@ def agent_via_gateway(rng: Random, start: datetime, end: datetime) -> Workload:
 
     for at in uniform_arrivals(rng, start, end, 2.5):
         agent_episode(w, rng, at, 6 + rng.randrange(8), GATEWAY, tools)
+
+    return w
+
+
+def agent_via_privatelink(rng: Random, start: datetime, end: datetime) -> Workload:
+    w = Workload(
+        name="claims-triage-agent",
+        principal="arn:aws:iam::447120043318:role/claims-triage",
+        scenario="agent_via_privatelink",
+        label=Label.AGENT,
+        compute="ECS",
+        note=(
+            "CATALOGUE STRESS, and the one nobody has to be asked about. Every "
+            "model call goes to Bedrock over an interface VPC endpoint, so the "
+            "destination is a private address in the customer's own subnet and "
+            "the flow log's AWS service annotation — which is for AWS's "
+            "published ranges — says nothing. Indistinguishable from an "
+            "internal API on the wire, and AWS knows exactly what it is."
+        ),
+    )
+    tools = [BILLING_API, ORDERS_DB]
+
+    for at in uniform_arrivals(rng, start, end, 3.0):
+        agent_episode(w, rng, at, 5 + rng.randrange(7), BEDROCK_PRIVATELINK, tools)
 
     return w
