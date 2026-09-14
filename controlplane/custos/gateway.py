@@ -89,6 +89,22 @@ class Candidate:
     Defaulted because a candidate rebuilt from a stored row predates this and
     is used only to match a declaration against a question that was asked."""
 
+    published_endpoint: bool = False
+    """AWS says this address is an interface endpoint for a service that
+    another AWS account published, and will not say what is behind it.
+
+    It changes the odds rather than the rule. Every other candidate is some
+    machine in the customer's own account, which they can go and look at. This
+    one is a door into another company's network, sold to them as a service,
+    carrying a transcript-shaped stream — which is exactly what a model
+    provider selling into AWS looks like from here, and nothing else in an
+    account looks like it.
+
+    So it is ranked first and the question says what AWS said. It is not
+    exempted from either test: a door nobody walks through in a loop is still
+    not an agent's model endpoint, and an exception carved out for this would
+    be the heuristic promoting itself to a finding."""
+
     @classmethod
     def from_row(cls, row: dict) -> Candidate:
         """Rebuild a candidate the store wrote, so the functions below work on
@@ -98,6 +114,7 @@ class Candidate:
             principals=tuple(row["principals"]),
             blind_principals=tuple(row["blind_principals"]),
             interleave=row.get("interleave", 0.0),
+            published_endpoint=bool(row.get("published_endpoint", False)),
         )
 
     @property
@@ -120,10 +137,16 @@ class Candidate:
             if self.interleave
             else ""
         )
+        door = (
+            " AWS says it is an interface endpoint for a service another "
+            "account published, and will not say whose."
+            if self.published_endpoint
+            else ""
+        )
         return (
             f"{self.address} received {self.egress / 1e6:.1f}MB from {who}, and "
             f"returned {self.ingress / 1e6:.1f}MB — a ratio of {self.ratio:.1f}:1."
-            f"{loop} Is it a model gateway?"
+            f"{loop}{door} Is it a model gateway?"
         )
 
 
@@ -217,16 +240,25 @@ class Assessment:
     declined: tuple[str, ...]
 
 
-def assess(telemetry: list[PrincipalTelemetry], limit: int = 5) -> Assessment:
+def assess(
+    telemetry: list[PrincipalTelemetry],
+    limit: int = 5,
+    published: frozenset[str] = frozenset(),
+) -> Assessment:
     """Both halves in one pass.
 
     `candidates` and `bulk_senders` each survey the telemetry from scratch, and
     the survey is the expensive part — every principal, every window, every
     destination. The ingestion path needs both on every scan.
+
+    `published` is the addresses AWS called an interface endpoint for a service
+    another account published. Nothing in the telemetry can know that — it is a
+    fact about the account's network, resolved by the collector — so it arrives
+    beside the telemetry rather than inside it.
     """
     survey = _survey(telemetry)
     return Assessment(
-        asked=tuple(_rank(survey, limit)),
+        asked=tuple(_rank(survey, limit, published)),
         declined=tuple(_declined(survey)),
     )
 
@@ -265,7 +297,9 @@ def bulk_senders(telemetry: list[PrincipalTelemetry]) -> tuple[str, ...]:
     return tuple(_declined(_survey(telemetry)))
 
 
-def _rank(survey: _Survey, limit: int) -> list[Candidate]:
+def _rank(
+    survey: _Survey, limit: int, published: frozenset[str] = frozenset()
+) -> list[Candidate]:
     found = []
     for address, principals in survey.reached_by.items():
         if not survey.loud(address):
@@ -289,9 +323,12 @@ def _rank(survey: _Survey, limit: int) -> list[Candidate]:
             principals=tuple(sorted(principals)),
             blind_principals=tuple(sorted(blind)),
             interleave=loop,
+            published_endpoint=address in published,
         ))
 
-    found.sort(key=lambda c: (-len(c.blind_principals), -c.egress, c.address))
+    found.sort(key=lambda c: (
+        not c.published_endpoint, -len(c.blind_principals), -c.egress, c.address,
+    ))
     return found[:limit]
 
 
