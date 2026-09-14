@@ -442,3 +442,59 @@ func TestTheBatchAndItsRecordsAgreeOnTheRegion(t *testing.T) {
 		}
 	}
 }
+
+// TestASuppliedResolverIsReused: the resolver's whole purpose is a cache. What
+// an ENI is called changes on the order of never, and re-asking AWS about
+// every destination every hour spends the customer's own API quota to learn
+// nothing — so a daemon supplies one that outlives the window.
+func TestASuppliedResolverIsReused(t *testing.T) {
+	api := &fakeEC2{interfaces: []ec2types.NetworkInterface{
+		destEni("10.0.4.21", "", "Name", "billing-api"),
+	}}
+	shared := &DestinationResolver{API: api}
+	records := []wire.FlowRecord{{
+		InterfaceID: "eni-1", SrcAddr: "10.0.1.5", DstAddr: "10.0.4.21",
+		DstPort: 443, Bytes: 100_000, Direction: wire.Egress,
+	}}
+
+	for range 3 {
+		c := collector(stubFlows{records: records}, api, nil)
+		c.Destinations = shared
+		if _, _, err := c.Collect(context.Background(), s3Window()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Attribution asks about the interfaces in each window's flow log every
+	// time, and should: those change. Destination naming asks by address, and
+	// should not.
+	if api.describedByAddress != 1 {
+		t.Fatalf("asked about destinations %d times across three windows",
+			api.describedByAddress)
+	}
+}
+
+// TestAResolverCreatedPerCollectionCachesNothing: the failure this guards
+// against is silent. A collector that makes its own resolver gets an empty
+// cache every window and re-asks AWS about every destination for ever, on an
+// API whose rate limit it shares with the customer's own tooling — and the
+// only symptom is a number in somebody else's CloudTrail.
+func TestAResolverCreatedPerCollectionCachesNothing(t *testing.T) {
+	api := &fakeEC2{interfaces: []ec2types.NetworkInterface{
+		destEni("10.0.4.21", "", "Name", "billing-api"),
+	}}
+	records := []wire.FlowRecord{{
+		InterfaceID: "eni-1", SrcAddr: "10.0.1.5", DstAddr: "10.0.4.21",
+		DstPort: 443, Bytes: 100_000, Direction: wire.Egress,
+	}}
+
+	for range 3 {
+		c := collector(stubFlows{records: records}, api, nil)
+		if _, _, err := c.Collect(context.Background(), s3Window()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if api.describedByAddress != 3 {
+		t.Fatalf("got %d, want 3: without a supplied resolver every window "+
+			"starts with an empty cache", api.describedByAddress)
+	}
+}

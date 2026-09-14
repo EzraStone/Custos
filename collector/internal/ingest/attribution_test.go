@@ -22,6 +22,7 @@ type fakeEC2 struct {
 	// subnet is Bedrock.
 	endpoints          map[string]string
 	describes          int
+	describedByAddress int
 	describedInstances int
 	describedEndpoints int
 }
@@ -51,6 +52,7 @@ func (f *fakeEC2) DescribeNetworkInterfaces(_ context.Context, in *ec2.DescribeN
 	// ENIs a flow log named, and by private address, which is how destination
 	// naming asks what lives at an address.
 	if len(in.Filters) > 0 {
+		f.describedByAddress++
 		want := map[string]bool{}
 		for _, filter := range in.Filters {
 			if aws.ToString(filter.Name) != "addresses.private-ip-address" {

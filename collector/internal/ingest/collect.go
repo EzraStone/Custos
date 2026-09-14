@@ -32,12 +32,26 @@ type Collector struct {
 	// exists so the batch can say what the report may not claim.
 	Format flowlogs.Format
 
-	Flows      FlowSource
-	Requests   RequestSource
-	Network    awsread.NetworkAPI
-	Identity   awsread.IdentityAPI
-	Serverless awsread.ServerlessAPI
-	Trail      awsread.TrailAPI
+	Flows    FlowSource
+	Requests RequestSource
+	Network  awsread.NetworkAPI
+
+	// Destinations names the addresses the workloads reached. Optional: one is
+	// made per collection when it is nil, which is right for a one-shot run.
+	//
+	// A daemon must supply its own, and per region. The resolver's whole
+	// purpose is a cache — what an ENI is called changes on the order of
+	// never, and re-asking AWS about every destination every hour spends the
+	// customer's own API quota to learn nothing — and a resolver created
+	// inside the collection is a cache that is empty every time.
+	//
+	// Per region, because a private address is a different host in each one. A
+	// resolver shared across regions would answer eu-west-1 with us-east-1's
+	// name, in the scope an operator reads before granting authority.
+	Destinations *DestinationResolver
+	Identity     awsread.IdentityAPI
+	Serverless   awsread.ServerlessAPI
+	Trail        awsread.TrailAPI
 
 	AccountID string
 	Region    string
@@ -304,7 +318,10 @@ func (c *Collector) collect(ctx context.Context, w awsread.Window) (wire.Batch, 
 	// addresses. A failure here costs the names and not the scan: the control
 	// plane falls back to showing the address, which is what it did before
 	// this existed.
-	destinations := &DestinationResolver{API: c.Network}
+	destinations := c.Destinations
+	if destinations == nil {
+		destinations = &DestinationResolver{API: c.Network}
+	}
 	peers := internalOnly(peerAddresses(records))
 	named, err := destinations.Resolve(ctx, peers)
 	if err != nil {
