@@ -102,3 +102,47 @@ def test_losing_alb_logs_costs_recall_and_not_precision(results):
     # Every missed agent must still surface as a review candidate.
     for r in degraded:
         assert all(row.in_review for row in r.missed_agents)
+
+
+def test_the_gate_fails_when_an_agent_sits_on_the_threshold(results):
+    """The failure the headroom bar exists for, constructed rather than waited
+    for.
+
+    Every agent at 0.81 and every negative at 0.10: a margin of 0.71, which is
+    nearly three times what the corpus actually produces, and a weakest agent
+    one hundredth above the line at which it stops being reported. Every other
+    criterion in this gate passes. The margin is not merely uninformative here,
+    it is actively reassuring, which is why the second number had to exist.
+    """
+    from dataclasses import replace
+
+    from custos_a0.evaluate import decide
+
+    def flatten(row):
+        confidence = 0.81 if row.label is Label.AGENT else 0.10
+        return replace(row, verdict=replace(row.verdict, confidence=confidence))
+
+    weakened = [replace(r, rows=[flatten(row) for row in r.rows]) for r in results]
+
+    gate = decide(weakened)
+    assert not gate.passed
+    # The only reason. A wide margin cannot rescue it and must not mask it.
+    assert gate.headline == (
+        "FAIL — the weakest agent clears the reporting threshold by only "
+        "0.01, against 0.05"
+    ), gate.headline
+
+
+def test_streaming_widens_the_margin_and_narrows_the_headroom(results):
+    """Both halves of the same measurement, pinned together.
+
+    Recorded because they move in opposite directions: a gate watching only
+    the first would have called this an improvement, and the number it moved
+    is how far the weakest agent is from not being reported at all.
+    """
+    plain = next(r for r in results if r.scenario.name.startswith("flow logs at 60s, with"))
+    stream = next(r for r in results if r.scenario.streaming and r.scenario.interval_seconds == 60)
+
+    assert stream.separation_margin > plain.separation_margin
+    assert stream.agent_headroom < plain.agent_headroom
+    assert stream.recall == 1.0 and stream.precision == 1.0

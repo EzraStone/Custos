@@ -278,6 +278,19 @@ def run_all(corpus: Corpus | None = None) -> list[Result]:
 MIN_MARGIN = 0.15
 """The margin below which a pass is luck rather than a finding."""
 
+MIN_HEADROOM = 0.05
+"""How far the weakest agent has to clear the reporting threshold.
+
+Lower than MIN_MARGIN and deliberately so. This is not a bar the classifier
+should comfortably clear — it is the point below which a pass stops meaning
+anything, because an agent sitting 0.01 above 0.80 is one capture away from
+being a row that is not in the report.
+
+Set at the number streaming produced rather than at a round one chosen in
+advance, which is the same rule the thresholds themselves follow. The honest
+reading of that is that the gate now sits exactly on a measured configuration
+with nothing to spare, and says so."""
+
 
 @dataclass(frozen=True, slots=True)
 class Gate:
@@ -301,8 +314,14 @@ def decide(results: list[Result]) -> Gate:
     any_false_positive = any(r.false_positives for r in results)
     full_recall = all(r.recall == 1.0 for r in supported)
     margin = min((r.separation_margin for r in supported), default=0.0)
+    headroom = min((r.agent_headroom for r in supported), default=0.0)
 
-    passed = not any_false_positive and full_recall and margin >= MIN_MARGIN
+    passed = (
+        not any_false_positive
+        and full_recall
+        and margin >= MIN_MARGIN
+        and headroom >= MIN_HEADROOM
+    )
 
     if passed:
         worst_degraded = min((r.recall for r in degraded), default=1.0)
@@ -315,7 +334,9 @@ def decide(results: list[Result]) -> Gate:
             detail=(
                 "No false positives in any configuration. Recall without load "
                 f"balancer logs falls to {worst_degraded:.0%}, with the missed "
-                "agents landing in the review band rather than being dropped."
+                "agents landing in the review band rather than being dropped. "
+                f"The weakest agent clears the reporting threshold by "
+                f"{headroom:.2f}, on the configuration where that is tightest."
             ),
         )
 
@@ -326,6 +347,11 @@ def decide(results: list[Result]) -> Gate:
         reasons.append("recall below 100% in a supported configuration")
     if margin < MIN_MARGIN:
         reasons.append(f"separation margin {margin:.2f} below {MIN_MARGIN}")
+    if headroom < MIN_HEADROOM:
+        reasons.append(
+            f"the weakest agent clears the reporting threshold by only "
+            f"{headroom:.2f}, against {MIN_HEADROOM}"
+        )
     return Gate(
         passed=False,
         headline="FAIL — " + "; ".join(reasons),
