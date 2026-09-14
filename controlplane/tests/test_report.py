@@ -777,3 +777,44 @@ def test_an_agent_with_no_providers_at_all_is_not_accused():
     a.model.providers = set()
     page = render(result([a]), "acme", T0)
     assert "could not be named" not in page
+
+
+# --- which conversion produced the dollar figures ---------------------------
+
+
+def _priced(streamed: int, priced: int):
+    from custos.report import Coverage
+
+    return Coverage(streamed_principals=streamed, priced_principals=priced)
+
+
+def test_a_streaming_account_is_told_which_reading_produced_its_figures():
+    html = render(result([agent()]), "acme-nonprod", T0, coverage=_priced(3, 3))
+    assert "one token at a time" in html
+    assert "forty times" in html
+
+
+def test_a_mixed_account_is_told_both():
+    """The interesting case. Some agents streaming and some not is a real
+    configuration — a company whose chatbot fronts a UI and whose agents wait
+    for the whole reply — and one sentence covering both readings says
+    neither."""
+    html = render(result([agent()]), "acme-nonprod", T0, coverage=_priced(2, 5))
+    assert "2 of 5 agents" in html
+    assert "the other 3 as arriving whole" in html
+
+
+def test_an_account_with_nothing_to_price_is_told_nothing():
+    """Every agent behind an undeclared gateway has no model traffic, so no
+    conversion happened. A sentence about an assumption nobody made reads as a
+    failure to decide rather than as nothing to decide about."""
+    html = render(result([agent()]), "acme-nonprod", T0, coverage=_priced(0, 0))
+    assert "one token at a time" not in html
+    assert "arriving whole" not in html
+
+
+def test_a_report_rendered_without_coverage_still_renders():
+    """`coverage` is optional and half the callers in the tests below pass
+    nothing. A disclosure that crashed on those would be caught here rather
+    than on a scan that had no collection statistics."""
+    assert "Payload contents were never collected" in render(result([agent()]), "acme-nonprod", T0)
