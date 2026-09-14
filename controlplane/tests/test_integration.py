@@ -938,3 +938,59 @@ def test_the_served_report_says_which_endpoint_was_resolved(client):
     page = client.get("/v1/report", headers=AUTH).text
     assert "reaches bedrock-runtime through an interface VPC endpoint" in page
     assert "has declared no additional model endpoints" not in page
+
+
+def test_a_scope_label_from_a_security_group_is_marked_in_the_report(client):
+    """End to end, because the qualifier has to survive three hops: the
+    collector sets the kind, the batch carries it, and the scope an operator
+    reads is rendered from it. A name that names a group the host is in, shown
+    as though it named the host, is an approval granted against the wrong
+    thing."""
+    from custos import batch as schema
+
+    start = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+    flows = []
+    for minute in range(40):
+        at = start + timedelta(minutes=minute)
+        flows.append(schema.FlowRecord(
+            account_id=ACCOUNT, interface_id="eni-1", srcaddr="10.0.1.5",
+            dstaddr="160.79.104.10", srcport=41000 + minute, dstport=443,
+            protocol=6, packets=40, bytes=140_000 + minute * 9_000,
+            start=at, end=at + timedelta(seconds=30), action="ACCEPT",
+            log_status="OK", direction="egress", tcp_flags=2,
+        ))
+        flows.append(schema.FlowRecord(
+            account_id=ACCOUNT, interface_id="eni-1", srcaddr="160.79.104.10",
+            dstaddr="10.0.1.5", srcport=443, dstport=41000 + minute, protocol=6,
+            packets=8, bytes=9_000, start=at, end=at + timedelta(seconds=30),
+            action="ACCEPT", log_status="OK", direction="ingress", tcp_flags=16,
+        ))
+        flows.append(schema.FlowRecord(
+            account_id=ACCOUNT, interface_id="eni-1", srcaddr="10.0.1.5",
+            dstaddr="10.0.4.50", srcport=52000 + minute, dstport=8080, protocol=6,
+            packets=12, bytes=4_000, start=at, end=at + timedelta(seconds=30),
+            action="ACCEPT", log_status="OK", direction="egress", tcp_flags=2,
+        ))
+
+    body = schema.Batch(
+        account_id=ACCOUNT, region="us-east-1",
+        window_start=start, window_end=start + timedelta(hours=1),
+        collector_version="test",
+        collection=schema.Collection(lines_read=len(flows), lines_parsed=len(flows),
+                                     have_access_logs=True),
+        flows=flows,
+        attachments=[schema.Attachment(
+            interface_id="eni-1", principal=f"arn:aws:iam::{ACCOUNT}:role/sg-named",
+            address="10.0.1.5", compute="EC2",
+        )],
+        destinations=[schema.Destination(
+            address="10.0.4.50", name="orders-service", kind="security-group",
+            region="us-east-1",
+        )],
+    )
+    assert client.post(
+        "/v1/batches", json=body.model_dump(mode="json"), headers=AUTH
+    ).status_code == 202
+
+    page = client.get("/v1/report", headers=AUTH).text
+    assert "orders-service 10.0.4.50 (security group)" in page

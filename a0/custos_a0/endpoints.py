@@ -101,7 +101,14 @@ BILLING_DB = Endpoint(
     "billing.cluster.rds.amazonaws.com", "10.0.9.45", 5432,
     EndpointClass.DATASTORE, writes=True, eni_name="rds", eni_kind="rds",
 )
-VECTOR_DB = Endpoint("vectors.svc.internal", "10.0.6.30", 6333, EndpointClass.DATASTORE)
+# Named by the only label anybody gave it. Nobody tagged this ENI and somebody
+# named the security group it sits in, which is the shape an account with poor
+# tag hygiene has — and the one case in the corpus where the scope's label
+# describes a group the host is in rather than the host.
+VECTOR_DB = Endpoint(
+    "vectors.svc.internal", "10.0.6.30", 6333, EndpointClass.DATASTORE,
+    eni_name="vector-store", eni_kind="security-group",
+)
 ARTIFACTS_S3 = Endpoint(
     "artifacts.s3.us-east-1.amazonaws.com", "52.216.10.7", 443,
     EndpointClass.DATASTORE, aws_service="S3", writes=True,
