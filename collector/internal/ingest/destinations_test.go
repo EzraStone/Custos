@@ -465,3 +465,49 @@ func TestAnIdentifierNameFallsThroughToTheRest(t *testing.T) {
 		t.Fatalf("got %v", names)
 	}
 }
+
+// TestAServiceNameAwsWroteIsUsed: `aws:` is a reserved tag prefix. A customer
+// cannot create a tag in it — AWS rejects the call — so these are AWS's own
+// metadata rather than a label somebody typed.
+func TestAServiceNameAwsWroteIsUsed(t *testing.T) {
+	iface := destEni("10.0.13.1", "arn:aws:ecs:us-east-1:1:attachment/9c8f",
+		"aws:ecs:serviceName", "checkout", "aws:ecs:clusterName", "prod")
+	names := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.13.1")
+	if names["10.0.13.1"] != "checkout/ecs" {
+		t.Fatalf("got %v", names)
+	}
+}
+
+// TestAClusterIsNotAService: a standalone task carries the cluster tag and no
+// service tag. Naming it after the cluster would give every standalone task in
+// the account the same name, which is worse than an address because it looks
+// like an answer.
+func TestAClusterIsNotAService(t *testing.T) {
+	iface := destEni("10.0.13.2", "arn:aws:ecs:us-east-1:1:attachment/1a2b",
+		"aws:ecs:clusterName", "prod")
+	if got := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.13.2"); len(got) != 0 {
+		t.Fatalf("got %v", got)
+	}
+}
+
+// TestTheMostSpecificManagedTagWins: an interface can carry several. A task in
+// a service is that service.
+func TestTheMostSpecificManagedTagWins(t *testing.T) {
+	iface := destEni("10.0.13.3", "",
+		"cluster.k8s.amazonaws.com/name", "prod-agents",
+		"aws:ecs:serviceName", "checkout")
+	names := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.13.3")
+	if names["10.0.13.3"] != "checkout/ecs" {
+		t.Fatalf("got %v", names)
+	}
+}
+
+// TestANameTagStillWinsOverWhatAwsWrote: what a customer called the thing
+// beats what the platform that launched it calls the launch.
+func TestANameTagStillWinsOverWhatAwsWrote(t *testing.T) {
+	iface := destEni("10.0.13.4", "", "Name", "checkout-api", "aws:ecs:serviceName", "checkout")
+	names := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.13.4")
+	if names["10.0.13.4"] != "checkout-api/tag" {
+		t.Fatalf("got %v", names)
+	}
+}

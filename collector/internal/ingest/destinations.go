@@ -282,6 +282,10 @@ func nameOf(iface ec2types.NetworkInterface) (name, kind string) {
 		return "nat-gateway", "nat-gateway"
 	}
 
+	if name, kind := byManagedTag(iface.TagSet); name != "" {
+		return name, kind
+	}
+
 	if name, kind := byInterfaceType(iface.InterfaceType); name != "" {
 		return name, kind
 	}
@@ -415,4 +419,42 @@ var resourceID = regexp.MustCompile(`^[a-z][a-z0-9]{0,15}-[0-9a-f]{8,}$`)
 // readable column in the scope on a second copy of the address.
 func isResourceID(name string) bool {
 	return resourceID.MatchString(name)
+}
+
+// managedTags are tag keys written by an AWS service rather than by a person,
+// whose value is the name of the thing the interface belongs to.
+//
+// `aws:` is a reserved prefix — a customer cannot create a tag in it, and AWS
+// rejects the API call that tries. So these are not "a label a customer chose"
+// in the SEC-23 sense; they are AWS's own metadata, in the same category as a
+// description AWS wrote, and the value is the service or environment name the
+// customer gave the resource. `cluster.k8s.amazonaws.com/name` is not reserved
+// but is written by the AWS VPC CNI, not by whoever deployed the workload.
+//
+// Ordered, because an interface can carry several: the most specific thing it
+// belongs to wins. A task in a service is that service; a task in a cluster
+// with no service is only in a cluster, and naming it after the cluster would
+// give every standalone task in the account the same name.
+var managedTags = []struct {
+	key  string
+	kind string
+}{
+	{"aws:ecs:serviceName", "ecs"},
+	{"elasticbeanstalk:environment-name", "beanstalk"},
+	{"cluster.k8s.amazonaws.com/name", "eks"},
+}
+
+func byManagedTag(tags []ec2types.Tag) (name, kind string) {
+	have := map[string]string{}
+	for _, tag := range tags {
+		if tag.Key != nil && tag.Value != nil {
+			have[*tag.Key] = strings.TrimSpace(*tag.Value)
+		}
+	}
+	for _, candidate := range managedTags {
+		if value := have[candidate.key]; value != "" && !isResourceID(value) {
+			return value, candidate.kind
+		}
+	}
+	return "", ""
 }
