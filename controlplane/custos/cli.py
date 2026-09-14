@@ -1,4 +1,4 @@
-"""`custos` — run a scan, render a report, inspect the register.
+"""`custos` — run a scan, render a report, inspect the register, record decisions.
 
 Exists so the whole pipeline can be driven without standing up a server. The
 first customer scan will be run this way: a collector dry-run writes a batch to
@@ -8,6 +8,15 @@ to provision, nothing to explain in a security review.
     custos scan batch.json --db acme.db --out report.html
     custos register --db acme.db
     custos history --db acme.db
+
+Everything the API can do is here too, and a test enforces it. The control
+plane is deployed when a customer wants continuous monitoring; before that
+there is no API and no console, and that is the phase every customer starts in:
+
+    custos grant  agt_... --operator you@example.com
+    custos retire agt_... --operator you@example.com --reason "decommissioned"
+    custos drift  agt_...
+    custos audit  agt_...
 """
 
 from __future__ import annotations
