@@ -298,6 +298,8 @@ Internal destinations that behave like model endpoints.
       "blind_principals": ["arn:aws:iam::447120043318:role/agent-via-gateway"],
       "question": "10.0.7.40 received 54.4MB from a workload that never reaches a model provider we recognise, and returned 12.8MB — a ratio of 4.3:1. Is it a model gateway?",
       "interleave": 0.98,
+      "published_endpoint": false,
+      "region": "us-east-1",
       "scan_id": 12 }
   ],
   "declined": 5
@@ -328,6 +330,18 @@ another internal service in the same minute. It is the half of the evidence
 that decides: "sends far more than it receives" describes a backup service
 too, and what makes a gateway the likely answer is that the workloads using it
 are running a loop.
+
+`published_endpoint` is AWS saying this address is an interface endpoint for a
+service another AWS account published, and declining to say whose. Every other
+candidate is a machine inside the account, which somebody can walk over and
+look at; this one is a door into another company's network carrying a
+transcript-shaped stream, which is what a model provider selling into AWS looks
+like from inside a customer's VPC. These are listed first.
+
+It changes the ordering and the wording, not the rule. A published endpoint
+whose workloads reach nothing else is declined like any other: better evidence
+is not evidence, and an exception carved out here is how a mechanism that must
+never classify anything starts classifying.
 
 `declined` counts internal destinations that had the same traffic shape and
 were **not** asked about, because the workloads reaching them reach nothing

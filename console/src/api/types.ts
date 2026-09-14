@@ -210,6 +210,16 @@ export interface GatewayCandidate {
   /** The phrasing to show. It carries the numbers somebody would check. */
   question: string;
   /**
+   * AWS calls this address an interface endpoint for a service another AWS
+   * account published, and will not say whose.
+   *
+   * The only question in this list that nobody in the account can answer by
+   * going and looking: what is behind it belongs to another company. It is
+   * also the shape a model provider selling into AWS takes, so these are
+   * ranked first and marked.
+   */
+  published_endpoint?: boolean;
+  /**
    * Region this question was asked about.
    *
    * Answering it declares the address for that region only — the same address

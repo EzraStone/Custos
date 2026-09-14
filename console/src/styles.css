@@ -352,6 +352,13 @@ h2 { font-family: var(--display); font-size: 1.5rem; margin: 2.5rem 0 .5rem; }
 .candidates { list-style: none; margin: 0; padding: 0; }
 .candidate { padding: .8rem 0; border-top: 1px solid var(--hair); }
 .candidate .question { margin: 0 0 .3rem; }
+/* AWS said this address is a door into another account and would not say
+   whose. The only question here nobody can answer by going and looking. */
+.candidate .tag.door {
+  font-family: var(--mono); font-size: .62rem; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--seal); display: block;
+  margin-bottom: .25rem;
+}
 .candidate .who { margin: 0 0 .7rem; font-size: .82rem; color: var(--ink-faint); }
 .candidate .actions { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
 .candidate .actions input { min-width: 20rem; }

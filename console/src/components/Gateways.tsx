@@ -131,6 +131,9 @@ function Candidate({
 
   return (
     <li className="candidate">
+      {candidate.published_endpoint ? (
+        <span className="tag door">Another account&rsquo;s service</span>
+      ) : null}
       <p className="question">{candidate.question}</p>
       <p className="who">
         Reached by{" "}
