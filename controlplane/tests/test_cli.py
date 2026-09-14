@@ -829,3 +829,46 @@ def test_the_audit_trail_carries_the_reason(tmp_path):
 
     entries = AgentStore(open_database(str(db))).audit_for(agent_id_)
     assert any("INC-4471" in str(e) for e in entries), entries
+
+
+def test_status_can_put_an_agent_back_in_the_queue(tmp_path, capsys):
+    """The console has had this since it existed. A CLI that can only move one
+    direction cannot undo a retire made by mistake, and RETIRED ->
+    PENDING_REVIEW is the transition the state machine permits for exactly
+    that."""
+    db = tmp_path / "s.db"
+    agent_id_ = _one_agent(db)
+    main(["--db", str(db), "retire", agent_id_,
+          "--operator", "ezra@custos.dev", "--reason", "wrong one"])
+
+    assert main([
+        "--db", str(db), "status", agent_id_, "--to", "pending_review",
+        "--operator", "ezra@custos.dev", "--reason", "retired by mistake",
+    ]) == 0
+    out = capsys.readouterr().out
+    assert "pending_review" in out
+
+    from custos.store.agents import AgentStore
+    from custos.store.db import open_database
+
+    assert str(AgentStore(open_database(str(db))).get(agent_id_).status) == "pending_review"
+
+
+def test_status_refuses_a_transition_the_state_machine_forbids(tmp_path, capsys):
+    """SANCTIONED is not in the choices at all: it is reachable only through
+    `grant`, which requires an explicit approval scope (SEC-17)."""
+    db = tmp_path / "s2.db"
+    agent_id_ = _one_agent(db)
+    with pytest.raises(SystemExit):
+        main(["--db", str(db), "status", agent_id_, "--to", "sanctioned",
+              "--operator", "ezra@custos.dev", "--reason", "no"])
+
+
+def test_retire_is_still_the_shorthand(tmp_path, capsys):
+    """OPERATIONS talks about retiring an agent, and a customer following it
+    should not have to translate that into a status transition."""
+    db = tmp_path / "s3.db"
+    agent_id_ = _one_agent(db)
+    assert main(["--db", str(db), "retire", agent_id_,
+                 "--operator", "ezra@custos.dev", "--reason", "gone"]) == 0
+    assert "retired" in capsys.readouterr().out

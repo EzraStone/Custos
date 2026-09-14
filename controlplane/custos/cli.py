@@ -575,20 +575,31 @@ def cmd_grant(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_retire(args: argparse.Namespace) -> int:
-    """Mark an agent as no longer running.
+# What a person may move an agent to, and what each one means. The same three
+# the console offers, and deliberately not SANCTIONED: that one is reachable
+# only through `grant`, which requires an explicit approval scope (SEC-17).
+TRANSITIONS: dict[str, str] = {
+    "retired": "it stops appearing as a finding; the record of it does not go away",
+    "pending_review": "it stays in the register and out of the unsanctioned list",
+    "discovered": "it goes back in the unsanctioned list as though nobody had looked",
+}
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    """Move an agent between the states a person may put it in.
 
     The other half of `grant`, and the one that keeps the queue readable. A
     decommissioned workload nobody retires keeps surfacing as a finding for
     ever, and a queue full of dead roles is a queue nobody reads.
 
-    It existed in the console and the API and not here, so a customer running
-    the CLI-only path — which is every customer before the control plane is
-    deployed — could sanction an agent and never retire one.
+    The console has had this control since it existed and the CLI had none of
+    it, so a customer running the CLI-only path — which is every customer
+    before the control plane is deployed — could sanction an agent and never
+    retire one, or un-retire one retired by mistake.
 
     A reason is required for the same purpose the scope is printed before a
     grant: whoever asks about this decision in six months is reading the audit
-    trail, and "retired" with nothing beside it answers nothing.
+    trail, and a status with nothing beside it answers nothing.
     """
     from .register.model import Status
     from .register.store import TransitionError
@@ -604,16 +615,16 @@ def cmd_retire(args: argparse.Namespace) -> int:
 
     try:
         agent = agents.transition(
-            args.agent_id, Status.RETIRED, actor=args.operator, at=now(),
+            args.agent_id, Status(args.to), actor=args.operator, at=now(),
             detail=args.reason,
         )
     except (KeyError, TransitionError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     conn.commit()
-    print(f"retired {agent.identity.principal} by {args.operator}")
+    print(f"{args.to} {agent.identity.principal} by {args.operator}")
     print(f"  reason  {args.reason}")
-    print("it stops appearing as a finding; the record of it does not go away")
+    print(TRANSITIONS[args.to])
     return 0
 
 
@@ -809,13 +820,26 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--account", required=True)
     p.set_defaults(func=cmd_gateways)
 
+    p = sub.add_parser("status", help="move an agent between states a person may set")
+    p.add_argument("agent_id")
+    p.add_argument("--to", required=True, choices=sorted(TRANSITIONS),
+                   help="the state to move it to")
+    p.add_argument("--operator", required=True, type=operator,
+                   help="the human making the decision")
+    p.add_argument("--reason", required=True, type=reason,
+                   help="why, for whoever reads the audit trail later")
+    p.set_defaults(func=cmd_status)
+
+    # The common case, named after what people call it. OPERATIONS talks about
+    # retiring an agent, and a customer following it should not have to
+    # translate that into a status transition.
     p = sub.add_parser("retire", help="mark an agent as no longer running")
     p.add_argument("agent_id")
     p.add_argument("--operator", required=True, type=operator,
                    help="the human making the decision")
     p.add_argument("--reason", required=True, type=reason,
                    help="why, for whoever reads the audit trail later")
-    p.set_defaults(func=cmd_retire)
+    p.set_defaults(func=cmd_status, to="retired")
 
     p = sub.add_parser("grant", help="sanction an agent")
     p.add_argument("agent_id")
