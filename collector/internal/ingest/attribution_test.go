@@ -20,7 +20,13 @@ type fakeEC2 struct {
 	// endpoints maps a vpce- id to the AWS endpoint service it is for, which
 	// is how the collector learns that a private address in the customer's own
 	// subnet is Bedrock.
-	endpoints          map[string]string
+	endpoints map[string]string
+	// endpointTags is the Name the customer put on the endpoint itself, which
+	// comes back on the same call as the service name.
+	endpointTags map[string]string
+	// privateDNS maps an endpoint service name to the DNS name its publisher
+	// configured, which is what DescribeVpcEndpointServices answers.
+	privateDNS         map[string]string
 	describes          int
 	describedByAddress int
 	describedInstances int
@@ -36,9 +42,15 @@ func (f *fakeEC2) DescribeVpcEndpoints(_ context.Context, in *ec2.DescribeVpcEnd
 		if !ok {
 			continue
 		}
-		out.VpcEndpoints = append(out.VpcEndpoints, ec2types.VpcEndpoint{
+		endpoint := ec2types.VpcEndpoint{
 			VpcEndpointId: aws.String(id), ServiceName: aws.String(service),
-		})
+		}
+		if name, ok := f.endpointTags[id]; ok {
+			endpoint.Tags = []ec2types.Tag{
+				{Key: aws.String("Name"), Value: aws.String(name)},
+			}
+		}
+		out.VpcEndpoints = append(out.VpcEndpoints, endpoint)
 	}
 	return out, nil
 }

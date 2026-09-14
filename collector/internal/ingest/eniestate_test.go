@@ -43,7 +43,16 @@ type estateEni struct {
 	// when it is one. The field that turns a private address into a model
 	// endpoint.
 	service string
-	why     string
+	// endpointTag is the Name the customer put on the VPC endpoint itself.
+	// Not on the interface: the interface belongs to AWS and carries AWS's
+	// description, while the endpoint is the customer's own resource and is
+	// the thing their Terraform tags.
+	endpointTag string
+	// privateDNS is the DNS name the *publisher* of an endpoint service
+	// configured for it. For a service somebody else published this is the
+	// only thing in the account that says what is behind it.
+	privateDNS string
+	why        string
 }
 
 func withType(i ec2types.NetworkInterface, kind ec2types.NetworkInterfaceType) ec2types.NetworkInterface {
@@ -251,7 +260,21 @@ func estate() []estateEni {
 		{
 			iface: destEni("10.0.5.31", "VPC Endpoint Interface vpce-0f9e8d7c"),
 			want:  "vpce-0f9e8d7c",
-			why:   "an endpoint AWS would not tell us about. The id is what the description gave it",
+			why:   "an endpoint nothing in the account can explain. The id is the honest answer",
+		},
+		{
+			iface:       destEni("10.0.15.21", "VPC Endpoint Interface vpce-0c4e6a8b"),
+			want:        "model-provider-privatelink",
+			service:     "com.amazonaws.vpce.us-east-1.vpce-svc-0a1b2c3d",
+			endpointTag: "model-provider-privatelink",
+			why:         "A SERVICE SOMEBODY ELSE PUBLISHED, and the customer named the endpoint in their own Terraform. We already make the call that returns this tag and throw it away",
+		},
+		{
+			iface:      destEni("10.0.15.22", "VPC Endpoint Interface vpce-0d5f7b9c"),
+			want:       "api.modelprovider.example",
+			service:    "com.amazonaws.vpce.us-east-1.vpce-svc-0b2c3d4e",
+			privateDNS: "api.modelprovider.example",
+			why:        "the publisher configured private DNS for it, which is the shape a provider selling into AWS takes and the one thing AWS will say about them",
 		},
 
 		// --- labelled by a person, in a field that takes anything -----------
@@ -344,7 +367,7 @@ func TestTheEstateHasTheTagHygieneItClaims(t *testing.T) {
 // cannot quietly shrink into something easier.
 //
 //	13 → 24 → 26, as harder shapes were added
-const nameableFloor = 24
+const nameableFloor = 26
 
 // TestScopeReadability is the measurement, and the only number in this package
 // that a customer feels directly. An entry an operator cannot read is an
@@ -363,6 +386,8 @@ func TestScopeReadability(t *testing.T) {
 
 	instanceNames := map[string]string{}
 	endpoints := map[string]string{}
+	endpointTags := map[string]string{}
+	privateDNS := map[string]string{}
 	for _, e := range all {
 		if e.instance != "" {
 			instanceNames[*e.iface.Attachment.InstanceId] = e.instance
@@ -370,9 +395,16 @@ func TestScopeReadability(t *testing.T) {
 		if e.service != "" {
 			endpoints[endpointID(e.iface)] = e.service
 		}
+		if e.endpointTag != "" {
+			endpointTags[endpointID(e.iface)] = e.endpointTag
+		}
+		if e.privateDNS != "" {
+			privateDNS[e.service] = e.privateDNS
+		}
 	}
 	names := resolveNamesWith(t, &fakeEC2{
 		interfaces: ifaces, instanceNames: instanceNames, endpoints: endpoints,
+		endpointTags: endpointTags, privateDNS: privateDNS,
 	}, addresses...)
 
 	var wrong, missing []string
