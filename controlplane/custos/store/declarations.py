@@ -181,12 +181,12 @@ class CandidateStore:
         self.conn.executemany(
             "INSERT OR REPLACE INTO gateway_candidates "
             "(scan_id, account_id, address, egress, ingress, principals, blind, "
-            "question, region, interleave) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "question, region, interleave, published_endpoint) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (scan_id, account_id, c.address, c.egress, c.ingress,
                  dumps(list(c.principals)), dumps(list(c.blind_principals)),
-                 c.question, region, c.interleave)
+                 c.question, region, c.interleave, int(c.published_endpoint))
                 for c in found
             ],
         )
@@ -224,6 +224,7 @@ class CandidateStore:
                 "principals": loads(r["principals"]),
                 "blind_principals": loads(r["blind"]),
                 "interleave": r["interleave"],
+                "published_endpoint": bool(r["published_endpoint"]),
                 "question": r["question"],
                 "region": r["region"],
                 "scan_id": r["scan_id"],
@@ -236,7 +237,8 @@ class CandidateStore:
         # strongest for no reason but the alphabet, and a list read top-down is
         # a list whose order is the answer to "which of these first".
         found.sort(
-            key=lambda c: (-len(c["blind_principals"]), -c["egress"], c["region"],
+            key=lambda c: (not c["published_endpoint"],
+                           -len(c["blind_principals"]), -c["egress"], c["region"],
                            c["address"])
         )
         return found

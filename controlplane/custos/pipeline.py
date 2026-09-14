@@ -212,6 +212,22 @@ def _resolved_endpoints(batch: Batch) -> tuple[str, ...]:
     }))
 
 
+def _published_endpoints(batch: Batch) -> frozenset[str]:
+    """Addresses AWS called an interface endpoint for a service published by
+    another account.
+
+    The deliberate opposite of `_resolved_endpoints`. That one is AWS naming a
+    service we recognise, and its addresses are classified as model traffic
+    with nobody asked. This one is AWS saying an address is a door into
+    somebody else's network and declining to say whose, which is the one thing
+    it cannot answer — so these become questions instead.
+    """
+    return frozenset(
+        d.address for d in batch.destinations
+        if d.service.startswith("com.amazonaws.vpce.")
+    )
+
+
 def _with_aws_endpoints(declared: Declared, batch: Batch) -> Declared:
     """Add the interface VPC endpoints AWS says are model inference.
 
@@ -355,7 +371,9 @@ def ingest(
         # One pass for both halves. The survey behind them walks every
         # principal, every window and every destination, and the ingestion
         # path needs the questions and the count of what was ruled out.
-        gateways = assess_gateways(result.telemetry)
+        gateways = assess_gateways(
+            result.telemetry, published=_published_endpoints(batch)
+        )
 
         scan_id = scans.record_scan(
             batch_id=record.id, account_id=batch.account_id, started_at=stamp,
