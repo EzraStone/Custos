@@ -82,13 +82,38 @@ func (r Report) String() string {
 		}
 	}
 
+	// A summary, because the list has grown to a dozen lines and most of them
+	// are passes. Somebody skimming this needs to know which lines to go back
+	// to, and the difference between the two kinds: one stops a scan, the
+	// other changes what the scan is allowed to claim.
 	if r.Ready() {
 		fmt.Fprintln(&b, "\nReady to scan.")
+		if warned := r.named(Warn); len(warned) > 0 {
+			fmt.Fprintf(&b, "%d of these limit what the scan can say: %s\n",
+				len(warned), strings.Join(warned, ", "))
+		}
 	} else {
 		fmt.Fprintln(&b, "\nNot ready. A scan now would find nothing, "+
 			"which is indistinguishable from an account with no agents.")
+		fmt.Fprintf(&b, "Fix first: %s\n", strings.Join(r.named(Fail), ", "))
 	}
 	return b.String()
+}
+
+// named lists the checks at one status, in the order they ran.
+//
+// Not sorted. The checks are ordered by what depends on what — configuration
+// before reachability, reachability before anything read from AWS — so the
+// first name in this list is usually the one to fix first, and re-ordering it
+// alphabetically would throw that away.
+func (r Report) named(status Status) []string {
+	var out []string
+	for _, result := range r.Results {
+		if result.Status == status {
+			out = append(out, result.Name)
+		}
+	}
+	return out
 }
 
 // FlowSource is the reader under test.

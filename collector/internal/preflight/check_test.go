@@ -1040,3 +1040,59 @@ func TestAnAccountWithNoEndpointsSaysNothingEitherWay(t *testing.T) {
 		}
 	}
 }
+
+// TestTheSummarySaysWhichLinesToGoBackTo: the list has grown to a dozen lines
+// and most of them are passes. Somebody skimming needs to know which ones need
+// them, and the difference between the two kinds — one stops a scan, the other
+// changes what the scan may claim.
+func TestTheSummarySaysWhichLinesToGoBackTo(t *testing.T) {
+	cfg := good()
+	cfg.AccessLogs = ""
+	out := run(cfg, stubFlows{records: modelTraffic(5)}).String()
+
+	if !strings.Contains(out, "Ready to scan.") {
+		t.Fatalf("not ready on a good config:\n%s", out)
+	}
+	if !strings.Contains(out, "limit what the scan can say") {
+		t.Fatalf("no summary of the warnings:\n%s", out)
+	}
+	if !strings.Contains(out, "access logs") {
+		t.Fatalf("the summary does not name the warning:\n%s", out)
+	}
+}
+
+// TestAReportWithNothingWrongSaysNothingExtra: a summary line on a clean
+// account is a line that means "everything is fine" and gets read as a
+// problem.
+func TestAReportWithNothingWrongSaysNothingExtra(t *testing.T) {
+	var report Report
+	report.add("account id", Pass, "447120043318", "")
+	report.add("flow logs readable", Pass, "5 records", "")
+
+	out := report.String()
+	if strings.Contains(out, "limit what the scan can say") {
+		t.Fatalf("a clean report carried a summary:\n%s", out)
+	}
+	if !strings.Contains(out, "Ready to scan.") {
+		t.Fatalf("not ready with nothing wrong:\n%s", out)
+	}
+}
+
+// TestANotReadyReportSaysWhatToFixFirst: the checks run in dependency order —
+// configuration before reachability, reachability before anything read from
+// AWS — so the first failure named is the one to start with, and sorting them
+// alphabetically would throw that away.
+func TestANotReadyReportSaysWhatToFixFirst(t *testing.T) {
+	var report Report
+	report.add("credentials", Fail, "cannot assume the role", "check the trust policy")
+	report.add("flow log source", Pass, "/aws/vpc/flowlogs", "")
+	report.add("flow logs readable", Fail, "no records", "widen the window")
+
+	out := report.String()
+	if !strings.Contains(out, "Not ready.") {
+		t.Fatalf("reported ready with two failures:\n%s", out)
+	}
+	if !strings.Contains(out, "Fix first: credentials, flow logs readable") {
+		t.Fatalf("did not say what to fix, in order:\n%s", out)
+	}
+}
