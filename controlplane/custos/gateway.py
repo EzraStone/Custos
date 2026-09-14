@@ -263,7 +263,11 @@ def assess(
     )
 
 
-def candidates(telemetry: list[PrincipalTelemetry], limit: int = 5) -> list[Candidate]:
+def candidates(
+    telemetry: list[PrincipalTelemetry],
+    limit: int = 5,
+    published: frozenset[str] = frozenset(),
+) -> list[Candidate]:
     """Internal destinations worth asking a customer about.
 
     Ordered by how many blind workloads reach them, then by volume. A gateway
@@ -277,7 +281,7 @@ def candidates(telemetry: list[PrincipalTelemetry], limit: int = 5) -> list[Cand
     workloads reaching it have no model traffic we recognise, and those
     workloads reach something else as well.
     """
-    return _rank(_survey(telemetry), limit)
+    return _rank(_survey(telemetry), limit, published)
 
 
 def bulk_senders(telemetry: list[PrincipalTelemetry]) -> tuple[str, ...]:

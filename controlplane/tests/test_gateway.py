@@ -267,3 +267,56 @@ def test_one_assessment_answers_both_halves():
     assert both.declined == ("10.0.8.10",)
     assert list(both.asked) == candidates(telemetry)
     assert both.declined == bulk_senders(telemetry)
+
+
+def test_a_door_into_another_account_is_asked_about_first():
+    """Two candidates, identical in every way the detector measures, and one of
+    them is an endpoint for a service another AWS account published.
+
+    Ranking is the whole product of this module: a person reads the list from
+    the top and stops. The internal address is something the customer can walk
+    over and look at; the endpoint is a door into somebody else's network
+    carrying a transcript-shaped stream, which is what a model provider selling
+    into AWS looks like from inside a customer's VPC.
+    """
+    records = _loop("eni-1", "10.0.7.9", 40, 140_000, 9_000)
+    records += _loop("eni-2", "10.0.15.21", 40, 140_000, 9_000)
+    found = candidates(
+        _telemetry(records, {"eni-1": "role/one", "eni-2": "role/two"}),
+        published=frozenset({"10.0.15.21"}),
+    )
+    assert [c.address for c in found] == ["10.0.15.21", "10.0.7.9"]
+    assert found[0].published_endpoint
+    assert not found[1].published_endpoint
+
+
+def test_the_question_says_what_aws_said():
+    """The point of ranking it first is lost if the reader cannot tell why it
+    is there. AWS's own answer — an endpoint for a service another account
+    published — is the reason, and it is not something the customer can find
+    out from the address."""
+    records = _loop("eni-1", "10.0.15.21", 40, 140_000, 9_000)
+    found = candidates(
+        _telemetry(records, {"eni-1": "role/agent"}),
+        published=frozenset({"10.0.15.21"}),
+    )
+    assert "another account published" in found[0].question
+    assert found[0].question.endswith("Is it a model gateway?")
+
+
+def test_a_door_nobody_loops_through_is_still_not_asked_about():
+    """The exception that is not made.
+
+    An endpoint is better evidence than an internal address, and it is still
+    not evidence. A workload whose only destination is one address has no tools
+    to act through and is not what this product means by an agent — being sold
+    by another company does not change that, and carving out an exception here
+    is how a heuristic that must never classify anything starts classifying.
+    """
+    records = _flows("eni-1", "10.0.15.21", 40, 140_000, 9_000)
+    found = candidates(
+        _telemetry(records, {"eni-1": "role/shipper"}),
+        published=frozenset({"10.0.15.21"}),
+    )
+    assert found == []
+    assert bulk_senders(_telemetry(records, {"eni-1": "role/shipper"})) == ("10.0.15.21",)
