@@ -124,6 +124,11 @@ Three more were added after the same failure happened three times:
 - **`test_model_services_agree.py`** — the collector's preflight and the
   control plane recognise the same AWS endpoint services. If they drift,
   `--check` promises something the scan does not deliver.
+- **`a0/tests/test_conversion.py`** — the two constants behind every dollar
+  figure are held against the corpus they were measured in. Neither is
+  derivable from anything in the control plane, and one of them is the
+  measured figure adjusted for a framing haircut taken somewhere else in the
+  file, so the two drifting apart produces a plausible number and no error.
 
 Add one whenever you notice two places that have to agree and nothing making
 them. The shape to look for is not a bug that fails; it is a claim in one place
@@ -240,6 +245,37 @@ customer's account, and each hid a real defect until someone went looking.
 the gate. If your change moves them, that is a change to a business decision.
 Say so in the commit message and update `docs/A0-FINDINGS.md` in the same
 commit.
+
+**There are two numbers, and they can move in opposite directions.** The
+separation margin is the gap between the classes; the headroom is how far the
+weakest agent sits above the threshold at which it is reported at all. A margin
+says nothing about where the gap is. Streaming responses widened the margin
+from 0.260 to 0.371 and cut the headroom from 0.151 to 0.054 in one run, and a
+change that widened the margin while pushing an agent under 0.80 would read as
+an improvement in every recorded number and be a row missing from a customer's
+report.
+
+## Modelling the wire
+
+`a0/custos_a0/wire` turns ground-truth calls into the telemetry a collector
+could read, and it is the most dangerous file in the repository to be casually
+wrong in. Everything the classifier is measured against comes out of it, and an
+omission there is a corpus that is easier than production in a way no test can
+see.
+
+**Model the protocol, not the payload.** The response side of a model call was
+four bytes per output token for a year, which is the payload. What a flow log
+counts is packets: a streaming API sends every token in its own SSE frame, its
+own TLS record and its own segment, which is 187 bytes for the same token. That
+was not a measurement anybody had to take — the envelope is documented and the
+rest follows — and it was wrong by forty-four times in the direction that
+flatters the product.
+
+**When a protocol detail has two settings, model both and assert neither.**
+Whether real agent traffic streams is a question about customers. The corpus
+can be built either way, both are in the sweep, and the difference is a number
+rather than an argument. A detail made unrepresentable is a detail decided by
+whoever wrote the model.
 
 ## Adding a delivery channel
 
