@@ -643,8 +643,9 @@ func TestEndpointsAreOnlyAskedAboutWhenThereAreSome(t *testing.T) {
 	}
 }
 
-// TestAPrivateLinkServiceSomebodyElsePublishedKeepsItsId: there is no service
-// segment to read, and inventing one would be a claim about somebody else's
+// TestAPrivateLinkServiceSomebodyElsePublishedKeepsItsId: nothing in the
+// account explains this one. No tag, no private DNS name, and no service
+// segment to read — inventing one would be a claim about somebody else's
 // account.
 func TestAPrivateLinkServiceSomebodyElsePublishedKeepsItsId(t *testing.T) {
 	iface := destEni("10.0.15.21", "VPC Endpoint Interface vpce-0c4e6a8b")
@@ -788,5 +789,97 @@ func TestALongNameIsCutOnACharacterBoundary(t *testing.T) {
 	if len([]rune(name)) != MaxNameLength+1 {
 		t.Fatalf("got %d characters, want %d plus the mark",
 			len([]rune(name)), MaxNameLength)
+	}
+}
+
+// TestTheCustomerSNameForAnEndpointWins: the tag comes back on the call we
+// already make, and a label the account chose beats anything we look up
+// (SEC-23). Most visible where AWS says least: this endpoint's service name
+// is an opaque id, and the customer's Terraform called it what it is.
+func TestTheCustomerSNameForAnEndpointWins(t *testing.T) {
+	iface := destEni("10.0.15.21", "VPC Endpoint Interface vpce-0c4e6a8b")
+	names := resolveNamesWith(t, &fakeEC2{
+		interfaces: []ec2types.NetworkInterface{iface},
+		endpoints: map[string]string{
+			"vpce-0c4e6a8b": "com.amazonaws.vpce.us-east-1.vpce-svc-0a1b2c3d",
+		},
+		endpointTags: map[string]string{"vpce-0c4e6a8b": "model-provider-privatelink"},
+	}, "10.0.15.21")
+	if names["10.0.15.21"] != "model-provider-privatelink/vpc-endpoint" {
+		t.Fatalf("got %v", names)
+	}
+}
+
+// TestAnEndpointTaggedWithItsOwnIdIsNotANameEither: Terraform modules tag
+// endpoints with whatever the module generated, and `vpce-0c4e6a8b` in the
+// Name field is the same non-answer as `vpce-0c4e6a8b` in the description.
+func TestAnEndpointTaggedWithItsOwnIdIsNotANameEither(t *testing.T) {
+	iface := destEni("10.0.15.21", "VPC Endpoint Interface vpce-0c4e6a8b")
+	names := resolveNamesWith(t, &fakeEC2{
+		interfaces: []ec2types.NetworkInterface{iface},
+		endpoints: map[string]string{
+			"vpce-0c4e6a8b": "com.amazonaws.vpce.us-east-1.vpce-svc-0a1b2c3d",
+		},
+		endpointTags: map[string]string{"vpce-0c4e6a8b": "vpce-0c4e6a8b"},
+	}, "10.0.15.21")
+	if names["10.0.15.21"] != "vpce-svc-0a1b2c3d/vpc-endpoint" {
+		t.Fatalf("got %v", names)
+	}
+}
+
+// TestTheDNSNameThePublisherSetIsTheAnswer: a model provider selling into AWS
+// appears in a customer's account as an endpoint service with an opaque id and
+// a private DNS name that is their own API hostname. That is the shape
+// Finding 9 said was still a question for a human.
+func TestTheDNSNameThePublisherSetIsTheAnswer(t *testing.T) {
+	iface := destEni("10.0.15.22", "VPC Endpoint Interface vpce-0d5f7b9c")
+	names := resolveNamesWith(t, &fakeEC2{
+		interfaces: []ec2types.NetworkInterface{iface},
+		endpoints: map[string]string{
+			"vpce-0d5f7b9c": "com.amazonaws.vpce.us-east-1.vpce-svc-0b2c3d4e",
+		},
+		privateDNS: map[string]string{
+			"com.amazonaws.vpce.us-east-1.vpce-svc-0b2c3d4e": "api.modelprovider.example",
+		},
+	}, "10.0.15.22")
+	if names["10.0.15.22"] != "api.modelprovider.example/vpc-endpoint" {
+		t.Fatalf("got %v", names)
+	}
+}
+
+// TestAnAWSEndpointCostsNoServiceLookup: the service name already says
+// everything about com.amazonaws.<region>.bedrock-runtime, so asking about it
+// would be a call per scan for a field we discard. Most accounts have only
+// these.
+func TestAnAWSEndpointCostsNoServiceLookup(t *testing.T) {
+	api := &fakeEC2{
+		interfaces: []ec2types.NetworkInterface{
+			destEni("10.0.15.20", "VPC Endpoint Interface vpce-0b3d5f7a"),
+		},
+		endpoints: map[string]string{
+			"vpce-0b3d5f7a": "com.amazonaws.us-east-1.bedrock-runtime",
+		},
+	}
+	resolveNamesWith(t, api, "10.0.15.20")
+	if api.describedServices != 0 {
+		t.Fatalf("asked about AWS's own service %d times", api.describedServices)
+	}
+}
+
+// TestANamedEndpointCostsNoServiceLookupEither: the customer's word wins, so
+// looking one up would be work whose answer is thrown away.
+func TestANamedEndpointCostsNoServiceLookupEither(t *testing.T) {
+	api := &fakeEC2{
+		interfaces: []ec2types.NetworkInterface{
+			destEni("10.0.15.21", "VPC Endpoint Interface vpce-0c4e6a8b"),
+		},
+		endpoints: map[string]string{
+			"vpce-0c4e6a8b": "com.amazonaws.vpce.us-east-1.vpce-svc-0a1b2c3d",
+		},
+		endpointTags: map[string]string{"vpce-0c4e6a8b": "model-provider-privatelink"},
+	}
+	resolveNamesWith(t, api, "10.0.15.21")
+	if api.describedServices != 0 {
+		t.Fatalf("asked about a service the customer had already named")
 	}
 }
