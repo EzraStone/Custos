@@ -50,6 +50,14 @@ class ScanRecord:
     direction_undecided: int = 0
     read_errors: int = 0
     regions: tuple[str, ...] = ()
+    resolved_endpoints: tuple[str, ...] = ()
+    """AWS endpoint services this scan resolved to model inference.
+
+    An account reaching Bedrock through an interface VPC endpoint has agents
+    that are visible only because of that lookup. A report that does not say so
+    cannot be told apart from one about an account with nothing behind an
+    endpoint at all."""
+
     skipped_records: int = 0
     """Records AWS dropped before we read them, from its own NODATA and
     SKIPDATA markers.
@@ -111,6 +119,7 @@ def _scan(row: sqlite3.Row) -> ScanRecord:
         bulk_senders=row["bulk_senders"],
         ipv6_destinations=row["ipv6_destinations"],
         skipped_records=row["skipped_records"],
+        resolved_endpoints=tuple(loads(row["resolved_endpoints"])),
     )
 
 
@@ -192,19 +201,21 @@ class ScanStore:
         bulk_senders: int = 0,
         ipv6_destinations: int = 0,
         skipped_records: int = 0,
+        resolved_endpoints: tuple[str, ...] = (),
     ) -> int:
         cursor = self.conn.execute(
             "INSERT INTO scans (batch_id, account_id, started_at, principals_seen, "
             "agents_found, review_candidates, coverage, truncated, catalogue_revision, "
             "scope_named, scope_total, missing_fields, direction_undecided, "
             "read_errors, regions, bulk_senders, ipv6_destinations, "
-            "skipped_records) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "skipped_records, resolved_endpoints) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (batch_id, account_id, iso(started_at), principals_seen, agents_found,
              review_candidates, coverage, int(truncated), catalogue_revision,
              scope_named, scope_total, dumps(list(missing_fields)),
              direction_undecided, read_errors, dumps(list(regions)),
-             bulk_senders, ipv6_destinations, skipped_records),
+             bulk_senders, ipv6_destinations, skipped_records,
+             dumps(list(resolved_endpoints))),
         )
         return cursor.lastrowid
 

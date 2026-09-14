@@ -322,11 +322,22 @@ def _format_limits(coverage: Coverage | None) -> list[str]:
     return items
 
 
+def _endpoint_short(service: str) -> str:
+    """`com.amazonaws.us-east-1.bedrock-runtime` as `bedrock-runtime`.
+
+    The prefix is identical on every AWS endpoint and the region is the scan's.
+    What distinguishes one from another is the last segment, and it is the only
+    part that belongs in a sentence somebody reads.
+    """
+    return service.rsplit(".", 1)[-1] if service.startswith("com.amazonaws.") else service
+
+
 def _limitations(
     result: ScanResult,
     degraded: list[str],
     declared: list[str] | None = None,
     coverage: Coverage | None = None,
+    resolved: list[str] | None = None,
 ) -> str:
     items = [
         "Payload contents were never collected. Identities, endpoints, byte "
@@ -353,12 +364,25 @@ def _limitations(
             "declaration naming a region applies only there, because a private "
             "address is a different host in every region."
         )
-    else:
+    elif not resolved:
         items.append(
             "This account has declared no additional model endpoints. If model "
             "calls here go through a self-hosted gateway, the agents making "
             "them do not appear above at all — they have no model traffic we "
             "can see."
+        )
+
+    # Endpoints nobody had to declare. Said separately from declarations
+    # because the provenance is different and a reader should be able to tell
+    # what somebody decided from what we looked up.
+    if resolved:
+        named = ", ".join(_e(_endpoint_short(s)) for s in resolved)
+        items.append(
+            f"This account reaches {named} through an interface VPC endpoint, "
+            "which Custos resolved from AWS. Agents behind it are visible "
+            "without anyone declaring anything — the traffic goes to a private "
+            "address in this account's own subnet and carries nothing in the "
+            "flow record to say what it is."
         )
 
     # The account's own revision, not the module default. An account that
@@ -634,6 +658,7 @@ def render(
     drift: list[Drift] | None = None,
     coverage: Coverage | None = None,
     declared: list[str] | None = None,
+    resolved: list[str] | None = None,
     reviews: list[Review] | None = None,
     questions: list[Question] | None = None,
 ) -> str:
@@ -697,7 +722,7 @@ def render(
 
 <section>
   <h2>What this report does not claim</h2>
-  <ul class="limits">{_limitations(result, degraded, declared, coverage)}</ul>
+  <ul class="limits">{_limitations(result, degraded, declared, coverage, resolved)}</ul>
 </section>
 
 <footer>

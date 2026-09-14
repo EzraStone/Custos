@@ -150,6 +150,7 @@ def _write_report(
         drift=drift if drift is not None else outcome.drift,
         coverage=outcome.coverage,
         declared=declared,
+        resolved=list(outcome.resolved_endpoints),
         reviews=reviews,
         questions=questions,
     ))

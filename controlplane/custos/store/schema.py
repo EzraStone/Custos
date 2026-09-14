@@ -22,7 +22,7 @@ agent's apparent spend and reach.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
 
 # Columns added after a table was first written, applied by ALTER on databases
 # that already exist. The schema below is applied with CREATE TABLE IF NOT
@@ -56,6 +56,12 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     # SKIPDATA markers. It is the difference between "your account is quiet"
     # and "we were handed less than happened".
     ("scans", "skipped_records", "INTEGER NOT NULL DEFAULT 0"),
+    # AWS endpoint services this scan resolved to model inference. An account
+    # reaching Bedrock over PrivateLink has agents that are visible only
+    # because of this lookup, and a report that does not say so leaves a
+    # reader unable to tell that account from one with nothing behind an
+    # endpoint at all.
+    ("scans", "resolved_endpoints", "TEXT NOT NULL DEFAULT '[]'"),
     # Regions this agent has been seen in. Accumulated across scans, because a
     # scan covers one region and a role running in three is discovered three
     # times.
@@ -139,6 +145,7 @@ CREATE TABLE IF NOT EXISTS scans (
     bulk_senders        INTEGER NOT NULL DEFAULT 0,
     ipv6_destinations   INTEGER NOT NULL DEFAULT 0,
     skipped_records     INTEGER NOT NULL DEFAULT 0,
+    resolved_endpoints  TEXT    NOT NULL DEFAULT '[]',
     agents_found        INTEGER NOT NULL DEFAULT 0,
     review_candidates   INTEGER NOT NULL DEFAULT 0,
     coverage            REAL    NOT NULL DEFAULT 0.0,

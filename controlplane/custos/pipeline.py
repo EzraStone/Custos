@@ -57,6 +57,11 @@ class IngestResult:
     drift: list[Drift] = field(default_factory=list)
     """Departures from each agent's established baseline. Empty until an agent
     has enough history for a baseline to mean anything."""
+    resolved_endpoints: tuple[str, ...] = ()
+    """AWS endpoint services this batch resolved to model inference. Agents
+    behind one are visible without anybody declaring anything, and the report
+    says so — otherwise an account with a resolved endpoint reads exactly like
+    an account with a hidden one."""
 
 
 # Enum construction is not free. Direction(value) runs the full enum lookup
@@ -185,6 +190,14 @@ def to_scan_input(
         inbound_logs_available=batch.have_alb_logs,
         region=batch.region,
     )
+
+
+def _resolved_endpoints(batch: Batch) -> tuple[str, ...]:
+    """AWS endpoint services in this batch that are model inference."""
+    return tuple(sorted({
+        d.service for d in batch.destinations
+        if d.service and is_model_endpoint_service(d.service)
+    }))
 
 
 def _with_aws_endpoints(declared: Declared, batch: Batch) -> Declared:
@@ -363,6 +376,9 @@ def ingest(
             # report a customer opens later rather than only the one the CLI
             # printed on the day.
             ipv6_destinations=ipv6_destinations(scan_input),
+            # Endpoints nobody had to declare. Recorded so the report served a
+            # week later can say the same thing the one printed today does.
+            resolved_endpoints=_resolved_endpoints(batch),
             # Records AWS dropped before we read them. It changes what a
             # quiet account means, and it drives the banner printed above the
             # findings rather than below them.
@@ -470,6 +486,7 @@ def ingest(
             batch, (named, total), ipv6_destinations(scan_input),
             declined=len(gateways.declined),
         ),
+        resolved_endpoints=_resolved_endpoints(batch),
         diff=diff, drift=drift,
     )
 

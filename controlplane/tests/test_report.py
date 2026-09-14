@@ -678,3 +678,53 @@ def test_two_unretained_regions_read_as_plural():
 def test_nothing_is_said_when_every_region_still_has_telemetry():
     page = render(result([agent()]), "acme", T0, coverage=Coverage(regions=("us-east-1",)))
     assert "no longer exists" not in page
+
+
+# --- endpoints nobody had to declare ------------------------------------------
+
+def test_a_resolved_endpoint_is_named_in_the_provenance():
+    """An account reaching Bedrock through a VPC endpoint has agents that are
+    visible only because of a lookup. A report that does not say so cannot be
+    told apart from one about an account with nothing behind an endpoint."""
+    page = render(
+        result([agent()]), "acme", T0,
+        resolved=["com.amazonaws.us-east-1.bedrock-runtime"],
+    )
+    assert "reaches bedrock-runtime through an interface VPC endpoint" in page
+    assert "without anyone declaring anything" in page
+
+
+def test_a_resolved_endpoint_is_not_reported_as_a_declaration():
+    """That list is read as a record of decisions somebody made. Putting our
+    own lookups in it would make the record false."""
+    page = render(
+        result([agent()]), "acme", T0,
+        resolved=["com.amazonaws.us-east-1.bedrock-runtime"],
+    )
+    assert "This account declared" not in page
+
+
+def test_a_resolved_endpoint_silences_the_nothing_declared_warning():
+    """"If model calls here go through a self-hosted gateway, the agents making
+    them do not appear above at all" is false on an account where one of them
+    does appear, because we resolved the endpoint."""
+    page = render(
+        result([agent()]), "acme", T0,
+        resolved=["com.amazonaws.us-east-1.bedrock-runtime"],
+    )
+    assert "has declared no additional model endpoints" not in page
+
+
+def test_an_account_with_neither_still_gets_the_warning():
+    page = render(result([agent()]), "acme", T0)
+    assert "has declared no additional model endpoints" in page
+
+
+def test_a_declaration_and_a_resolution_are_both_reported():
+    page = render(
+        result([agent()]), "acme", T0,
+        declared=["10.0.7.0/24 (llm-gateway)"],
+        resolved=["com.amazonaws.us-east-1.bedrock-runtime"],
+    )
+    assert "This account declared" in page
+    assert "reaches bedrock-runtime through an interface VPC endpoint" in page

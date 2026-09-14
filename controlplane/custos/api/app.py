@@ -903,6 +903,12 @@ def create_app(
             result, account_label=account_id,
             generated_at=now(), diff=diff, coverage=coverage,
             declared=_declared_labels(DeclarationStore(app.state.db), account_id),
+            # Endpoints nobody had to declare, across every region. An account
+            # with one reads exactly like an account with a hidden gateway
+            # unless the report says which it is.
+            resolved=sorted({
+                service for s in per_region for service in s.resolved_endpoints
+            }),
             reviews=candidates,
             questions=questions,
             # The section that says an agent started doing something it has

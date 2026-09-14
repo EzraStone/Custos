@@ -919,3 +919,22 @@ def test_an_endpoint_for_an_ordinary_service_is_not_model_traffic(client):
     assert not is_model_endpoint_service("com.amazonaws.us-east-1.bedrock")
     assert not is_model_endpoint_service("com.amazonaws.vpce.us-east-1.vpce-svc-0a1b")
     assert Destination(address="10.0.1.1").service == ""
+
+
+def test_the_served_report_says_which_endpoint_was_resolved(client):
+    """The figure is computed at scan time from destinations the batch carried,
+    and the batch is not kept. If it does not survive into the stored scan, the
+    report a customer opens a week later reads exactly like a report about an
+    account with a hidden gateway."""
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+
+    payload = build_batch(
+        corpus.build(corpus.CorpusSpec(days=1, hard=True)), region="us-east-1"
+    ).model_dump(mode="json")
+    payload["account_id"] = ACCOUNT
+    client.post("/v1/batches", json=payload, headers=AUTH)
+
+    page = client.get("/v1/report", headers=AUTH).text
+    assert "reaches bedrock-runtime through an interface VPC endpoint" in page
+    assert "has declared no additional model endpoints" not in page
