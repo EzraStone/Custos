@@ -92,9 +92,10 @@ func estate() []estateEni {
 			why:   "a VPC endpoint, which is how an account reaches S3 privately",
 		},
 		{
-			iface: destEni("10.0.6.15", "AWS Lambda VPC ENI-checkout-worker-a1b2"),
-			want:  "checkout-worker",
-			why:   "a Lambda in a VPC",
+			iface: destEni("10.0.6.15",
+				"AWS Lambda VPC ENI-checkout-worker-f7a1b2c3-4d5e-6f70-8a9b-0c1d2e3f4a5b"),
+			want: "checkout-worker",
+			why:  "a Lambda in a VPC. The suffix is a full UUID, which is what anchors the parse",
 		},
 
 		// --- structured, and currently thrown away --------------------------
@@ -198,7 +199,7 @@ func TestTheEstateHasTheTagHygieneItClaims(t *testing.T) {
 // threshold somebody picked stops meaning anything the moment it is met.
 //
 //	6 of 13 — the Name tag and four of the five AWS description shapes
-const readableFloor = 6
+const readableFloor = 7
 
 // TestScopeReadability is the measurement, and the only number in this package
 // that a customer feels directly. An entry an operator cannot read is an
