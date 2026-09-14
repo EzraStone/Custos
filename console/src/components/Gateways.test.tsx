@@ -218,3 +218,43 @@ describe("the same address in two regions", () => {
     expect(screen.getAllByRole("button", { name: /yes, it is ours/i })).toHaveLength(1);
   });
 });
+
+describe("a question about another account's service", () => {
+  it("marks the one AWS would not explain", () => {
+    show({
+      candidates: [
+        candidate({
+          address: "10.0.15.21",
+          published_endpoint: true,
+          question:
+            "10.0.15.21 received 54.4MB from a workload that never reaches a "
+            + "model provider we recognise, and returned 12.8MB — a ratio of "
+            + "4.3:1. AWS says it is an interface endpoint for a service "
+            + "another account published, and will not say whose. Is it a "
+            + "model gateway?",
+        }),
+      ],
+    });
+    expect(screen.getByText(/another account’s service/i)).toBeInTheDocument();
+  });
+
+  it("leaves an ordinary internal address unmarked", () => {
+    // The badge is only worth anything if it is rare. One on every row is a
+    // decoration, and the distinction it draws — a machine somebody can go and
+    // look at, versus a door into another company — is the whole point.
+    show();
+    expect(screen.queryByText(/another account’s service/i)).toBeNull();
+  });
+
+  it("offers the same answer control, because the answer is the same", () => {
+    // Being unable to look behind it does not change what the customer knows.
+    // Somebody bought this service and can say what it is.
+    const { onDeclare } = show({
+      candidates: [candidate({ published_endpoint: true })],
+    });
+    expect(
+      screen.getByRole("button", { name: /yes, it is ours/i }),
+    ).toBeEnabled();
+    expect(onDeclare).not.toHaveBeenCalled();
+  });
+});
