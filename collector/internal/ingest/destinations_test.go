@@ -248,3 +248,68 @@ func TestOnlyTheUnknownAddressesAreAsked(t *testing.T) {
 		t.Fatalf("cached and fresh results were not merged in order: %v", got)
 	}
 }
+
+// TestManagedInterfacesAreNamedByTheirType: InterfaceType is a closed enum AWS
+// sets itself, present on exactly the interfaces nobody tags. Every account has
+// a NAT gateway and none of them has ever had a Name tag.
+func TestManagedInterfacesAreNamedByTheirType(t *testing.T) {
+	for _, tc := range []struct {
+		kind ec2types.NetworkInterfaceType
+		want string
+	}{
+		{ec2types.NetworkInterfaceTypeNatGateway, "nat-gateway/nat-gateway"},
+		{ec2types.NetworkInterfaceTypeTransitGateway, "transit-gateway/transit-gateway"},
+		{ec2types.NetworkInterfaceTypeNetworkLoadBalancer, "network-load-balancer/load-balancer"},
+		{ec2types.NetworkInterfaceTypeApiGatewayManaged, "api-gateway/api-gateway"},
+		{ec2types.NetworkInterfaceTypeGlobalAcceleratorManaged, "global-accelerator/global-accelerator"},
+	} {
+		iface := destEni("10.0.0.9", "")
+		iface.InterfaceType = tc.kind
+		names := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.0.9")
+		if names["10.0.0.9"] != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.kind, names["10.0.0.9"], tc.want)
+		}
+	}
+}
+
+// TestAnOrdinaryInterfaceTypeNamesNothing: `interface`, `branch` and `trunk`
+// say only that something made an ENI in the ordinary way. Putting a word in
+// front of an approver that carries no information is worse than the address
+// it replaced.
+func TestAnOrdinaryInterfaceTypeNamesNothing(t *testing.T) {
+	for _, kind := range []ec2types.NetworkInterfaceType{
+		ec2types.NetworkInterfaceTypeInterface,
+		ec2types.NetworkInterfaceTypeBranch,
+		ec2types.NetworkInterfaceTypeTrunk,
+		ec2types.NetworkInterfaceTypeEfa,
+	} {
+		iface := destEni("10.0.11.8", "")
+		iface.InterfaceType = kind
+		if names := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.11.8"); len(names) != 0 {
+			t.Errorf("%s was named %v", kind, names)
+		}
+	}
+}
+
+// TestATagStillWinsOverTheInterfaceType: what a customer called the thing
+// beats what AWS calls the plumbing. An NLB somebody named `checkout-lb` is
+// `checkout-lb`, because that is the word their runbook uses.
+func TestATagStillWinsOverTheInterfaceType(t *testing.T) {
+	iface := destEni("10.0.3.9", "", "Name", "checkout-lb")
+	iface.InterfaceType = ec2types.NetworkInterfaceTypeNetworkLoadBalancer
+	names := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.3.9")
+	if names["10.0.3.9"] != "checkout-lb/tag" {
+		t.Fatalf("got %v", names)
+	}
+}
+
+// TestADescriptionStillWinsOverTheInterfaceType: `billing-api` is a better
+// answer than `load-balancer`, and AWS wrote both.
+func TestADescriptionStillWinsOverTheInterfaceType(t *testing.T) {
+	iface := destEni("10.0.4.23", "ELB app/billing-api/50dc6c495c0c9188")
+	iface.InterfaceType = ec2types.NetworkInterfaceTypeLoadBalancer
+	names := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.4.23")
+	if names["10.0.4.23"] != "billing-api/load-balancer" {
+		t.Fatalf("got %v", names)
+	}
+}

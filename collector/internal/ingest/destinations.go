@@ -253,8 +253,57 @@ func nameOf(iface ec2types.NetworkInterface) (name, kind string) {
 		return "elasticache", "elasticache"
 	}
 
+	if name, kind := byInterfaceType(iface.InterfaceType); name != "" {
+		return name, kind
+	}
+
 	// An unrecognised description is deliberately not forwarded. The control
 	// plane shows the address, which is honest, rather than free text that
 	// might be a note to a colleague.
+	return "", ""
+}
+
+// byInterfaceType names the managed interfaces AWS labels for us.
+//
+// The strongest signal available and the one that was being thrown away.
+// InterfaceType is a closed enum AWS sets itself: it is not customer text, it
+// cannot carry a note to a colleague, and it is present on exactly the
+// interfaces nobody tags — a NAT gateway, a transit gateway, a network load
+// balancer. Every account has those and none of them has ever had a Name tag.
+//
+// What each one buys an operator is a fact about the traffic rather than a
+// service name. "This workload reaches the NAT gateway" is not the name of a
+// service, but it answers the question the scope is asked: an approver seeing
+// `nat-gateway` knows the traffic left the VPC for the internet, which is a
+// decision they can make. `10.0.0.9` is not.
+//
+// Deliberately not listed: `interface`, `branch` and `trunk` say only that
+// something made an ENI in the ordinary way, and `efa` is a high-performance
+// fabric that says nothing about what runs on it. Naming those would put a
+// word in front of an approver that carries no information, which is worse
+// than the address it replaced.
+func byInterfaceType(kind ec2types.NetworkInterfaceType) (name, label string) {
+	switch kind {
+	case ec2types.NetworkInterfaceTypeNatGateway:
+		return "nat-gateway", "nat-gateway"
+	case ec2types.NetworkInterfaceTypeTransitGateway:
+		return "transit-gateway", "transit-gateway"
+	case ec2types.NetworkInterfaceTypeNetworkLoadBalancer:
+		return "network-load-balancer", "load-balancer"
+	case ec2types.NetworkInterfaceTypeLoadBalancer,
+		ec2types.NetworkInterfaceTypeGatewayLoadBalancer,
+		ec2types.NetworkInterfaceTypeGatewayLoadBalancerEndpoint:
+		return "load-balancer", "load-balancer"
+	case ec2types.NetworkInterfaceTypeApiGatewayManaged:
+		return "api-gateway", "api-gateway"
+	case ec2types.NetworkInterfaceTypeVpcEndpoint:
+		return "vpc-endpoint", "vpc-endpoint"
+	case ec2types.NetworkInterfaceTypeLambda:
+		return "lambda", "lambda"
+	case ec2types.NetworkInterfaceTypeGlobalAcceleratorManaged:
+		return "global-accelerator", "global-accelerator"
+	case ec2types.NetworkInterfaceTypeQuicksight:
+		return "quicksight", "quicksight"
+	}
 	return "", ""
 }
