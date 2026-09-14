@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -94,12 +95,13 @@ func run(args []string, stdout, stderr *os.File) error {
 func serve(ctx context.Context, cfg *config.Config, stdout, stderr *os.File) error {
 	fmt.Fprintf(stderr, "collecting every %s, cursor at %s\n", cfg.Window, cfg.StatePath)
 
+	reuse := &regionState{}
 	return schedule.Run(ctx, schedule.Options{
 		Interval: cfg.Window,
 		State:    schedule.Store{Path: cfg.StatePath},
 		Log:      stderr,
 	}, func(ctx context.Context, w awsread.Window) error {
-		collections, err := fromAWSWindow(ctx, cfg, w)
+		collections, err := fromAWSWindow(ctx, cfg, w, reuse)
 		if err != nil {
 			return err
 		}
@@ -230,8 +232,75 @@ type Collection struct {
 	Report ingest.Report
 }
 
+// fromAWS is the one-shot path: one window, nothing kept afterwards. A nil
+// regionState caches nothing, which is right when there is no second window to
+// save a call for.
 func fromAWS(ctx context.Context, cfg *config.Config) ([]Collection, error) {
-	return fromAWSWindow(ctx, cfg, ingest.Window(cfg.Window))
+	return fromAWSWindow(ctx, cfg, ingest.Window(cfg.Window), nil)
+}
+
+// regionState is what a daemon keeps between windows.
+//
+// Two things, both per region, and both for the same reason: the work they do
+// is identical every hour and the answers do not change. AWS clients carry a
+// credentials cache that refreshes itself, so rebuilding them every window
+// re-assumes the role for nothing. Destination resolvers carry the names of
+// the interfaces the account reached, which change on the order of never.
+//
+// Per region because a private address is a different host in each one. A
+// resolver shared across regions would answer eu-west-1 with us-east-1's name,
+// in the scope an operator reads before granting authority.
+//
+// A nil *regionState is valid and caches nothing, which is what a one-shot run
+// wants: there is no second window to save a call for.
+type regionState struct {
+	mu       sync.Mutex
+	byRegion map[string]*awsclient.Clients
+	namers   map[string]*ingest.DestinationResolver
+}
+
+func (r *regionState) clients(
+	ctx context.Context, cfg *config.Config, region string,
+) (*awsclient.Clients, error) {
+	opts := awsclient.Options{
+		Region: region, RoleARN: cfg.RoleARN, ExternalID: cfg.ExternalID,
+	}
+	if r == nil {
+		return awsclient.New(ctx, opts)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if c, ok := r.byRegion[region]; ok {
+		return c, nil
+	}
+	c, err := awsclient.New(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	if r.byRegion == nil {
+		r.byRegion = map[string]*awsclient.Clients{}
+	}
+	r.byRegion[region] = c
+	return c, nil
+}
+
+func (r *regionState) destinations(
+	region string, api awsread.NetworkAPI,
+) *ingest.DestinationResolver {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if n, ok := r.namers[region]; ok {
+		return n
+	}
+	if r.namers == nil {
+		r.namers = map[string]*ingest.DestinationResolver{}
+	}
+	n := &ingest.DestinationResolver{API: api}
+	r.namers[region] = n
+	return n
 }
 
 // fromAWSWindow collects every configured region for one window.
@@ -246,7 +315,7 @@ func fromAWS(ctx context.Context, cfg *config.Config) ([]Collection, error) {
 // read eu-west-1 is a reason to say so about eu-west-1, not a reason to lose
 // us-east-1 as well.
 func fromAWSWindow(
-	ctx context.Context, cfg *config.Config, w awsread.Window,
+	ctx context.Context, cfg *config.Config, w awsread.Window, reuse *regionState,
 ) ([]Collection, error) {
 	regions := cfg.RegionList()
 	var (
@@ -254,7 +323,7 @@ func fromAWSWindow(
 		failures []string
 	)
 	for _, region := range regions {
-		collected, err := collectRegion(ctx, cfg, region, w)
+		collected, err := collectRegion(ctx, cfg, region, w, reuse)
 		if err != nil {
 			failures = append(failures, fmt.Sprintf("%s: %v", region, err))
 			continue
@@ -277,12 +346,9 @@ func fromAWSWindow(
 
 func collectRegion(
 	ctx context.Context, cfg *config.Config, region string, w awsread.Window,
+	reuse *regionState,
 ) (Collection, error) {
-	clients, err := awsclient.New(ctx, awsclient.Options{
-		Region:     region,
-		RoleARN:    cfg.RoleARN,
-		ExternalID: cfg.ExternalID,
-	})
+	clients, err := reuse.clients(ctx, cfg, region)
 	if err != nil {
 		return Collection{}, err
 	}
@@ -329,6 +395,10 @@ func collectRegion(
 		Trail:      clients.Trail,
 		AccountID:  cfg.AccountID,
 		Region:     region,
+		// Per region, and outliving the window. What an ENI is called changes
+		// on the order of never; a resolver made inside the collection is a
+		// cache that is empty every time.
+		Destinations: reuse.destinations(region, clients.Network),
 	}
 	batch, report, err := collector.Collect(ctx, w)
 	if note != "" {

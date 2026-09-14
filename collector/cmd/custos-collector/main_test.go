@@ -84,3 +84,30 @@ func TestDryRunPrintsTheBatchAndSendsNothing(t *testing.T) {
 		t.Fatal("dry run must state that nothing was sent")
 	}
 }
+
+// TestARegionStateKeepsOneResolverPerRegion: a private address is a different
+// host in each region. A resolver shared across them would answer eu-west-1
+// with us-east-1's name, in the scope an operator reads before granting
+// authority.
+func TestARegionStateKeepsOneResolverPerRegion(t *testing.T) {
+	state := &regionState{}
+	east := state.destinations("us-east-1", nil)
+	west := state.destinations("eu-west-1", nil)
+	again := state.destinations("us-east-1", nil)
+
+	if east == west {
+		t.Fatal("two regions share one resolver, and one address means two hosts")
+	}
+	if east != again {
+		t.Fatal("the same region got a second resolver, so its cache is empty again")
+	}
+}
+
+// TestANilRegionStateCachesNothing: the one-shot path. There is no second
+// window to save a call for, and a nil state must not be a nil dereference.
+func TestANilRegionStateCachesNothing(t *testing.T) {
+	var state *regionState
+	if state.destinations("us-east-1", nil) != nil {
+		t.Fatal("a one-shot run was given a cache to keep")
+	}
+}

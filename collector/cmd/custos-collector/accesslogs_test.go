@@ -97,7 +97,7 @@ func TestAFixedFlowLogPrefixRefusesAnotherRegion(t *testing.T) {
 		FlowLogs: "s3://acme-logs/AWSLogs/1/vpcflowlogs/us-east-1",
 		Window:   time.Hour,
 	}
-	_, err := collectRegion(context.Background(), cfg, "eu-west-1", ingest.Window(time.Hour))
+	_, err := collectRegion(context.Background(), cfg, "eu-west-1", ingest.Window(time.Hour), nil)
 	if err == nil {
 		t.Fatal("one region's flow logs were read while collecting another")
 	}
@@ -114,7 +114,7 @@ func TestABucketAloneIsFineForEveryRegion(t *testing.T) {
 		AccountID: "447120043318", Region: "us-east-1",
 		FlowLogs: "s3://acme-logs", Window: time.Hour,
 	}
-	_, err := collectRegion(context.Background(), cfg, "eu-west-1", ingest.Window(time.Hour))
+	_, err := collectRegion(context.Background(), cfg, "eu-west-1", ingest.Window(time.Hour), nil)
 	if err != nil && strings.Contains(err.Error(), "cannot be read from it") {
 		t.Fatalf("a derivable prefix was refused: %v", err)
 	}
