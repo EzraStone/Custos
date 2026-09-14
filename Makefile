@@ -115,6 +115,10 @@ gates: ## Every measured number this product rests on, in one run
 	@echo
 	@echo "=== the gateway detector, noise corpus ==="
 	@$(PY) -m custos_a0.cli questions | tail -2
+	@echo
+	@echo "=== how much of a scope an operator can read ==="
+	@cd collector && go test ./internal/ingest/ -run TestScopeReadability -v 2>/dev/null \
+	  | grep "scope readability" | sed "s/^ *[a-z_]*\.go:[0-9]*: //"
 
 clean:
 	rm -rf a0/out collector/bin checkpoint/bin

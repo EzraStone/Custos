@@ -151,6 +151,30 @@ regions collected alternately, and nothing the account can see may move when
 another window of one of them arrives. Add to it rather than only fixing the
 instance.
 
+## Changing the interface estate
+
+`collector/internal/ingest/eniestate_test.go` is the corpus for destination
+naming: interfaces shaped the way AWS returns them, with the tag hygiene a real
+account has. `TestScopeReadability` is the number it produces, and `make gates`
+prints it beside the classifier's margins.
+
+Two rules, both of which this file has already broken once.
+
+**A shape has to be a shape AWS writes.** The Lambda entry was spelled
+`AWS Lambda VPC ENI-checkout-worker-a1b2` when AWS writes a full 36-character
+UUID, and the estate reported a miss that did not exist. A corpus of
+approximations measures the approximations.
+
+**It has to contain what cannot be named.** Six of its interfaces have no
+honest answer — free text somebody typed, an untagged ENI on an untagged
+instance, a security group called `default` — and they are there because a
+corpus that names everything measures nothing. When readability reaches 100%,
+that is a signal to add harder interfaces rather than a result.
+
+`readableFloor` is checked in both directions. Falling is a regression. Rising
+without raising the floor fails too, because a number that moved and was not
+recorded is a measurement nobody took.
+
 ## Changing the corpus
 
 `a0/tests/test_corpus.py` asserts the corpus is hard: volume alone must not
