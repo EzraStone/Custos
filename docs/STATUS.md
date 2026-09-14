@@ -48,6 +48,7 @@ custos diff                 →  what changed since last week
 | A PrivateLink service another account published | Resolved when the customer tagged the endpoint or the publisher set a private DNS name. Otherwise a question, ranked first |
 | Fleet view across accounts | Works. One line per account, unscanned and destructive first |
 | Scope readability, measured | Works. Reported by `--check`, the report, the console, and `custos history` |
+| Wire bytes to tokens | Measured. `make conversion`: 4.3-11.6 whole, 187-194 streamed, decided per principal from packet size |
 
 ## The one number that matters
 
@@ -61,19 +62,28 @@ falls to **0.14**. Quote that number, not the first one, wherever it would be
 doing work.
 
 Reproduce with `make experiment`. CI fails the build if it stops holding.
-`make gates` prints all four measured numbers in one run:
+`make gates` prints all five measured numbers in one run:
 
 ```
-G0, base corpus          separation margin 0.260
+G0, base corpus          separation margin 0.260, headroom 0.151
 the classifier, stress   separation margin 0.142, recall 1.00, precision 1.00
 the gateway detector     3 questions, 2 worth asking, both real ones shown
+wire bytes per token     4.3-11.6 whole, 187-194 streamed, discriminator at 600
 scope readability        26 of 26 nameable interfaces
 ```
 
-That is the set anyone asking what is real will want together, and three of the
-four started at a number worth being embarrassed by: the stress margin at half
-the headline, the detector at 0.00, readability at 46%. The fourth has not
-moved since A0.
+That is the set anyone asking what is real will want together, and four of the
+five started at a number worth being embarrassed by: the stress margin at half
+the headline, the detector at 0.00, readability at 46%, and the conversion at a
+single constant that is wrong by forty-four times for half the accounts that
+might use this. The one that has not moved since A0 is the headline margin.
+
+**The margin is not the only headroom.** G0 also requires the weakest agent to
+clear the reporting threshold by 0.05, because those two numbers can move in
+opposite directions — streaming responses widen the margin to 0.371 and cut
+the headroom to 0.054 in the same run. A change that widened the margin and
+pushed an agent below 0.80 would read as an improvement everywhere and would
+be a missing row in a customer's report.
 
 The finding underneath it is the interesting part: the signal the specification
 leads with — burst timing and per-call payload growth — is not implementable,
@@ -171,9 +181,38 @@ matters on an account that supplied its own pricing, because the report tells
 that account every figure is at their prices. It is true of every row except
 the ones whose provider nothing could name, and those are named now.
 
-What is still a guess is the conversion itself: wire bytes to tokens at four
-bytes each, which is right for English JSON and wrong for code, and wrong in
-a direction nobody has measured.
+The conversion itself was the last thing here with nothing behind it, and it
+is measured now — see the streaming entry below. What is still a guess is the
+tokenisation: four bytes per token is right for English JSON and wrong for
+code, and that part needs a tokeniser and a corpus of real prompts rather than
+arithmetic.
+
+**Wire bytes are not four bytes a token, and for half of them they are 175.**
+The dollar figure that gets a report forwarded to somebody with a budget comes
+from dividing observed bytes by a constant. That constant was four in both
+directions, which is right for a JSON body and wrong for a streamed one by
+around forty-four times — concentrated in output tokens, which are priced at
+five times input. A report could have been telling a budget owner an agent
+costs ten thousand a month when it costs a few hundred.
+
+It is arithmetic rather than an opinion. A streaming API flushes after every
+token, so each token is its own Server-Sent Events frame, its own TLS record
+and its own TCP segment: four bytes of text inside about 183 of protocol.
+
+A flow record does not say whether a response streamed. It does carry packet
+counts, and once the acknowledgements the outbound segments imply are
+subtracted, the mean inbound data packet is 1,444 to 2,740 bytes when responses
+arrive whole and 232 to 288 when they stream — nothing between, because that
+gap is a property of the protocol rather than of the corpus. `make conversion`
+reproduces it and the discriminator reads every workload in both captures
+correctly.
+
+What is unmeasured is the mixture. How much real agent traffic streams is a
+question about customers, the corpus can be built either way, and a workload
+running both regimes at once — streamed completions and whole embedding
+responses — lands between the two constants and fits neither. The report says
+per scan which reading produced its figures, because it was inferred rather
+than supplied.
 
 **The byte ratios have only been measured against synthetic traffic.** The
 weights were fitted on the A0 corpus. What A0 establishes is that a separating
