@@ -54,6 +54,19 @@ function resolvedNothing(agent: Agent, region: string): boolean {
   return seen.tools.length === 0 && seen.data_stores.length === 0;
 }
 
+/**
+ * Whether this agent's spend came from a fallback rate.
+ *
+ * False when no providers are recorded at all: that is every agent discovered
+ * before the field existed, and calling it "not recognised" would be a claim
+ * about our schema rather than about the account.
+ */
+function fallbackPriced(agent: Agent): boolean {
+  const providers = agent.providers;
+  if (!providers || providers.length === 0) return false;
+  return providers.every((p) => p === "unknown");
+}
+
 export function Finding({
   agent,
   operator,
@@ -113,6 +126,21 @@ export function Finding({
           <dt>Status</dt>
           <dd>{agent.status}</dd>
         </div>
+        {/*
+          A spend figure whose provider nobody could name came from a fallback
+          rate, and on an account that supplied its own rates every other
+          figure on the page is at their prices. Saying which is which is the
+          difference between an estimate and a number somebody acts on.
+        */}
+        {fallbackPriced(agent) ? (
+          <div>
+            <dt>Provider</dt>
+            <dd>
+              not recognised{" "}
+              <span className="muted">(spend is a fallback rate)</span>
+            </dd>
+          </div>
+        ) : null}
         {/*
           Shown only when there is more than one. One region is the ordinary
           case and a column of the same word is not information.

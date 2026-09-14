@@ -291,3 +291,44 @@ describe("an agent in more than one region", () => {
     expect(screen.queryByText("Regions")).toBeNull();
   });
 });
+
+describe("a spend figure from a fallback rate", () => {
+  it("says so, because every other figure on the page may be their price", () => {
+    render(
+      <Finding
+        agent={agent({ providers: ["unknown"] })}
+        operator="ezra@custos.dev"
+        onGrant={vi.fn()}
+        onTransition={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/not recognised/)).toBeInTheDocument();
+    expect(screen.getByText(/fallback rate/)).toBeInTheDocument();
+  });
+
+  it("says nothing when the provider was named", () => {
+    render(
+      <Finding
+        agent={agent({ providers: ["anthropic"] })}
+        operator="ezra@custos.dev"
+        onGrant={vi.fn()}
+        onTransition={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/not recognised/)).toBeNull();
+  });
+
+  it("says nothing when no providers were recorded at all", () => {
+    // Every agent discovered before the field existed. Calling that "not
+    // recognised" would be a claim about our schema rather than the account.
+    render(
+      <Finding
+        agent={agent()}
+        operator="ezra@custos.dev"
+        onGrant={vi.fn()}
+        onTransition={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/not recognised/)).toBeNull();
+  });
+});

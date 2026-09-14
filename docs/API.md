@@ -103,6 +103,14 @@ Each agent carries its `evidence`: the sentences the classifier produced. A
 finding without them is a score, and a score is what the workload's owner will
 argue with instead of the facts.
 
+`providers` is which model providers this agent reached. `["unknown"]` alone
+means the spend figure came from a fallback rate: the addresses are in no
+published range Custos recognises and the flow log carried no AWS service
+annotation for them. On an account that supplied its own rates every other
+figure is at their prices and this one is not, so a client showing spend should
+show this beside it. An empty list is not the same claim — it is an agent
+discovered before the field existed.
+
 `regions` is every region this agent has been seen in. It accumulates across
 scans, because one scan covers one region and a role running in three is
 discovered three times.

@@ -1125,6 +1125,11 @@ def _render(agent) -> dict:
         # region, so the scan's own figure is a fraction of the cost whenever
         # the agent runs in more than one.
         "est_monthly_spend_usd": agent.monthly_spend_usd,
+        # Which model providers this agent reached. `unknown` alone means the
+        # figure above came from a fallback rate — the addresses are in no
+        # published range we recognise and the flow log carried no AWS service
+        # annotation — which makes it the least reliable number on the row.
+        "providers": sorted(agent.model.providers),
         # Every region this agent has been seen in. tools, data_stores and
         # spend above cover all of them; blast_radius comes from IAM and is
         # account-wide by nature.

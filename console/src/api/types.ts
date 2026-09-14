@@ -49,6 +49,19 @@ export interface Agent {
   data_stores: string[];
   est_monthly_spend_usd: number;
   /**
+   * Which model providers this agent reached.
+   *
+   * `["unknown"]` means the spend figure came from a fallback rate: the
+   * addresses are in no published range we recognise and the flow log carried
+   * no AWS service annotation for them. It is the least reliable number on the
+   * row and the console says so.
+   *
+   * Optional: a control plane older than the field sends none, and an agent
+   * discovered before providers were recorded has an empty list — neither is
+   * the same as "we could not name it".
+   */
+  providers?: string[];
+  /**
    * Every region this agent has been seen in.
    *
    * `tools`, `data_stores` and `est_monthly_spend_usd` above cover all of
