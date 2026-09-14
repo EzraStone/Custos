@@ -41,10 +41,11 @@ custos diff                 →  what changed since last week
 | Destination naming | Works. Measured: 100% of a nameable estate, from nine sources |
 | Customer-supplied pricing | Works. Per account, dated, superseded rather than overwritten. Agents on a fallback rate are named |
 | Gateway questions in the report | Works. Their own section, ranked across regions, with what was ruled out |
-| Gateway questions, measured | Works. `make questions`: precision 0.50, real gateway first, was 0.00 and eighth |
+| Gateway questions, measured | Works. `make questions`: precision 0.67, both real endpoints shown, was 0.00 and eighth |
 | Review band, kept and readable | Works. In the console, the CLI, and both reports, with evidence and recurrence |
 | Model gateway declaration | Works. Private ranges scoped to a region (SEC-24) |
 | Bedrock over PrivateLink | Works. The endpoint is resolved from AWS; nobody declares anything |
+| A PrivateLink service another account published | Resolved when the customer tagged the endpoint or the publisher set a private DNS name. Otherwise a question, ranked first |
 | Fleet view across accounts | Works. One line per account, unscanned and destructive first |
 | Scope readability, measured | Works. Reported by `--check`, the report, the console, and `custos history` |
 
@@ -65,8 +66,8 @@ Reproduce with `make experiment`. CI fails the build if it stops holding.
 ```
 G0, base corpus          separation margin 0.260
 the classifier, stress   separation margin 0.142, recall 1.00, precision 1.00
-the gateway detector     2 questions, 1 worth asking, the real one first
-scope readability        24 of 24 nameable interfaces
+the gateway detector     3 questions, 2 worth asking, both real ones shown
+scope readability        26 of 26 nameable interfaces
 ```
 
 That is the set anyone asking what is real will want together, and three of the
@@ -115,10 +116,15 @@ the detector asked nine questions, showed five, and ranked the real gateway
 eighth.
 
 Fixed by the loop: a workload whose only destination is one address is not
-running a tool loop, and that address cannot be its model endpoint. Two
-questions now, the gateway first, precision 0.50 — the other question is the
-agent's own deploy API, reached in the same loop, and nothing on the wire says
-which of two addresses in a loop is the model.
+running a tool loop, and that address cannot be its model endpoint. Three
+questions now and two of them real — the self-hosted gateway and a PrivateLink
+service a model provider published — for a precision of 0.67. The wasted one is
+an agent's own deploy API, reached in the same loop, and nothing on the wire
+says which of two addresses in a loop is the model.
+
+Both real endpoints being shown is a separate property from precision and
+needs its own test. A detector that asks one honest question and misses the
+other scores 1.00.
 
 `make questions` reproduces it and CI prints it. What is still unmeasured is
 the same thing as everywhere else: seven synthetic services are the obvious
@@ -145,10 +151,18 @@ and one kind of it still is.** An interface VPC endpoint for
 agents behind it are found without anybody declaring anything — 0.039 to 0.970
 on the corpus workload added for it.
 
-A PrivateLink service somebody else published is not: `com.amazonaws.vpce.
-<region>.vpce-svc-0a1b2c3d` names nothing AWS will explain, so whatever is
-behind it is exactly as invisible as before. That one is still a question for a
-human, and it is the shape a model provider selling into AWS would take.
+A PrivateLink service somebody else published was not, and most of it is now.
+`com.amazonaws.vpce.<region>.vpce-svc-0a1b2c3d` names nothing AWS will explain,
+but that is three cases rather than one. The customer's own Terraform usually
+tagged the endpoint, and that tag was coming back on a call already being made
+and being thrown away. A publisher selling a service to other accounts usually
+configured a private DNS name for it, which for a model provider is their own
+API hostname, and one further read returns it.
+
+What is left is the residue: no tag, no private DNS name. That is a question
+for a human, it is asked first among the questions because a door into another
+company is not a thing anyone in the account can go and look at, and a corpus
+workload now exists to check that it is actually asked.
 
 **Spend is attributed to a provider now, and when it is not, the report says
 which agents.** Three of the corpus's eight agents reach Bedrock and all three
@@ -173,7 +187,14 @@ the way AWS returns them, with the tag hygiene a company that adopted agents
 bottom-up actually has. It went from 46% to 100% of the nameable ones as six
 discarded sources were added: the interface type, six more AWS descriptions,
 AWS-reserved tags, the instance behind the interface, and the one security
-group somebody named.
+group somebody named. Two more followed, and the estate grew from 24 nameable
+interfaces to 26 to hold them.
+
+The gate itself had to be rebuilt to allow that. It was a floor on how many
+interfaces the resolver got right, and adding a harder one was invisible to
+it: a nameable interface nothing could name left the success count exactly
+where it was. It counts the question now — every nameable interface must be
+named, by name, or the test fails with the address and the reason.
 
 What that does not establish is the shape of a real estate. The proportions in
 the fixture are a judgement about what accounts look like, not an observation
