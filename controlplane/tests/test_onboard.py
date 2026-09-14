@@ -177,3 +177,23 @@ def test_the_message_says_an_account_is_a_region_by_region_thing():
 
 def test_the_collector_environment_offers_the_region_list():
     assert "CUSTOS_REGIONS" in generate(ACCOUNT, ENDPOINT).collector_env
+
+
+def test_the_message_says_privatelink_model_traffic_is_visible():
+    """The customer most likely to buy this is the one who turned PrivateLink
+    on so their model calls would not cross the public internet — and their
+    flow log shows an account with no model traffic at all. Saying we see it
+    anyway is the difference between understanding their setup and reporting
+    zero agents."""
+    message = generate("447120043318", "https://custos.example").message
+    assert "Bedrock through an interface VPC endpoint" in message
+    assert "without you declaring anything" in message
+
+
+def test_the_message_still_asks_for_a_gateway_declaration():
+    """Resolving a VPC endpoint is a lookup. A self-hosted gateway is not
+    something anybody but the customer knows, and the ask must not get lost
+    behind the part we now do ourselves."""
+    message = generate("447120043318", "https://custos.example").message
+    assert "self-hosted gateway is different" in message
+    assert "nobody but you knows" in message

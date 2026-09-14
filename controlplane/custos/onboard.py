@@ -148,11 +148,24 @@ implying otherwise.
 `./custos-collector --check` names which of your regions have flow logs.
 Whichever they are, list them and we cover them in one run.
 
+If your model calls go to Bedrock through an interface VPC endpoint, we see
+them. Worth saying because your flow log does not: an endpoint puts a network
+interface in your own subnet, so every model call goes to a private address and
+the record carries nothing about what is there. We ask AWS what the endpoints
+your traffic reached are for — one read-only call, about those endpoints only —
+and the agents behind them appear without you declaring anything.
+
+A self-hosted gateway is different and you do have to tell us about that one,
+because nobody but you knows.
+
 One thing worth checking on your side before the first scan: whether the
 network interfaces behind your internal services carry a `Name` tag. We name
-what an agent reaches from those tags and from the descriptions AWS writes for
-its own managed services, and anything neither covers appears as an IP address.
-That does not change what we find — it changes whether the person approving a
+what an agent reaches from seven things — that tag, the tag on the instance
+behind the interface, the descriptions and interface types AWS writes for its
+own managed services, the tags AWS writes on ECS and EKS interfaces, the
+service a VPC endpoint is for, and as a last resort the one security group you
+named — and anything none of those covers appears as an IP address.
+That does not change what we find; it changes whether the person approving a
 finding is reading "billing-api" or "10.0.4.23". `./custos-collector --check`
 reports how many we could name before you commit to anything.
 """
