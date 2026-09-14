@@ -4,6 +4,7 @@
     custos-a0 experiment --out DIR  also write the report and log fixtures
     custos-a0 report --out DIR      render a scan report from the corpus
     custos-a0 fixtures --out DIR    write flow log fixtures in the native format
+    custos-a0 conversion            measure wire bytes per token, both ways round
 """
 
 from __future__ import annotations
@@ -212,6 +213,59 @@ def cmd_questions(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_conversion(args: argparse.Namespace) -> int:
+    """Measure the wire-bytes-to-tokens conversion the dollar figures rest on.
+
+    Separate from every other command here because it scores no classifier. It
+    measures an assumption: that a model call's response is four bytes per
+    output token, which `docs/STATUS.md` has called a guess wrong in a
+    direction nobody had measured.
+    """
+    from custos.spend import STREAMED_PACKET_BYTES, responses_streamed
+
+    from . import corpus as corpus_mod
+    from .conversion import measure
+
+    corpus = corpus_mod.build()
+    header = (
+        f"{'workload':<26}{'streams':>9}{'mean pkt':>10}{'bytes/token':>13}"
+        f"{'read as':>10}"
+    )
+    for streaming in (False, True):
+        label = "streamed" if streaming else "whole"
+        print(f"Custos conversion — model responses arrive {label}" + chr(10))
+        print(header)
+        print("-" * len(header))
+        for m in measure(corpus, streaming):
+            read = responses_streamed(
+                m.ingress_bytes, m.ingress_packets, m.egress_packets
+            )
+            wrong = "  <-- WRONG" if read != m.streams else ""
+            print(
+                f"{m.workload:<26}{str(m.streams):>9}{m.mean_data_packet:>10.0f}"
+                f"{m.bytes_per_output_token:>13.1f}"
+                f"{('streamed' if read else 'whole'):>10}{wrong}"
+            )
+        print()
+
+    everything = measure(corpus, True) + measure(corpus, False)
+    streamed = [m for m in everything if m.streams]
+    whole = [m for m in everything if not m.streams]
+    print(
+        f"the discriminator sits at {STREAMED_PACKET_BYTES:.0f} bytes, between "
+        f"{max(m.mean_data_packet for m in streamed):.0f} and "
+        f"{min(m.mean_data_packet for m in whole):.0f}"
+    )
+    print(
+        "bytes per output token: "
+        f"{min(m.bytes_per_output_token for m in whole):.1f}"
+        f"-{max(m.bytes_per_output_token for m in whole):.1f} whole, "
+        f"{min(m.bytes_per_output_token for m in streamed):.1f}"
+        f"-{max(m.bytes_per_output_token for m in streamed):.1f} streamed"
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="custos-a0", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -230,6 +284,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--limit", type=int, default=5,
                    help="how many questions a customer is shown")
     p.set_defaults(func=cmd_questions)
+
+    p = sub.add_parser("conversion",
+                       help="measure wire bytes per token, both ways round")
+    p.set_defaults(func=cmd_conversion)
 
     p = sub.add_parser("report", help="render a scan report from the corpus")
     p.add_argument("--out", default="out")

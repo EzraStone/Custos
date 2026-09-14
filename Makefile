@@ -15,7 +15,7 @@ VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 .PHONY: help setup check lint test test-py test-go test-console fmt experiment \
         collector console serve scan image prune onboard preflight smoke \
-        screenshots stress questions gates clean
+        screenshots stress questions conversion gates clean
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -106,6 +106,9 @@ stress: ## Score the classifier against the partially-coupled corpus
 questions: ## Score the gateway detector against the noise corpus
 	$(PY) -m custos_a0.cli questions
 
+conversion: ## Measure wire bytes per token, responses whole and streamed
+	$(PY) -m custos_a0.cli conversion
+
 gates: ## Every measured number this product rests on, in one run
 	@echo "=== G0: the classifier, base corpus ==="
 	@$(PY) -m custos_a0.cli experiment | tail -3
@@ -115,6 +118,9 @@ gates: ## Every measured number this product rests on, in one run
 	@echo
 	@echo "=== the gateway detector, noise corpus ==="
 	@$(PY) -m custos_a0.cli questions | tail -2
+	@echo
+	@echo "=== wire bytes per output token, and how to tell which ==="
+	@$(PY) -m custos_a0.cli conversion | tail -2
 	@echo
 	@echo "=== how much of a scope an operator can read ==="
 	@cd collector && go test ./internal/ingest/ -run TestScopeReadability -v 2>/dev/null \
