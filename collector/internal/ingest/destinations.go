@@ -105,10 +105,10 @@ func (r *DestinationResolver) Resolve(ctx context.Context, addresses []string) (
 			}
 		}
 
-		for address, service := range r.endpointServices(ctx, ifaces) {
+		for address, endpoint := range r.endpointServices(ctx, ifaces) {
 			resolved[address] = wire.Destination{
-				Address: address, Name: serviceShortName(service),
-				Kind: "vpc-endpoint", Service: service,
+				Address: address, Name: endpointName(endpoint),
+				Kind: "vpc-endpoint", Service: endpoint.service,
 			}
 		}
 
@@ -619,9 +619,18 @@ func instanceName(tags []ec2types.Tag) string {
 // endpoint in the region. Custos reads what its own traffic already pointed
 // at, and a call that enumerates an account's endpoints is a different claim
 // about what this role does (SEC-16).
+// endpoint is what one DescribeVpcEndpoints answer says about an address.
+type endpoint struct {
+	// service is AWS's name for what the endpoint is for.
+	service string
+	// tag is the Name the customer put on the endpoint resource. Empty for
+	// most of them, and the whole answer for the ones AWS cannot explain.
+	tag string
+}
+
 func (r *DestinationResolver) endpointServices(
 	ctx context.Context, ifaces []ec2types.NetworkInterface,
-) map[string]string {
+) map[string]endpoint {
 	byEndpoint := map[string][]string{}
 	for _, iface := range ifaces {
 		id := endpointID(iface)
@@ -639,7 +648,7 @@ func (r *DestinationResolver) endpointServices(
 	}
 	sort.Strings(ids)
 
-	services := map[string]string{}
+	services := map[string]endpoint{}
 	var token *string
 	for {
 		out, err := r.API.DescribeVpcEndpoints(ctx, &ec2.DescribeVpcEndpointsInput{
@@ -650,16 +659,17 @@ func (r *DestinationResolver) endpointServices(
 			// the endpoint id. A scan is not worth losing over a name.
 			return services
 		}
-		for _, endpoint := range out.VpcEndpoints {
-			if endpoint.VpcEndpointId == nil || endpoint.ServiceName == nil {
+		for _, e := range out.VpcEndpoints {
+			if e.VpcEndpointId == nil || e.ServiceName == nil {
 				continue
 			}
-			service := strings.TrimSpace(*endpoint.ServiceName)
+			service := strings.TrimSpace(*e.ServiceName)
 			if service == "" {
 				continue
 			}
-			for _, address := range byEndpoint[*endpoint.VpcEndpointId] {
-				services[address] = service
+			found := endpoint{service: service, tag: instanceName(e.Tags)}
+			for _, address := range byEndpoint[*e.VpcEndpointId] {
+				services[address] = found
 			}
 		}
 		if out.NextToken == nil || *out.NextToken == "" {
@@ -679,6 +689,29 @@ func endpointID(iface ec2types.NetworkInterface) string {
 		return m[1]
 	}
 	return ""
+}
+
+// endpointName is what an operator should see for an interface endpoint.
+//
+// The customer's own Name tag first, for the same reason it comes first
+// everywhere else in this file: it is the word the account already uses for
+// the thing, and no lookup of ours beats it (SEC-23). It comes back on the
+// call we already make, and was being discarded.
+//
+// It matters most where AWS says least. `com.amazonaws.vpce.<region>.
+// vpce-svc-0a1b2c3d` names a service somebody else published and AWS will not
+// say what is behind it, so a scope entry reading `vpce-svc-0a1b2c3d` is an
+// approval the operator has to guess at — while the customer's own Terraform
+// very often called it what it is.
+//
+// The service name still travels either way. This changes what is printed,
+// not what the destination is, so an endpoint a customer named `llm` is still
+// classified from `com.amazonaws.us-east-1.bedrock-runtime`.
+func endpointName(e endpoint) string {
+	if e.tag != "" {
+		return e.tag
+	}
+	return serviceShortName(e.service)
 }
 
 // serviceShortName is the part of an endpoint service name an operator reads.
