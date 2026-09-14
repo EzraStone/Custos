@@ -203,9 +203,18 @@ instance, a security group called `default` — and they are there because a
 corpus that names everything measures nothing. When readability reaches 100%,
 that is a signal to add harder interfaces rather than a result.
 
-`readableFloor` is checked in both directions. Falling is a regression. Rising
-without raising the floor fails too, because a number that moved and was not
-recorded is a measurement nobody took.
+**The gate counts the question, not the answer.** Every nameable interface must
+be named, by name, or `TestScopeReadability` fails with its address and the
+reason it was expected to be readable. `nameableFloor` records how many there
+are and is checked in both directions: the estate cannot grow without somebody
+recording that it did, and it cannot shrink into something easier.
+
+It was the other way round once — a floor on how many the resolver got right —
+and that had a hole in it exactly the size of the rule above. A nameable
+interface nothing could name left the success count where it was, met the
+floor, and moved only a percentage printed in a log line no assertion read. So
+the instruction to add harder interfaces was a no-op against the gate meant to
+enforce it.
 
 ## Changing the corpus
 

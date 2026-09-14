@@ -230,6 +230,13 @@ under `model traffic over privatelink`, either as resolved or as an endpoint we
 could not identify. The second means their role predates
 `ec2:DescribeVpcEndpoints` and needs a re-apply.
 
+Then check `endpoint services nobody published a name for`. A PrivateLink
+service another account published carries their model traffic just as
+invisibly, and unlike a Bedrock endpoint nothing can look it up: AWS names it
+with an opaque id, and if the publisher set no DNS name and the customer wrote
+no tag, a person is the only source left. That line is the question to put to
+them, and every scan puts it in the report as well.
+
 Then check coverage. Then check that `CUSTOS_FLOW_LOGS` points at the group
 carrying the traffic — an account can have several and the empty one still
 parses cleanly. Then check the catalogue revision: an agent using a provider we
