@@ -418,3 +418,50 @@ func TestAGroupNameLosesToEverythingElse(t *testing.T) {
 		t.Fatalf("got %v", names)
 	}
 }
+
+// TestANameTagThatIsAnIdentifierIsNotAName: tooling writes the Name field too,
+// and what it writes is an id — honest, and exactly as useful to an approver
+// as the address it would replace.
+func TestANameTagThatIsAnIdentifierIsNotAName(t *testing.T) {
+	for _, name := range []string{
+		"i-0a1b2c3d4e5f60718",
+		"eni-0a1b2c3d4e5f60718",
+		"tf-20260814093211004500000003",
+		"vol-0a1b2c3d",
+	} {
+		iface := destEni("10.0.12.1", "", "Name", name)
+		if got := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.12.1"); len(got) != 0 {
+			t.Errorf("%q was used as a name: %v", name, got)
+		}
+	}
+}
+
+// TestARealNameIsNotMistakenForAnIdentifier: the rule is a hyphen, a short
+// lowercase prefix, and eight or more hex digits. Service names are not that
+// and must not be caught by it.
+func TestARealNameIsNotMistakenForAnIdentifier(t *testing.T) {
+	for _, name := range []string{
+		"billing-api", "orders-service", "checkout-v2", "db-primary",
+		"api-gateway-edge", "svc-payments", "eu-billing-2026",
+	} {
+		iface := destEni("10.0.4.21", "", "Name", name)
+		got := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.4.21")
+		if got["10.0.4.21"] != name+"/tag" {
+			t.Errorf("%q was rejected: %v", name, got)
+		}
+	}
+}
+
+// TestAnIdentifierNameFallsThroughToTheRest: rejecting it is not the end of
+// the search. An instance tagged with its own id and sitting in a group
+// somebody named is still nameable.
+func TestAnIdentifierNameFallsThroughToTheRest(t *testing.T) {
+	iface := groupedEni("10.0.12.5", "orders-service-sg")
+	iface.TagSet = []ec2types.Tag{
+		{Key: aws.String("Name"), Value: aws.String("i-0a1b2c3d4e5f60718")},
+	}
+	names := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.12.5")
+	if names["10.0.12.5"] != "orders-service/security-group" {
+		t.Fatalf("got %v", names)
+	}
+}

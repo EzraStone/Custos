@@ -48,6 +48,11 @@ func withGroups(i ec2types.NetworkInterface, names ...string) ec2types.NetworkIn
 	return i
 }
 
+func attachedTo(i ec2types.NetworkInterface, instance string) ec2types.NetworkInterface {
+	i.Attachment = &ec2types.NetworkInterfaceAttachment{InstanceId: aws.String(instance)}
+	return i
+}
+
 func withRequester(i ec2types.NetworkInterface, who string) ec2types.NetworkInterface {
 	i.RequesterId = aws.String(who)
 	i.RequesterManaged = aws.Bool(true)
@@ -168,6 +173,56 @@ func estate() []estateEni {
 			why:   "an EKS-managed group; the cluster name is in it but so is a node's worth of noise",
 		},
 
+		// --- labelled by a machine, which is not the same as labelled -------
+		{
+			iface: destEni("10.0.12.1", "", "Name", "i-0a1b2c3d4e5f60718"),
+			want:  "",
+			why:   "a Name tag holding the instance id. As readable as the address it replaced",
+		},
+		{
+			iface: destEni("10.0.12.2", "", "Name", "eni-0a1b2c3d4e5f60718"),
+			want:  "",
+			why:   "tooling that tagged the ENI with its own id",
+		},
+		{
+			iface: destEni("10.0.12.3", "", "Name", "tf-20260814093211004500000003"),
+			want:  "",
+			why:   "Terraform's generated name prefix. A name nobody chose and nobody reads",
+		},
+		{
+			iface: destEni("10.0.12.4", "", "name", "checkout-api"),
+			want:  "",
+			why:   "lowercase `name`. Not the key the console writes, and guessing at tag keys is how a note ends up in a scope",
+		},
+
+		// --- labelled by AWS, on the ENI ------------------------------------
+		{
+			iface: destEni("10.0.13.1", "arn:aws:ecs:us-east-1:447120043318:attachment/9c8f",
+				"aws:ecs:serviceName", "checkout", "aws:ecs:clusterName", "prod"),
+			want: "checkout",
+			why:  "ECS in awsvpc mode tags the ENI with the service it belongs to",
+		},
+		{
+			iface: destEni("10.0.13.2", "arn:aws:ecs:us-east-1:447120043318:attachment/1a2b",
+				"aws:ecs:clusterName", "prod"),
+			want: "",
+			why:  "a standalone ECS task. The cluster is not the service, and every task in it would share the name",
+		},
+
+		// --- tagged on the instance, not the interface ----------------------
+		{
+			iface: attachedTo(destEni("10.0.14.1", ""), "i-0a1b2c3d4e5f60718"),
+			want:  "",
+			why:   "THE COMMON CASE. People tag instances, not interfaces, and the ENI carries only the attachment",
+		},
+
+		// --- named, and no more readable than an address --------------------
+		{
+			iface: destEni("10.0.5.31", "VPC Endpoint Interface vpce-0f9e8d7c"),
+			want:  "vpce-0f9e8d7c",
+			why:   "an endpoint id is what AWS wrote, and it is not a service an approver recognises",
+		},
+
 		// --- nothing honest to say ------------------------------------------
 		{
 			iface: destEni("10.0.11.7", "temp box for INC-4471, ask Sam before deleting"),
@@ -220,7 +275,7 @@ func TestTheEstateHasTheTagHygieneItClaims(t *testing.T) {
 // threshold somebody picked stops meaning anything the moment it is met.
 //
 //	6 of 13 — the Name tag and four of the five AWS description shapes
-const readableFloor = 17
+const readableFloor = 18
 
 // TestScopeReadability is the measurement, and the only number in this package
 // that a customer feels directly. An entry an operator cannot read is an

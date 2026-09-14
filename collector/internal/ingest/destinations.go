@@ -237,8 +237,11 @@ var (
 // from a customer account is not something to ship without looking at it.
 func nameOf(iface ec2types.NetworkInterface) (name, kind string) {
 	for _, tag := range iface.TagSet {
-		if tag.Key != nil && *tag.Key == "Name" && tag.Value != nil && *tag.Value != "" {
-			return strings.TrimSpace(*tag.Value), "tag"
+		if tag.Key == nil || *tag.Key != "Name" || tag.Value == nil {
+			continue
+		}
+		if name := strings.TrimSpace(*tag.Value); name != "" && !isResourceID(name) {
+			return name, "tag"
 		}
 	}
 
@@ -392,4 +395,24 @@ func bySecurityGroup(groups []ec2types.GroupIdentifier) string {
 		return ""
 	}
 	return named[0]
+}
+
+// resourceID matches a name that is an identifier: `i-0a1b2c3d4e5f60718`,
+// `eni-0a1b2c3d`, and the `tf-20260814093211004500000003` Terraform generates
+// when a name_prefix is used without a name.
+//
+// A hyphen, a short lowercase prefix, and eight or more hex digits. A service
+// nobody would name that way, and an identifier everybody's tooling does.
+var resourceID = regexp.MustCompile(`^[a-z][a-z0-9]{0,15}-[0-9a-f]{8,}$`)
+
+// isResourceID reports whether a Name tag is another way of writing the
+// address it would replace.
+//
+// A Name tag is trusted because it is the label a customer chose for the thing
+// (SEC-23). Tooling writes that field too, and what it writes is an id — which
+// is honest, and exactly as useful to an approver as `10.0.12.1`. Rejecting it
+// is not a claim that the customer was wrong; it is a refusal to spend the one
+// readable column in the scope on a second copy of the address.
+func isResourceID(name string) bool {
+	return resourceID.MatchString(name)
 }
