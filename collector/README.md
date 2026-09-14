@@ -52,7 +52,16 @@ an email address and an API key.
 | VPC Flow Logs | Addresses, ports, byte counts, packet counts, timings, TCP flags |
 | CloudTrail | Which principal is attached to which network interface |
 | IAM (read-only) | Role tags, IAM paths, attached policy actions |
+| EC2 network metadata | What the interfaces your traffic reached are called, and which AWS service an interface VPC endpoint is for |
 | ALB access logs *(optional)* | Timestamp, target address, and two byte counts — nothing else |
+
+**Why we ask what an endpoint is for.** If your model calls go to Bedrock over
+PrivateLink, they go to a private address in your own subnet and your flow log
+says nothing about what is there — so a scan finds no model traffic and reports
+no agents, confidently and wrongly. `ec2:DescribeVpcEndpoints` is the one call
+that answers it, and it is asked only about the endpoints your own traffic
+already reached. Without it, the alternative is asking you to tell us your
+model endpoints by hand.
 
 Flow logs are read from wherever you already deliver them — set
 `CUSTOS_FLOW_LOGS` to a CloudWatch Logs group name or to `s3://bucket/prefix`.
