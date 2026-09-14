@@ -62,6 +62,18 @@ class Call:
     step: int = 0
     """Position within the episode, zero-indexed."""
 
+    resp_events: int = 0
+    """How many flushes the response arrived in, or 0 for one body.
+
+    Ground truth about the protocol rather than about the workload. A model API
+    that streams sends every token as its own SSE event, and the wire model
+    charges each one an envelope, a TLS record and a TCP segment — about 187
+    bytes for a four-byte token.
+
+    Zero everywhere unless a corpus is built streaming, because which of the
+    two a customer's agents do is unmeasured and making one unrepresentable
+    would be deciding it."""
+
 
 @dataclass(slots=True)
 class Workload:

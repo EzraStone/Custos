@@ -22,6 +22,7 @@ from .connpool import (
     ConnectionPool,
     ack_traffic,
     framed,
+    streamed,
 )
 from .record import ACK, PSH, SYN, Direction, FlowRecord, InboundRequest
 
@@ -42,6 +43,20 @@ class AggregationConfig:
     have_alb_logs: bool = True
     """Whether the customer gave us load balancer access logs. A0 measures how
     much the classifier loses without them, because some customers will not."""
+
+    streaming: bool = False
+    """Whether model responses arrive streamed.
+
+    Off by default so every number recorded before this existed still means
+    what it said. It is not a detail: a streamed token costs about 187 wire
+    bytes against the 4 the corpus models, it applies to the response side of
+    every model call, and the response side is the denominator of the signal
+    the classifier reads.
+
+    Which way a real account's agents run is unknown, and that is the honest
+    state. Agent frameworks that need the whole reply before acting on it do
+    not stream; ones fronting a user interface do. So the corpus can be built
+    either way and the difference is a number rather than an argument."""
 
 
 @dataclass(slots=True)
@@ -130,7 +145,12 @@ def aggregate(corpus: Corpus, config: AggregationConfig | None = None) -> Captur
                 conn.is_new = False
 
             out_bytes, out_pkts = framed(out_payload)
-            in_bytes, in_pkts = framed(in_payload)
+            # The response side is where streaming lives. A request is one
+            # body whichever way the reply comes back.
+            events = call.resp_events if cfg.streaming else 0
+            in_bytes, in_pkts = (
+                streamed(in_payload, events) if events else framed(in_payload)
+            )
             # Each direction also carries the acknowledgements for the other.
             out_ack_bytes, out_ack_pkts = ack_traffic(in_pkts)
             in_ack_bytes, in_ack_pkts = ack_traffic(out_pkts)

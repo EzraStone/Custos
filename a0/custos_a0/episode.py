@@ -72,6 +72,11 @@ def agent_episode(
                 resp_bytes=tok(resp_tok),
                 request_id=request_id,
                 step=step,
+                # One SSE event per output token, which is what a streaming
+                # model API sends. Charged only when the capture is built
+                # streaming; carried always, so the ground truth does not
+                # depend on how it is read.
+                resp_events=int(resp_tok),
             )
         )
         # Time to first token scales with context length; this is why long
