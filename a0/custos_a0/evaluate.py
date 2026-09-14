@@ -185,6 +185,30 @@ class Result:
         )
 
     @property
+    def agent_headroom(self) -> float:
+        """Lowest agent confidence minus the threshold it has to clear.
+
+        The second number, and it exists because the first one can improve
+        while the product gets worse.
+
+        The margin is a gap between two classes and says nothing about where
+        that gap sits. Streaming responses move every workload toward
+        ingress-dominated: the negatives fall further than the agents, so the
+        margin widens by a tenth — and the lowest agent goes from 0.15 above
+        the threshold to 0.05 above it. A shift that widened the margin and
+        pushed an agent below 0.80 would read as an improvement and would be a
+        missed agent in a customer's report.
+
+        Negative means an agent is not being reported as one, whatever the
+        margin says.
+        """
+        from custos.classify import AGENT_THRESHOLD
+
+        if not self.agents:
+            return 0.0
+        return min(r.verdict.confidence for r in self.agents) - AGENT_THRESHOLD
+
+    @property
     def unscorable(self) -> list[Row]:
         """Workloads with no recognised model traffic at all.
 
