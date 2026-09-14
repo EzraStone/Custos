@@ -36,17 +36,16 @@ def test_a_real_model_endpoint_is_the_first_question_asked(measured):
     assert measured.found
 
 
-def test_at_most_three_questions_are_asked(measured):
+def test_at_most_two_questions_are_asked(measured):
     """Seven ordinary services with a gateway's traffic shape, and the list a
-    customer sees is short enough to read. Two of the three are real model
-    endpoints; the third is the agent's own deploy API, which is a fair
-    question — it is reached in the same loop and nothing on the wire says
-    which address in a loop is the model."""
-    assert len(measured.shown) <= 3, [a.address for a in measured.shown]
+    customer sees is short enough to read. The second is the agent's own deploy
+    API, which is a fair question — it is reached in the same loop and nothing
+    on the wire says which address in a loop is the model."""
+    assert len(measured.shown) <= 2, [a.address for a in measured.shown]
 
 
-def test_precision_is_not_worse_than_two_thirds(measured):
-    assert measured.precision >= 2 / 3
+def test_precision_is_not_worse_than_a_half(measured):
+    assert measured.precision >= 0.5
 
 
 def test_no_bulk_sender_is_asked_about(measured):
@@ -79,16 +78,17 @@ def test_noise_alone_asks_nothing_at_all():
     assert run(spec=CorpusSpec(noise=True)).asked == ()
 
 
-def test_both_real_model_endpoints_are_asked_about(measured):
-    """One is a self-hosted gateway only the customer knows about. The other is
-    a Bedrock VPC endpoint, which AWS knows about and will say — asking is the
-    only thing that finds it until the collector looks it up."""
+def test_the_endpoint_aws_named_is_not_asked_about(measured):
+    """The best outcome for a question is not being asked. A Bedrock interface
+    VPC endpoint is resolved by the collector before any question exists, so
+    the customer is never interrupted about the one case where the answer was
+    available for the asking."""
     from custos_a0.endpoints import BEDROCK_PRIVATELINK
     from custos_a0.scenarios.hard import GATEWAY
 
     asked = {a.address for a in measured.shown}
-    assert GATEWAY.ip in asked
-    assert BEDROCK_PRIVATELINK.ip in asked
+    assert GATEWAY.ip in asked, "the self-hosted gateway is still a question"
+    assert BEDROCK_PRIVATELINK.ip not in asked
 
 
 def test_the_noise_produces_no_agents_either():

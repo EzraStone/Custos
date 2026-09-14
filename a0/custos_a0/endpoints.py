@@ -51,6 +51,12 @@ class Endpoint:
     register as addresses.
     """
     eni_kind: str = ""
+    endpoint_service: str = ""
+    """The AWS endpoint service this address is an interface endpoint for.
+
+    Set on exactly one endpoint in the corpus, and it is the point of that
+    endpoint: an account reaching Bedrock over PrivateLink has model traffic
+    going to a private address with nothing in the flow record to say so."""
 
 
 # Model providers.
@@ -150,7 +156,8 @@ DOC_EXTRACT = Endpoint(
 BEDROCK_PRIVATELINK = Endpoint(
     "bedrock-runtime.us-east-1.amazonaws.com", "10.0.15.20", 443,
     EndpointClass.INTERNAL_API,
-    eni_name="vpce-0b3d5f7a9c1e2f40", eni_kind="vpc-endpoint",
+    eni_name="bedrock-runtime", eni_kind="vpc-endpoint",
+    endpoint_service="com.amazonaws.us-east-1.bedrock-runtime",
 )
 
 # The load balancer. Shared by every inbound-facing workload.

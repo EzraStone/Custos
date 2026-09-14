@@ -872,3 +872,50 @@ def test_the_served_report_carries_the_behaviour_section():
     assert "Behaviour worth asking about" in page
     assert "vectors 10.0.6.30" in page
     assert "in us-east-1" in page
+
+
+def test_an_agent_behind_a_bedrock_vpc_endpoint_is_found_without_being_declared(client):
+    """An account that reaches Bedrock over PrivateLink sends every model call
+    to a private address in its own subnet, and the flow record says nothing:
+    `pkt-dst-aws-service` covers AWS's published ranges and a VPC endpoint ENI
+    is not in one.
+
+    The same blindness a self-hosted gateway produces, with one difference —
+    AWS knows what that ENI is. Asking the customer to declare it would be
+    asking them for an answer we could look up.
+    """
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+    from custos_a0.endpoints import BEDROCK_PRIVATELINK
+
+    payload = build_batch(
+        corpus.build(corpus.CorpusSpec(days=1, hard=True)), region="us-east-1"
+    ).model_dump(mode="json")
+    payload["account_id"] = ACCOUNT
+    assert client.post("/v1/batches", json=payload, headers=AUTH).status_code == 202
+
+    agents = client.get("/v1/register", headers=AUTH).json()["agents"]
+    found = [a for a in agents if "claims-triage" in a["principal"]]
+    assert found, "the agent behind the VPC endpoint was not found"
+    assert found[0]["confidence"] > 0.9
+
+    # And nobody was asked to declare anything for it.
+    declared = client.get("/v1/endpoints", headers=AUTH).json()["endpoints"]
+    assert not any(BEDROCK_PRIVATELINK.ip in d["value"] for d in declared), (
+        "the lookup was recorded as something the customer declared"
+    )
+
+
+def test_an_endpoint_for_an_ordinary_service_is_not_model_traffic(client):
+    """`com.amazonaws.<region>.s3` is an endpoint too, and traffic to it is
+    traffic to S3. A rule that read every interface endpoint as a model
+    endpoint would manufacture an agent out of every workload that reads a
+    bucket privately, which is most of them."""
+    from custos.batch import Destination
+    from custos.catalog import is_model_endpoint_service
+
+    assert is_model_endpoint_service("com.amazonaws.us-east-1.bedrock-runtime")
+    assert not is_model_endpoint_service("com.amazonaws.us-east-1.s3")
+    assert not is_model_endpoint_service("com.amazonaws.us-east-1.bedrock")
+    assert not is_model_endpoint_service("com.amazonaws.vpce.us-east-1.vpce-svc-0a1b")
+    assert Destination(address="10.0.1.1").service == ""

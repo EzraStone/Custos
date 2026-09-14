@@ -46,12 +46,12 @@ class Asked:
     real: bool
     """Whether this address really is carrying model traffic.
 
-    Two of them are. The self-hosted gateway is the case the mechanism was
-    built for. The Bedrock VPC endpoint is a question worth asking for the same
-    reason and with a better answer available — AWS knows what that ENI is —
-    but until the collector looks it up, asking is the only thing that finds
-    it, and a question that finds an invisible agent is a question that
-    earned its place."""
+    Two addresses in the corpus do. The self-hosted gateway is the case the
+    mechanism was built for and the only one that reaches this list, because
+    the other — a Bedrock interface VPC endpoint — is resolved by the collector
+    before any question is asked. It stays in this set so that a regression
+    which stops resolving it, and starts asking about it instead, is scored as
+    the near miss it is rather than as a clean result."""
 
     @property
     def address(self) -> str:
@@ -106,9 +106,12 @@ def run(spec: CorpusSpec | None = None, limit: int = 5) -> QuestionResult:
         spec = CorpusSpec(hard=True, noise=True)
 
     inp = to_scan_input(build_batch(corpus_mod.build(spec)))
+    # With whatever the pipeline already resolved. An interface VPC endpoint
+    # AWS named is not a question any more, and a metric that still counted it
+    # as one would reward asking about something we had already answered.
     telemetry = sessionize(
         inp.records, inp.principal_by_eni, inp.address_by_eni, inp.requests,
-        origin=inp.start, interval=inp.interval,
+        origin=inp.start, interval=inp.interval, declared=inp.declared,
     )
     # No limit here: the detector's own cut is what `limit` measures, so the
     # scoring has to see the candidates it dropped.

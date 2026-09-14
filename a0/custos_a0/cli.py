@@ -179,8 +179,8 @@ def cmd_questions(args: argparse.Namespace) -> int:
     result = run(limit=args.limit)
 
     print(
-        "Custos gateway questions — two real model endpoints, "
-        "seven ordinary services\n"
+        "Custos gateway questions — one self-hosted gateway, one VPC endpoint "
+        "AWS names for us, seven ordinary services\n"
     )
     header = f"{'':4}  {'address':16}{'egress':>12}{'ingress':>11}{'ratio':>9}   answer"
     print(header)

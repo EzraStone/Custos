@@ -17,9 +17,10 @@ from datetime import datetime, timedelta
 from .attribute import PrincipalFacts
 from .baseline import Drift, detect_from_history
 from .batch import Batch
-from .catalog import is_ipv6
+from .catalog import is_ipv6, is_model_endpoint_service
 from .classify import Disposition
-from .declared import Declared
+from .declared import Declaration, Declared
+from .declared import build as build_declared
 from .diff import ScanDiff, compare
 from .gateway import assess as assess_gateways
 from .reach import IamCapability
@@ -157,7 +158,9 @@ def to_scan_input(
         destination_names={
             d.address: d.name for d in batch.destinations if d.name
         },
-        declared=declared if declared is not None else Declared(),
+        declared=_with_aws_endpoints(
+            declared if declared is not None else Declared(), batch
+        ),
         rates=rates if rates is not None else Rates(),
         facts={
             p.principal: PrincipalFacts(
@@ -179,6 +182,43 @@ def to_scan_input(
         inbound_logs_available=batch.have_alb_logs,
         region=batch.region,
     )
+
+
+def _with_aws_endpoints(declared: Declared, batch: Batch) -> Declared:
+    """Add the interface VPC endpoints AWS says are model inference.
+
+    Kept separate from what the customer declared, and merged only here, for
+    the classification of this one batch. Two reasons.
+
+    The provenance is different. A declaration is a person saying "this is our
+    model gateway", and SEC-24 exists because that claim can manufacture agents
+    in a region nobody meant it to apply to. This is AWS answering a question
+    about one ENI in one region: it cannot be wrong about a different region,
+    because the answer came from the region the batch was collected in.
+
+    And it is not the customer's, so it must not appear in the list of things
+    the customer declared. That list is read as a record of decisions somebody
+    made, and putting our own lookups in it would make the record false.
+    """
+    found = [
+        Declaration(f"{d.address}/32", "range", d.service)
+        for d in batch.destinations
+        if d.service and is_model_endpoint_service(d.service)
+    ]
+    if not found:
+        return declared
+    return build_declared(list(_as_declarations(declared)) + found)
+
+
+def _as_declarations(declared: Declared) -> list[Declaration]:
+    """The declarations behind a Declared value, for merging.
+
+    Notes are not carried: they belong to the customer's own wording and
+    nothing reads them here.
+    """
+    out = [Declaration(str(net), "range") for net in declared.nets]
+    out += [Declaration(service, "aws_service") for service in sorted(declared.services)]
+    return out
 
 
 def _regions(batch: Batch) -> tuple[str, ...]:

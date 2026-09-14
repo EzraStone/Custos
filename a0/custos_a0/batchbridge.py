@@ -88,7 +88,8 @@ def build_batch(
     # someone tagged, and RDS, which AWS describes itself. The rest arrive as
     # addresses, which is what the register then shows.
     destinations = [
-        Destination(address=ep.ip, name=ep.eni_name, kind=ep.eni_kind, region=region)
+        Destination(address=ep.ip, name=ep.eni_name, kind=ep.eni_kind,
+                    region=region, service=ep.endpoint_service)
         for ep in endpoints.ALL
         if ep.eni_name
     ]

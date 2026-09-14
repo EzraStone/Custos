@@ -116,6 +116,15 @@ class Destination(BaseModel):
     region: str = ""
     """Region the address was resolved in. Same reason as FlowRecord.region."""
 
+    service: str = ""
+    """The AWS endpoint service this address is an interface endpoint for.
+
+    `com.amazonaws.us-east-1.bedrock-runtime`, say. It changes what the
+    destination *is* rather than only what it is called: an account reaching
+    Bedrock over PrivateLink sends every model call to a private address in its
+    own subnet, with nothing in the flow record to say so, and this is what
+    lets the classifier see the model traffic that is there."""
+
 
 class Collection(BaseModel):
     """How the collection itself went, as opposed to what it found.

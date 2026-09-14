@@ -88,6 +88,44 @@ DATASTORE_PORTS = frozenset({
 
 _STORAGE_AWS_SERVICES = frozenset({"S3", "DYNAMODB", "RDS", "ELASTICACHE"})
 
+MODEL_ENDPOINT_SERVICES: frozenset[str] = frozenset({
+    "bedrock-runtime",
+    "bedrock-agent-runtime",
+    "sagemaker-runtime",
+})
+"""AWS endpoint services whose traffic is model inference.
+
+The last segment of an interface VPC endpoint's service name — the
+`bedrock-runtime` in `com.amazonaws.us-east-1.bedrock-runtime`.
+
+An account that reaches Bedrock this way sends every model call to a private
+address in its own subnet, and the flow record says nothing: `pkt-dst-aws-
+service` covers AWS's published ranges and a VPC endpoint ENI is not in one. So
+the traffic reads as an internal API and every agent behind it is invisible —
+the same blindness a self-hosted gateway produces, with the difference that AWS
+knows the answer and will give it.
+
+Narrow on purpose, and narrow in the same way MODEL_RANGES is. `bedrock` is the
+control plane — ListFoundationModels, CreateGuardrail — and is not inference.
+`sagemaker-runtime` is: InvokeEndpoint is a model call whatever is behind it.
+A service we are not sure about is left out, because a false positive here
+manufactures an agent out of ordinary traffic.
+"""
+
+
+def is_model_endpoint_service(service: str) -> bool:
+    """Whether an interface endpoint's service name is model inference.
+
+    Takes the full name — `com.amazonaws.us-east-1.bedrock-runtime` — and reads
+    only the last segment, because the region is the scan's and the prefix is
+    the same on every AWS endpoint. A PrivateLink service somebody else
+    published lives under `com.amazonaws.vpce.` and is never one of these:
+    whatever is behind it, AWS is not telling us it is Bedrock.
+    """
+    if not service.startswith("com.amazonaws.") or service.startswith("com.amazonaws.vpce."):
+        return False
+    return service.rsplit(".", 1)[-1] in MODEL_ENDPOINT_SERVICES
+
 _MODEL_NETS: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = tuple(
     ipaddress.ip_network(c) for c in MODEL_RANGES
 )
