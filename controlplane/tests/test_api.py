@@ -1230,3 +1230,78 @@ def test_one_principal_uncertain_in_two_regions_is_one_question(client):
     rows = [r for r in reviews if r["principal"] == both]
     assert len(rows) == 1
     assert rows[0]["confidence"] == 0.62
+
+
+# --- the write surface's free text --------------------------------------------
+#
+# `operator`, `note` and `reason` come from a person and end up in the audit
+# trail, in the report's provenance section, and in a column-aligned terminal
+# table. Nothing bounded them.
+
+def test_an_operator_name_with_a_newline_is_one_line(client):
+    """The audit trail is the record of who granted what, and it is read as a
+    table."""
+    _grantable(client)
+    agent = client.get("/v1/register", headers=AUTH).json()["agents"][0]
+
+    response = client.post(
+        f"/v1/agents/{agent['id']}/imprimatur",
+        json={"operator": "ezra\nstone"}, headers=AUTH,
+    )
+    assert response.status_code == 200
+
+    entries = client.get(f"/v1/agents/{agent['id']}/audit", headers=AUTH).json()["entries"]
+    assert any(e["actor"] == "ezra stone" for e in entries), entries
+
+
+def test_a_note_longer_than_the_limit_is_cut_and_marked(client):
+    """A reader has to see a prefix rather than a different value."""
+    response = client.post(
+        "/v1/endpoints",
+        json={
+            "value": "10.0.7.0/24", "operator": "ezra@custos.dev",
+            "note": "x" * 500, "region": "us-east-1",
+        },
+        headers=AUTH,
+    )
+    assert response.status_code == 200
+    declared = client.get("/v1/endpoints", headers=AUTH).json()["endpoints"]
+    assert declared[0]["note"].endswith("…")
+    assert len(declared[0]["note"]) == 129
+
+
+def test_an_operator_of_only_whitespace_is_refused(client):
+    """SEC-17 needs a person, and a tab is not one. The bound is applied before
+    validation so `min_length=1` is a statement about what survives cleaning."""
+    _grantable(client)
+    agent = client.get("/v1/register", headers=AUTH).json()["agents"][0]
+
+    response = client.post(
+        f"/v1/agents/{agent['id']}/imprimatur", json={"operator": " \t "}, headers=AUTH
+    )
+    assert response.status_code == 422
+
+
+def test_an_ordinary_operator_name_is_untouched(client):
+    _grantable(client)
+    agent = client.get("/v1/register", headers=AUTH).json()["agents"][0]
+
+    client.post(
+        f"/v1/agents/{agent['id']}/imprimatur",
+        json={"operator": "ezra@custos.dev"}, headers=AUTH,
+    )
+    entries = client.get(f"/v1/agents/{agent['id']}/audit", headers=AUTH).json()["entries"]
+    assert any(e["actor"] == "ezra@custos.dev" for e in entries)
+
+
+def _grantable(client):
+    """Put one real agent in the register. The minimal batch fixture produces
+    none, and a grant needs something to grant against."""
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+
+    payload = build_batch(
+        corpus.build(corpus.CorpusSpec(days=1)), region="us-east-1"
+    ).model_dump(mode="json")
+    payload["account_id"] = ACCOUNT
+    client.post("/v1/batches", json=payload, headers=AUTH)

@@ -17,9 +17,9 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, BeforeValidator, Field
 
-from .. import __version__
+from .. import __version__, text
 from ..batch import Batch, BatchAccepted
 from ..catalog import RANGES_REVISION
 from ..deliver import Channel, notify
@@ -37,6 +37,7 @@ from ..store.db import now, open_database
 from ..store.declarations import CandidateStore, DeclarationStore
 from ..store.rates import RateStore
 from ..store.scans import ReviewStore, ScanStore
+from ..text import one_line
 from .auth import Principal, TokenStore, parse_bearer
 from .compression import GzipRequestMiddleware
 
@@ -955,19 +956,43 @@ def _mount_console(app: FastAPI) -> None:
     app.mount("/", StaticFiles(directory=str(root), html=True), name="console")
 
 
+def _bounded(limit: int):
+    """A validator that makes one field a bounded, renderable single line.
+
+    Applied to every free-text field on the write surface. These end up in the
+    audit trail, in the report's provenance section, and in a column-aligned
+    terminal table, and nothing bounded them: a newline in an operator's name
+    broke the artefact somebody reads before granting authority, and a field
+    with no length limit is a field somebody eventually puts a log file in.
+
+    Applied before validation rather than after, so `min_length=1` is a
+    statement about what survives cleaning. An operator name of nothing but
+    whitespace is not an operator, and SEC-17 needs a person.
+    """
+    return BeforeValidator(
+        lambda v: one_line(v, limit) if isinstance(v, str) else v
+    )
+
+
+Operator = Annotated[str, _bounded(text.OPERATOR)]
+Note = Annotated[str, _bounded(text.NOTE)]
+Reason = Annotated[str, _bounded(text.REASON)]
+Value = Annotated[str, _bounded(text.VALUE)]
+
+
 class RateRequest(BaseModel):
-    provider: str = Field(min_length=1, description="anthropic, openai, bedrock, ...")
+    provider: Value = Field(min_length=1, description="anthropic, openai, bedrock, ...")
     input_per_mtok: float = Field(gt=0, description="USD per million input tokens")
     output_per_mtok: float = Field(gt=0, description="USD per million output tokens")
-    operator: str = Field(min_length=1, description="Human identity supplying the rate")
+    operator: Operator = Field(min_length=1, description="Human identity supplying the rate")
 
 
 class DeclareRequest(BaseModel):
-    value: str = Field(min_length=1, description="A CIDR, an address, or an AWS service name")
+    value: Value = Field(min_length=1, description="A CIDR, an address, or an AWS service name")
     kind: str = Field(default="range", pattern="^(range|aws_service)$")
-    operator: str = Field(min_length=1, description="Human identity making the declaration")
-    note: str = Field(default="", description="What the customer calls this endpoint")
-    region: str = Field(
+    operator: Operator = Field(min_length=1, description="Human identity making the declaration")
+    note: Note = Field(default="", description="What the customer calls this endpoint")
+    region: Value = Field(
         default="",
         description=(
             "Region this applies to. Required for a private range, because a "
@@ -977,15 +1002,17 @@ class DeclareRequest(BaseModel):
 
 
 class GrantRequest(BaseModel):
-    operator: str = Field(min_length=1, description="Human identity granting the authority")
+    operator: Operator = Field(
+        min_length=1, description="Human identity granting the authority"
+    )
     approved_tools: list[str] | None = None
     approved_data: list[str] | None = None
 
 
 class StatusRequest(BaseModel):
     status: str
-    operator: str = Field(min_length=1)
-    reason: str = ""
+    operator: Operator = Field(min_length=1)
+    reason: Reason = ""
 
 
 def _drift_for(scans, agents: dict) -> list:
