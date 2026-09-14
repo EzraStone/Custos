@@ -164,6 +164,6 @@ func TestOnlyRecognisedFieldNamesLeaveTheAccount(t *testing.T) {
 var known = map[string]bool{
 	"interface-id": true, "srcaddr": true, "dstaddr": true, "bytes": true,
 	"start": true, "end": true, "account-id": true, "dstport": true,
-	"flow-direction": true, "log-status": true,
+	"flow-direction": true, "log-status": true, "packets": true,
 	"pkt-dst-aws-service": true, "pkt-src-aws-service": true,
 }

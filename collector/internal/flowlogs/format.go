@@ -61,6 +61,9 @@ var optional = map[string]string{
 		"cannot be counted and coverage is overstated",
 	"account-id": "the account is taken from configuration rather than from " +
 		"the record",
+	"packets": "packet counts are unknown, so a streamed model response " +
+		"cannot be told from a whole one and every spend figure uses the " +
+		"reading that produces the larger number",
 }
 
 // LogFormatHeader is LogFormat as AWS writes it at the top of an S3 object:
