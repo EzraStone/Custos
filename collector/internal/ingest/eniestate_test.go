@@ -34,6 +34,11 @@ type estateEni struct {
 	// there is one and somebody named it. Interfaces are tagged far less often
 	// than the instances they are attached to, and this is what that costs.
 	instance string
+	// absent means AWS returns no interface for this address. A shared VPC
+	// owned by another account, or an on-prem host over Direct Connect: the
+	// address is reached, the role can see nothing about it, and the honest
+	// answer is the address.
+	absent bool
 	// service is the AWS endpoint service this interface is an endpoint for,
 	// when it is one. The field that turns a private address into a model
 	// endpoint.
@@ -249,7 +254,26 @@ func estate() []estateEni {
 			why:   "an endpoint AWS would not tell us about. The id is what the description gave it",
 		},
 
+		// --- labelled by a person, in a field that takes anything -----------
+		{
+			iface: destEni("10.0.16.1", "", "Name", "billing\tapi  (prod)"),
+			want:  "billing api (prod)",
+			why:   "a tag value is text somebody typed; a tab in it breaks a column-aligned scope",
+		},
+		{
+			iface: destEni("10.0.16.2", "", "Name",
+				"a-very-long-service-name-that-somebody-pasted-in-from-a-runbook-and-never-shortened"),
+			want: "a-very-long-service-name-that-somebody-pasted-in-from-a-runbook-\u2026",
+			why:  "256 characters is a legal tag value and would push the address off the line",
+		},
+
 		// --- nothing honest to say ------------------------------------------
+		{
+			iface:  destEni("10.0.16.9", ""),
+			absent: true,
+			want:   "",
+			why:    "AN ADDRESS WITH NO INTERFACE IN THIS ACCOUNT. A shared-services VPC owned by another account, or on-prem over Direct Connect. Nothing one account's role can answer",
+		},
 		{
 			iface: destEni("10.0.11.7", "temp box for INC-4471, ask Sam before deleting"),
 			want:  "",
@@ -301,7 +325,7 @@ func TestTheEstateHasTheTagHygieneItClaims(t *testing.T) {
 // threshold somebody picked stops meaning anything the moment it is met.
 //
 //	6 of 13 — the Name tag and four of the five AWS description shapes
-const readableFloor = 21
+const readableFloor = 23
 
 // TestScopeReadability is the measurement, and the only number in this package
 // that a customer feels directly. An entry an operator cannot read is an
@@ -312,7 +336,9 @@ func TestScopeReadability(t *testing.T) {
 	var addresses []string
 	var ifaces []ec2types.NetworkInterface
 	for _, e := range all {
-		ifaces = append(ifaces, e.iface)
+		if !e.absent {
+			ifaces = append(ifaces, e.iface)
+		}
 		addresses = append(addresses, *e.iface.PrivateIpAddresses[0].PrivateIpAddress)
 	}
 
