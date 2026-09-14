@@ -341,3 +341,80 @@ func TestTheFilesystemIdIsNotCarried(t *testing.T) {
 		t.Fatalf("got %v", names)
 	}
 }
+
+func groupedEni(address string, groups ...string) ec2types.NetworkInterface {
+	iface := destEni(address, "")
+	for _, name := range groups {
+		iface.Groups = append(iface.Groups, ec2types.GroupIdentifier{
+			GroupId: aws.String("sg-" + name), GroupName: aws.String(name),
+		})
+	}
+	return iface
+}
+
+// TestTheOneGroupSomebodyNamedNamesTheInterface: nobody tags an ENI — the
+// console does not show the field during instance launch — and almost
+// everybody names a security group, because the console makes them type one.
+func TestTheOneGroupSomebodyNamedNamesTheInterface(t *testing.T) {
+	names := resolveNames(t,
+		[]ec2types.NetworkInterface{groupedEni("10.0.4.50", "orders-service-sg")},
+		"10.0.4.50")
+	if names["10.0.4.50"] != "orders-service/security-group" {
+		t.Fatalf("got %v", names)
+	}
+}
+
+// TestAGeneratedGroupNameNamesNothing: `default` is what AWS called it and
+// `launch-wizard-3` is what the console called it. Neither is what anybody
+// called the service.
+func TestAGeneratedGroupNameNamesNothing(t *testing.T) {
+	for _, name := range []string{
+		"default",
+		"launch-wizard-3",
+		"eks-cluster-sg-prod-1029384756",
+		"k8s-elb-a1b2c3d4e5",
+		"checkout-stack-AppSecurityGroup-1A2B3C4D5E6F",
+	} {
+		iface := groupedEni("10.0.4.51", name)
+		if got := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.4.51"); len(got) != 0 {
+			t.Errorf("%q named the interface %v", name, got)
+		}
+	}
+}
+
+// TestTwoNamedGroupsNameNothing: two groups are two claims about what this is,
+// and picking one would be choosing which of a customer's two answers to put
+// in front of an approver.
+func TestTwoNamedGroupsNameNothing(t *testing.T) {
+	iface := groupedEni("10.0.4.52", "orders-service-sg", "shared-egress")
+	if got := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.4.52"); len(got) != 0 {
+		t.Fatalf("got %v", got)
+	}
+}
+
+// TestAGeneratedGroupDoesNotCountAsASecondClaim: an interface in its service's
+// group and the VPC default is in one group anybody chose.
+func TestAGeneratedGroupDoesNotCountAsASecondClaim(t *testing.T) {
+	iface := groupedEni("10.0.4.53", "orders-service-sg", "default")
+	names := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.4.53")
+	if names["10.0.4.53"] != "orders-service/security-group" {
+		t.Fatalf("got %v", names)
+	}
+}
+
+// TestAGroupNameLosesToEverythingElse: it is the weakest source in the list.
+func TestAGroupNameLosesToEverythingElse(t *testing.T) {
+	tagged := groupedEni("10.0.4.54", "orders-service-sg")
+	tagged.TagSet = []ec2types.Tag{{Key: aws.String("Name"), Value: aws.String("orders-api")}}
+	names := resolveNames(t, []ec2types.NetworkInterface{tagged}, "10.0.4.54")
+	if names["10.0.4.54"] != "orders-api/tag" {
+		t.Fatalf("got %v", names)
+	}
+
+	managed := groupedEni("10.0.4.55", "orders-service-sg")
+	managed.InterfaceType = ec2types.NetworkInterfaceTypeNatGateway
+	names = resolveNames(t, []ec2types.NetworkInterface{managed}, "10.0.4.55")
+	if names["10.0.4.55"] != "nat-gateway/nat-gateway" {
+		t.Fatalf("got %v", names)
+	}
+}
