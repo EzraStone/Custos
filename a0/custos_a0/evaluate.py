@@ -32,12 +32,21 @@ class Scenario:
     name: str
     interval_seconds: int
     have_alb_logs: bool
+    streaming: bool = False
+    """Whether model responses arrive one SSE event per token.
+
+    A configuration of the customer's clients rather than of their logging, so
+    it is not something onboarding can ask them to change. It is in the sweep
+    for the same reason the aggregation interval is: the classifier has to hold
+    at whatever the account already does, and the first account will not be
+    asked to stop streaming."""
 
     @property
     def config(self) -> AggregationConfig:
         return AggregationConfig(
             interval=timedelta(seconds=self.interval_seconds),
             have_alb_logs=self.have_alb_logs,
+            streaming=self.streaming,
         )
 
 
@@ -46,6 +55,8 @@ SCENARIOS: tuple[Scenario, ...] = (
     Scenario("flow logs at 600s, with ALB logs", 600, True),
     Scenario("flow logs at 60s, no ALB logs", 60, False),
     Scenario("flow logs at 600s, no ALB logs", 600, False),
+    Scenario("streaming responses, 60s, with ALB logs", 60, True, streaming=True),
+    Scenario("streaming responses, 600s, with ALB logs", 600, True, streaming=True),
 )
 
 
