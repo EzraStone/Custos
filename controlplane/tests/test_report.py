@@ -818,3 +818,18 @@ def test_a_report_rendered_without_coverage_still_renders():
     nothing. A disclosure that crashed on those would be caught here rather
     than on a scan that had no collection statistics."""
     assert "Payload contents were never collected" in render(result([agent()]), "acme-nonprod", T0)
+
+
+def test_a_format_with_no_packet_counts_says_what_that_costs():
+    """The field was neither required nor optional until this week, because
+    nothing read it. It decides a figure now, and a format without it produces
+    a report whose every spend figure takes the larger reading with nothing
+    saying so."""
+    from custos.report import Coverage
+
+    html = render(
+        result([agent()]), "acme-nonprod", T0,
+        coverage=Coverage(missing_fields=("packets",), regions=("us-east-1",)),
+    )
+    assert "Packet counts were not recorded" in html
+    assert "forty times too high" in html

@@ -225,6 +225,11 @@ _FIELD_COSTS = {
     "log-status": "AWS's own NODATA and SKIPDATA markers were not recorded, so "
                   "the coverage figure above cannot account for records AWS "
                   "dropped before we read them. It is an upper bound.",
+    "packets": "Packet counts were not recorded, which is how a streamed "
+               "model response is told from a whole one. Every spend figure "
+               "above therefore uses the reading that produces the larger "
+               "number, and for a workload whose responses do stream that is "
+               "about forty times too high.",
 }
 
 
