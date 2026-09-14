@@ -428,6 +428,97 @@ Two things fell out of it that were not the point:
 
 ---
 
+## Finding 11 — the corpus modelled a streamed response as four bytes a token
+
+Every dollar figure this product prints comes from one conversion: observed
+wire bytes divided by a constant, priced per million tokens. The constant has
+been four since A0, and `docs/STATUS.md` has called it a guess "wrong in a
+direction nobody has measured" ever since spend attribution landed.
+
+It is wrong by forty-four times, for any account whose model clients stream.
+
+**The arithmetic.** A streaming model API flushes after every token — that is
+the entire reason to stream, so the next token reaches the client without
+waiting for the rest. Each token therefore becomes its own Server-Sent Events
+frame, its own TLS record and its own TCP segment:
+
+| | bytes |
+|---|---|
+| the token | 4 |
+| SSE envelope | 114 |
+| TLS record header | 29 |
+| IP and TCP headers | 40 |
+| **per output token** | **187** |
+
+The envelope is counted from the smaller of the two shapes a provider actually
+writes, Anthropic's `content_block_delta`. OpenAI's `chat.completion.chunk`
+carries a request id, a model name, a system fingerprint and a choices array on
+every token and comes to roughly double.
+
+This is not a measurement of anything. It is arithmetic on a documented
+protocol, and the only reason it had not been done is that nobody had asked
+what a flow record's ingress bytes are made of.
+
+**It lands on the expensive side.** Output tokens are priced at five times
+input on every provider in the table. Dividing a streamed response by four
+does not inflate a cost estimate slightly; it can put a report's headline
+figure an order of magnitude high, for the agent whose figure is most likely to
+be acted on.
+
+**A flow record does not say which.** That is why this has been one constant
+for as long as it has existed: two answers forty-four times apart with nothing
+to choose on. It does carry packet counts, and those turn out to be enough.
+
+Subtract the acknowledgements the outbound segments imply — one per two, at 52
+bytes — and the mean inbound data packet is:
+
+| | mean inbound data packet |
+|---|---|
+| responses arriving whole | 1,444 – 2,740 bytes |
+| responses streamed | 232 – 288 bytes |
+
+Nothing between. The gap is a property of the protocol rather than of the
+corpus: a sender filling segments produces packets near the MSS, and a sender
+flushing per token produces packets the size of one SSE frame. The threshold
+sits at 600, in measured empty space, the same rule the classifier's own
+thresholds follow. `make conversion` reproduces it, and the discriminator reads
+every workload in both captures correctly.
+
+Subtracting the ACKs is the part that makes it work, and it is not an
+optimisation. An agent resends its accumulated transcript, so it sends far more
+segments than it receives responses; enough acknowledgements of its own traffic
+drag its raw inbound average to 84 bytes, and it reads as streaming whatever
+its responses actually did.
+
+**What it does to the classifier is the more interesting half.** Streaming
+inflates the response side of every model call, which is the denominator of the
+signal the whole product reads. The separation margin goes *up*, 0.260 to
+0.371, because the negatives lose more confidence than the agents do.
+
+That result is the reason this arc grew a second gate. The margin is a gap
+between two classes and says nothing about where the gap sits, and in the same
+run the weakest agent went from 0.151 above the reporting threshold to 0.054
+above it. A shift that widened the margin and pushed an agent under 0.80 would
+read as an improvement in every number recorded here and would be a row missing
+from a customer's report. G0 now requires both.
+
+**What is unmeasured.** The mixture. How much real agent traffic streams is a
+question about customers rather than about protocols — a framework that acts on
+a whole reply has no reason to stream, one behind a user interface does — so
+the corpus can be built either way and neither is asserted.
+
+And a workload doing both is read as neither. `kb-assistant` mixes streamed
+completions with whole embedding responses and lands at 24.5 bytes per output
+token, between the two constants and fitting neither. Nothing in a flow record
+separates two conversations with the same peer below the level of a principal,
+so that one is a stated limit rather than a bug.
+
+The tokenisation itself is still four bytes a token, still right for English
+JSON, still wrong for code, and still unmeasured. That part needs a tokeniser
+and a corpus of real prompts, which is a different afternoon.
+
+---
+
 ## Why this result should be believed, and where it should not
 
 **The corpus is adversarial by construction.** Four negatives exist
