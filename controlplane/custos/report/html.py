@@ -407,6 +407,29 @@ def _limitations(
             "bytes rather than from token counts, so they remain estimates — "
             "but they are estimates at your prices rather than ours."
         )
+
+    # Agents whose provider could not be named. Their figure came from a
+    # fallback rate whatever the line above says, and on an account that
+    # supplied its own rates that line says "your prices" — which is false for
+    # exactly these rows and true for every other one.
+    unpriced = sorted(
+        _short_principal(a.identity.principal)
+        for a in result.register.unsanctioned
+        if a.model.providers and a.model.providers <= {"unknown"}
+    )
+    if unpriced:
+        named = ", ".join(_e(name) for name in unpriced[:4])
+        more = f" and {len(unpriced) - 4} more" if len(unpriced) > 4 else ""
+        many = len(unpriced) != 1
+        items.append(
+            f"The model provider behind {named}{more} could not be named — the "
+            "addresses reached are in no published range we recognise and the "
+            "flow log carried no AWS service annotation for them. "
+            f"{'Those figures' if many else 'That figure'} used a fallback "
+            "rate, so the spend beside "
+            f"{'them' if many else 'it'} is the least reliable number on this "
+            "page."
+        )
     items.extend(_format_limits(coverage))
     if degraded:
         items.append(

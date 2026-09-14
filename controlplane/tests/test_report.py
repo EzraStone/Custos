@@ -739,3 +739,41 @@ def test_the_ipv6_caveat_does_not_overstate_what_is_blind():
     assert "reaching Anthropic or OpenAI over IPv6 does not appear" in page
     assert "Bedrock over IPv6 is recognised" in page
     assert "reaching a provider over IPv6 does not appear above at all" not in page
+
+
+# --- an agent whose provider nobody could name --------------------------------
+
+def _unpriced(a):
+    a.model.providers = {"unknown"}
+    return a
+
+
+def test_an_agent_with_no_named_provider_is_called_out():
+    """Its figure came from a fallback rate, and on an account that supplied
+    its own rates the line above says "your prices" — which is false for
+    exactly this row and true for every other one."""
+    page = render(result([_unpriced(agent())]), "acme", T0)
+    assert "could not be named" in page
+    assert "least reliable number on this page" in page
+
+
+def test_an_agent_with_a_named_provider_is_not():
+    a = agent()
+    a.model.providers = {"anthropic"}
+    page = render(result([a]), "acme", T0)
+    assert "could not be named" not in page
+
+
+def test_one_unpriced_agent_reads_as_one():
+    page = render(result([_unpriced(agent())]), "acme", T0)
+    assert "That figure used a fallback rate" in page
+    assert "the spend beside it" in page
+
+
+def test_an_agent_with_no_providers_at_all_is_not_accused():
+    """An agent discovered before providers were recorded has an empty set, and
+    calling that "could not be named" would be a claim about a column."""
+    a = agent()
+    a.model.providers = set()
+    page = render(result([a]), "acme", T0)
+    assert "could not be named" not in page
