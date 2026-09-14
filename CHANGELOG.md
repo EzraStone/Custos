@@ -150,6 +150,35 @@ findings name the region they are about on every surface, and the region is
 part of a finding's fingerprint — appended only when there is one, so nothing
 that never had a region is re-delivered for the sake of a hash change.
 
+### Spend figures that came from a fallback rate now say so
+
+An agent whose model traffic goes to a provider we do not recognise is priced
+at a fallback rate, and nothing said which agents those were. On an account
+that supplied its own pricing the report says the figures are "estimates at
+your prices rather than ours" — true of every row except those, and false for
+exactly those.
+
+The report names them, at most four then a count: a list that runs to twenty is
+a list that gets skipped, which is the same as not saying it. The console marks
+the row, because that is where somebody looks at one agent and decides.
+
+An agent with no providers recorded at all is not accused. That is every agent
+discovered before the field existed, and calling it "not recognised" would be a
+claim about our schema rather than about the account.
+
+### Two caveats that were not true as written
+
+The IPv6 disclosure said "an agent reaching a provider over IPv6 does not
+appear above at all". False for AWS's own model endpoints, and false the whole
+time: `pkt-dst-aws-service` describes the destination rather than its address
+family, so Bedrock over IPv6 is recognised exactly as Bedrock over IPv4 is. The
+count included those addresses too.
+
+Overstating a limitation costs the limitations section the same credibility
+that understating one does. Its whole value is that a reader can take what it
+says at face value. `--check` and STATUS said the same thing and have been
+corrected with it.
+
 ### Three things only the console could do
 
 **The CLI could sanction an agent and not retire one.** It could write to the
