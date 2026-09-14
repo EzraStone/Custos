@@ -104,6 +104,13 @@ func (r *DestinationResolver) Resolve(ctx context.Context, addresses []string) (
 			}
 		}
 
+		for address, service := range r.endpointServices(ctx, ifaces) {
+			resolved[address] = wire.Destination{
+				Address: address, Name: serviceShortName(service),
+				Kind: "vpc-endpoint", Service: service,
+			}
+		}
+
 		for id, name := range r.instanceNames(ctx, byInstance) {
 			for _, address := range byInstance[id] {
 				resolved[address] = wire.Destination{
@@ -551,4 +558,106 @@ func instanceName(tags []ec2types.Tag) string {
 		}
 	}
 	return ""
+}
+
+// endpointServices asks which AWS service each interface endpoint is for.
+//
+// An interface VPC endpoint puts an ENI in the customer's own subnet, so
+// traffic to it is traffic to a private address. The flow log's
+// `pkt-dst-aws-service` annotation covers AWS's published address ranges and
+// this is not one, so the record says nothing: on the wire it is an internal
+// API, and an agent calling Bedrock through one is invisible.
+//
+// That is the same blindness a self-hosted gateway produces, with one
+// difference. A self-hosted gateway is something only the customer knows
+// about. A VPC endpoint for com.amazonaws.<region>.bedrock-runtime is
+// something AWS knows about, and asking a customer to declare it is asking
+// them for an answer we could have looked up.
+//
+// Filtered by the endpoint ids the interfaces named, rather than listing every
+// endpoint in the region. Custos reads what its own traffic already pointed
+// at, and a call that enumerates an account's endpoints is a different claim
+// about what this role does (SEC-16).
+func (r *DestinationResolver) endpointServices(
+	ctx context.Context, ifaces []ec2types.NetworkInterface,
+) map[string]string {
+	byEndpoint := map[string][]string{}
+	for _, iface := range ifaces {
+		id := endpointID(iface)
+		if id == "" {
+			continue
+		}
+		byEndpoint[id] = append(byEndpoint[id], privateAddresses(iface)...)
+	}
+	if len(byEndpoint) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(byEndpoint))
+	for id := range byEndpoint {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	services := map[string]string{}
+	var token *string
+	for {
+		out, err := r.API.DescribeVpcEndpoints(ctx, &ec2.DescribeVpcEndpointsInput{
+			VpcEndpointIds: ids, NextToken: token,
+		})
+		if err != nil {
+			// The addresses keep whatever the description gave them, which is
+			// the endpoint id. A scan is not worth losing over a name.
+			return services
+		}
+		for _, endpoint := range out.VpcEndpoints {
+			if endpoint.VpcEndpointId == nil || endpoint.ServiceName == nil {
+				continue
+			}
+			service := strings.TrimSpace(*endpoint.ServiceName)
+			if service == "" {
+				continue
+			}
+			for _, address := range byEndpoint[*endpoint.VpcEndpointId] {
+				services[address] = service
+			}
+		}
+		if out.NextToken == nil || *out.NextToken == "" {
+			return services
+		}
+		token = out.NextToken
+	}
+}
+
+// endpointID is the vpce- id an interface belongs to, or "".
+func endpointID(iface ec2types.NetworkInterface) string {
+	description := ""
+	if iface.Description != nil {
+		description = strings.TrimSpace(*iface.Description)
+	}
+	if m := vpcEndpoint.FindStringSubmatch(description); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
+// serviceShortName is the part of an endpoint service name an operator reads.
+//
+// `com.amazonaws.us-east-1.bedrock-runtime` becomes `bedrock-runtime`. The
+// region is already the scan's region and the prefix is the same on every one
+// of them; what distinguishes one endpoint from another is the last segment,
+// and it is the only part that fits in a scope.
+//
+// A private-link service somebody else published — `com.amazonaws.vpce.
+// us-east-1.vpce-svc-0a1b2c3d` — has no such segment, so the id is kept. That
+// is honest: we do not know what it is either.
+func serviceShortName(service string) string {
+	if strings.HasPrefix(service, "com.amazonaws.vpce.") {
+		return service[strings.LastIndex(service, ".")+1:]
+	}
+	if after, ok := strings.CutPrefix(service, "com.amazonaws."); ok {
+		if _, name, found := strings.Cut(after, "."); found && name != "" {
+			return name
+		}
+	}
+	return service
 }

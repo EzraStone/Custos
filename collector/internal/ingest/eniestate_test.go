@@ -34,7 +34,11 @@ type estateEni struct {
 	// there is one and somebody named it. Interfaces are tagged far less often
 	// than the instances they are attached to, and this is what that costs.
 	instance string
-	why      string
+	// service is the AWS endpoint service this interface is an endpoint for,
+	// when it is one. The field that turns a private address into a model
+	// endpoint.
+	service string
+	why     string
 }
 
 func withType(i ec2types.NetworkInterface, kind ec2types.NetworkInterfaceType) ec2types.NetworkInterface {
@@ -232,11 +236,17 @@ func estate() []estateEni {
 			why:   "an instance nobody tagged either. The bottom of the search",
 		},
 
-		// --- named, and no more readable than an address --------------------
+		// --- an endpoint, and what is on the other side of it ---------------
+		{
+			iface:   destEni("10.0.15.20", "VPC Endpoint Interface vpce-0b3d5f7a"),
+			want:    "bedrock-runtime",
+			service: "com.amazonaws.us-east-1.bedrock-runtime",
+			why:     "model traffic that never leaves the VPC. Every agent behind it is invisible without this",
+		},
 		{
 			iface: destEni("10.0.5.31", "VPC Endpoint Interface vpce-0f9e8d7c"),
 			want:  "vpce-0f9e8d7c",
-			why:   "an endpoint id is what AWS wrote, and it is not a service an approver recognises",
+			why:   "an endpoint AWS would not tell us about. The id is what the description gave it",
 		},
 
 		// --- nothing honest to say ------------------------------------------
@@ -291,7 +301,7 @@ func TestTheEstateHasTheTagHygieneItClaims(t *testing.T) {
 // threshold somebody picked stops meaning anything the moment it is met.
 //
 //	6 of 13 — the Name tag and four of the five AWS description shapes
-const readableFloor = 20
+const readableFloor = 21
 
 // TestScopeReadability is the measurement, and the only number in this package
 // that a customer feels directly. An entry an operator cannot read is an
@@ -307,13 +317,18 @@ func TestScopeReadability(t *testing.T) {
 	}
 
 	instanceNames := map[string]string{}
+	endpoints := map[string]string{}
 	for _, e := range all {
 		if e.instance != "" {
 			instanceNames[*e.iface.Attachment.InstanceId] = e.instance
 		}
+		if e.service != "" {
+			endpoints[endpointID(e.iface)] = e.service
+		}
 	}
-	names := resolveNamesWith(t, &fakeEC2{interfaces: ifaces, instanceNames: instanceNames},
-		addresses...)
+	names := resolveNamesWith(t, &fakeEC2{
+		interfaces: ifaces, instanceNames: instanceNames, endpoints: endpoints,
+	}, addresses...)
 
 	var wrong, missing []string
 	readable, nameable := 0, 0

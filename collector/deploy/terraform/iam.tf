@@ -36,6 +36,13 @@ data "aws_iam_policy_document" "read_only" {
       # about the others just as confidently, so preflight asks.
       "ec2:DescribeRegions",
       "ec2:DescribeFlowLogs",
+      # Which AWS service an interface VPC endpoint is for. An account that
+      # reaches Bedrock over PrivateLink sends every model call to a private
+      # address in its own subnet, with nothing in the flow record to say so —
+      # the agents behind it are invisible without this, and this is the only
+      # read that can tell us. Asked only about endpoints the account's own
+      # traffic already reached.
+      "ec2:DescribeVpcEndpoints",
     ]
     resources = ["*"] # these Describe calls do not support resource scoping
   }

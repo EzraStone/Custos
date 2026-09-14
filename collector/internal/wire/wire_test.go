@@ -34,6 +34,9 @@ var allowedFields = map[string]map[string]bool{
 	},
 	"Destination": {
 		"Address": true, "Name": true, "Kind": true, "Region": true,
+		// AWS's own endpoint service identifier, in AWS's own namespace. It
+		// describes what the customer is talking to, not what they said.
+		"Service": true,
 	},
 	"Batch": {
 		"AccountID": true, "Region": true, "WindowStart": true, "WindowEnd": true,

@@ -577,3 +577,81 @@ func TestAnInterfaceWithNoInstanceIsNotAskedAbout(t *testing.T) {
 		t.Fatalf("asked about an instance that does not exist")
 	}
 }
+
+// TestAnInterfaceEndpointIsNamedAfterItsService: an account reaching Bedrock
+// over PrivateLink sends every model call to a private address in its own
+// subnet, with nothing in the flow record to say so. This is the one read that
+// can tell us, and the agents behind it are invisible without it.
+func TestAnInterfaceEndpointIsNamedAfterItsService(t *testing.T) {
+	iface := destEni("10.0.15.20", "VPC Endpoint Interface vpce-0b3d5f7a")
+	names := resolveNamesWith(t, &fakeEC2{
+		interfaces: []ec2types.NetworkInterface{iface},
+		endpoints: map[string]string{
+			"vpce-0b3d5f7a": "com.amazonaws.us-east-1.bedrock-runtime",
+		},
+	}, "10.0.15.20")
+	if names["10.0.15.20"] != "bedrock-runtime/vpc-endpoint" {
+		t.Fatalf("got %v", names)
+	}
+}
+
+// TestTheEndpointServiceTravels: the name is for the operator; the service is
+// what lets the classifier see the model traffic that is there.
+func TestTheEndpointServiceTravels(t *testing.T) {
+	iface := destEni("10.0.15.20", "VPC Endpoint Interface vpce-0b3d5f7a")
+	r := &DestinationResolver{API: &fakeEC2{
+		interfaces: []ec2types.NetworkInterface{iface},
+		endpoints: map[string]string{
+			"vpce-0b3d5f7a": "com.amazonaws.us-east-1.bedrock-runtime",
+		},
+	}}
+	got, err := r.Resolve(context.Background(), []string{"10.0.15.20"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Service != "com.amazonaws.us-east-1.bedrock-runtime" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+// TestAnEndpointWeCannotResolveKeepsItsId: the endpoint id is what the
+// description gave it, and it is what the register showed before this existed.
+// A failure here must not cost the customer a name they already had.
+func TestAnEndpointWeCannotResolveKeepsItsId(t *testing.T) {
+	iface := destEni("10.0.5.30", "VPC Endpoint Interface vpce-0a1b2c3d")
+	names := resolveNamesWith(t, &fakeEC2{
+		interfaces: []ec2types.NetworkInterface{iface},
+	}, "10.0.5.30")
+	if names["10.0.5.30"] != "vpce-0a1b2c3d/vpc-endpoint" {
+		t.Fatalf("got %v", names)
+	}
+}
+
+// TestEndpointsAreOnlyAskedAboutWhenThereAreSome: an account with no interface
+// endpoints must not pay a call for the ones it does not have.
+func TestEndpointsAreOnlyAskedAboutWhenThereAreSome(t *testing.T) {
+	api := &fakeEC2{interfaces: []ec2types.NetworkInterface{
+		destEni("10.0.4.21", "", "Name", "billing-api"),
+	}}
+	resolveNamesWith(t, api, "10.0.4.21")
+	if api.describedEndpoints != 0 {
+		t.Fatalf("asked about endpoints %d times on an account with none",
+			api.describedEndpoints)
+	}
+}
+
+// TestAPrivateLinkServiceSomebodyElsePublishedKeepsItsId: there is no service
+// segment to read, and inventing one would be a claim about somebody else's
+// account.
+func TestAPrivateLinkServiceSomebodyElsePublishedKeepsItsId(t *testing.T) {
+	iface := destEni("10.0.15.21", "VPC Endpoint Interface vpce-0c4e6a8b")
+	names := resolveNamesWith(t, &fakeEC2{
+		interfaces: []ec2types.NetworkInterface{iface},
+		endpoints: map[string]string{
+			"vpce-0c4e6a8b": "com.amazonaws.vpce.us-east-1.vpce-svc-0a1b2c3d",
+		},
+	}, "10.0.15.21")
+	if names["10.0.15.21"] != "vpce-svc-0a1b2c3d/vpc-endpoint" {
+		t.Fatalf("got %v", names)
+	}
+}

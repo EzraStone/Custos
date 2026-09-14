@@ -16,9 +16,30 @@ type fakeEC2 struct {
 	instances  map[string]string // instance id -> instance profile ARN
 	// instanceNames is what somebody called the instance, which is what
 	// destination naming reads when the interface itself carries nothing.
-	instanceNames      map[string]string
+	instanceNames map[string]string
+	// endpoints maps a vpce- id to the AWS endpoint service it is for, which
+	// is how the collector learns that a private address in the customer's own
+	// subnet is Bedrock.
+	endpoints          map[string]string
 	describes          int
 	describedInstances int
+	describedEndpoints int
+}
+
+func (f *fakeEC2) DescribeVpcEndpoints(_ context.Context, in *ec2.DescribeVpcEndpointsInput,
+	_ ...func(*ec2.Options)) (*ec2.DescribeVpcEndpointsOutput, error) {
+	f.describedEndpoints++
+	out := &ec2.DescribeVpcEndpointsOutput{}
+	for _, id := range in.VpcEndpointIds {
+		service, ok := f.endpoints[id]
+		if !ok {
+			continue
+		}
+		out.VpcEndpoints = append(out.VpcEndpoints, ec2types.VpcEndpoint{
+			VpcEndpointId: aws.String(id), ServiceName: aws.String(service),
+		})
+	}
+	return out, nil
 }
 
 func (f *fakeEC2) DescribeNetworkInterfaces(_ context.Context, in *ec2.DescribeNetworkInterfacesInput,

@@ -70,6 +70,12 @@ type NetworkAPI interface {
 		...func(*ec2.Options)) (*ec2.DescribeNetworkInterfacesOutput, error)
 	DescribeInstances(context.Context, *ec2.DescribeInstancesInput,
 		...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error)
+	// DescribeVpcEndpoints says which AWS service an interface endpoint is
+	// for. An account that reaches Bedrock over PrivateLink has every model
+	// call going to a private address in its own subnet, with nothing in the
+	// flow record to say so — this is the one call that can tell us.
+	DescribeVpcEndpoints(context.Context, *ec2.DescribeVpcEndpointsInput,
+		...func(*ec2.Options)) (*ec2.DescribeVpcEndpointsOutput, error)
 }
 
 // IdentityAPI reads roles, their tags, and what their policies permit.

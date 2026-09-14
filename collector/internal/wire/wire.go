@@ -127,6 +127,19 @@ type Destination struct {
 	// address names a different host in each region, and this is the field
 	// that stops one region's name being shown against another's traffic.
 	Region string `json:"region,omitempty"`
+
+	// Service is the AWS endpoint service this address is an interface
+	// endpoint for — `com.amazonaws.us-east-1.bedrock-runtime`, say.
+	//
+	// It travels because it changes what the destination *is* rather than
+	// only what it is called. An account reaching Bedrock over PrivateLink
+	// sends every model call to a private address in its own subnet with
+	// nothing in the flow record to say so, and this is the field that lets
+	// the classifier see the model traffic that is there.
+	//
+	// AWS's own service identifier, in AWS's own namespace. No SEC-18 surface:
+	// it describes what the customer is talking to, not what they said.
+	Service string `json:"service,omitempty"`
 }
 
 // Collection describes the collection itself rather than the account.
