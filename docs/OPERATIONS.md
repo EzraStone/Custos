@@ -222,6 +222,19 @@ agents is a conversation that ends a pilot.
 
 ## When something looks wrong
 
+**A spend figure that looks an order of magnitude wrong.**
+Check whether that agent's responses were read as streamed — the register
+carries `responses_streamed` per agent, the console says so beside the figure,
+and the report's limitations name the count. A streamed response is about 175
+wire bytes per output token and a whole one about four, and output tokens are
+priced highest, so the two readings are roughly forty-four times apart.
+
+Nothing in a flow record says which happened: it is inferred from the size of
+the inbound packets once the acknowledgements are subtracted. If the customer
+knows the workload and we read it wrong, that is worth hearing — it is the one
+input to this figure nobody supplied, and `docs/adr/0003-wire-bytes-to-tokens.md`
+records how the reading is made.
+
 **"0 agents found" on an account that definitely runs agents.**
 Check whether their model traffic leaves the VPC at all. An interface VPC
 endpoint for Bedrock puts every model call on a private address in their own
