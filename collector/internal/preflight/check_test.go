@@ -1096,3 +1096,70 @@ func TestANotReadyReportSaysWhatToFixFirst(t *testing.T) {
 		t.Fatalf("did not say what to fix, in order:\n%s", out)
 	}
 }
+
+// TestAnEndpointNobodyPublishedANameForIsAQuestion: three things can explain a
+// service somebody else published — the customer's tag, the publisher's DNS
+// name, or a person. This is the case where the first two are empty, and it is
+// the shape a model provider selling into AWS takes.
+func TestAnEndpointNobodyPublishedANameForIsAQuestion(t *testing.T) {
+	records := append(modelTraffic(1), gatewayTraffic("10.0.15.21", 140_000, 9_000)...)
+	report := RunWith(context.Background(), good(), stubFlows{records: records},
+		namedAs(map[string]wire.Destination{
+			"10.0.15.21": {
+				Address: "10.0.15.21", Name: "vpce-svc-0a1b2c3d", Kind: "vpc-endpoint",
+				Service: "com.amazonaws.vpce.us-east-1.vpce-svc-0a1b2c3d",
+			},
+		}), oneRegion{})
+
+	result := find(t, report, "endpoint services nobody published a name for")
+	if result.Status != Warn {
+		t.Fatalf("got %v: %+v", result.Status, result)
+	}
+	if !strings.Contains(result.Detail, "10.0.15.21") {
+		t.Fatalf("does not say which address: %q", result.Detail)
+	}
+	if !strings.Contains(result.Remedy, "declare") {
+		t.Fatalf("does not say what to do about it: %q", result.Remedy)
+	}
+}
+
+// TestAnEndpointSomebodyNamedIsNotAQuestion: the whole point of reading the
+// endpoint's tag and the publisher's DNS name is to stop asking. A check that
+// fires anyway would train the reader to skip it.
+func TestAnEndpointSomebodyNamedIsNotAQuestion(t *testing.T) {
+	records := append(modelTraffic(1), gatewayTraffic("10.0.15.21", 140_000, 9_000)...)
+	report := RunWith(context.Background(), good(), stubFlows{records: records},
+		namedAs(map[string]wire.Destination{
+			"10.0.15.21": {
+				Address: "10.0.15.21", Name: "api.modelprovider.example",
+				Kind:    "vpc-endpoint",
+				Service: "com.amazonaws.vpce.us-east-1.vpce-svc-0a1b2c3d",
+			},
+		}), oneRegion{})
+
+	for _, r := range report.Results {
+		if r.Name == "endpoint services nobody published a name for" {
+			t.Fatalf("asked about an endpoint that has a name: %+v", r)
+		}
+	}
+}
+
+// TestAWSOwnEndpointsAreNeverThisQuestion: com.amazonaws.<region>.s3 is not a
+// service somebody else published, and a check that swept them in would fire
+// on almost every account that has a VPC endpoint at all.
+func TestAWSOwnEndpointsAreNeverThisQuestion(t *testing.T) {
+	records := append(modelTraffic(1), gatewayTraffic("10.0.15.20", 140_000, 9_000)...)
+	report := RunWith(context.Background(), good(), stubFlows{records: records},
+		namedAs(map[string]wire.Destination{
+			"10.0.15.20": {
+				Address: "10.0.15.20", Name: "s3", Kind: "vpc-endpoint",
+				Service: "com.amazonaws.us-east-1.s3",
+			},
+		}), oneRegion{})
+
+	for _, r := range report.Results {
+		if r.Name == "endpoint services nobody published a name for" {
+			t.Fatalf("asked about an AWS endpoint: %+v", r)
+		}
+	}
+}

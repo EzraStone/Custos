@@ -536,6 +536,7 @@ func checkDestinationNames(ctx context.Context, report *Report, names Namer, rec
 	}
 
 	checkPrivateLinkModels(report, named)
+	checkPublishedEndpoints(report, named)
 
 	switch {
 	case len(covered) == 0:
@@ -755,6 +756,46 @@ func checkSampleScope(r *Report, cfg Config) {
 			"%s; %s are collected by a scan but were not sampled here, so "+
 			"those three results describe one region of this account",
 			cfg.Region, strings.Join(elsewhere, ", ")))
+}
+
+// checkPublishedEndpoints asks the one question about this account that
+// nothing in AWS can answer.
+//
+// A service somebody else published is named `com.amazonaws.vpce.<region>.
+// vpce-svc-0a1b2c3d`. Three things can explain one: the Name the customer put
+// on their own endpoint, the DNS name the publisher configured for the
+// service, or a person. When the first two are empty the third is all there
+// is, and that is worth one line at onboarding rather than a scope entry the
+// operator silently guesses at months later.
+//
+// It matters beyond readability. This is the exact shape a model provider
+// selling into AWS takes inside a customer's account: an opaque endpoint
+// carrying every model call, on a private address, with no service annotation
+// in the flow record. An account whose agents reach a provider this way looks
+// like an account with no model traffic, and the only thing that distinguishes
+// it from a genuinely quiet account is somebody saying so.
+func checkPublishedEndpoints(report *Report, named []wire.Destination) {
+	var opaque []string
+	for _, d := range named {
+		if !strings.HasPrefix(d.Service, "com.amazonaws.vpce.") {
+			continue
+		}
+		// Named after its own service id: nothing explained it.
+		if d.Name != d.Service[strings.LastIndex(d.Service, ".")+1:] {
+			continue
+		}
+		opaque = append(opaque, fmt.Sprintf("%s (%s)", d.Name, d.Address))
+	}
+	if len(opaque) == 0 {
+		return
+	}
+	sort.Strings(opaque)
+	report.add("endpoint services nobody published a name for", Warn,
+		strings.Join(opaque, "; "),
+		"AWS will not say what is behind these and neither will the "+
+			"endpoint's own tags - if one of them is a model provider, the "+
+			"agents calling it are invisible; name the endpoint in your own "+
+			"Terraform, or declare the address as a model gateway")
 }
 
 // sortedKeys is the set as a stable list, so a report does not reorder itself
