@@ -304,6 +304,66 @@ first.
 
 ---
 
+## Finding 9 — the same blindness as a hidden gateway, and AWS knew the answer
+
+An interface VPC endpoint puts an ENI in the customer's own subnet, so an
+account reaching Bedrock through one sends every model call to a private
+address inside its own VPC. The flow log's `pkt-dst-aws-service` annotation
+covers AWS's published address ranges and a VPC endpoint ENI is not in one, so
+the record says nothing at all. On the wire it is an internal API on 443.
+
+A corpus workload was added for it. **It scored 0.039 — the floor. Completely
+invisible**, and worse than the self-hosted-gateway agent at 0.168, which at
+least has more tools to leave a trace with.
+
+This matters more than the count suggests, for two reasons.
+
+**It is the default for the customer this product is sold to.** PrivateLink is
+what a security-conscious platform team turns on so that model traffic does not
+cross the public internet. The account most likely to have it is the account
+most likely to buy a tool for governing agents — and it is the account where a
+scan finds nothing and says so confidently.
+
+**Nobody has to be asked.** A self-hosted gateway is something only the
+customer knows about, which is why the declaration mechanism exists. A VPC
+endpoint for `com.amazonaws.<region>.bedrock-runtime` is something AWS knows
+about and will state, in one read-only call, about an ENI the account's own
+traffic already reached. Asking a customer to declare it is asking them for an
+answer we could have looked up.
+
+**After the lookup: 0.039 to 0.970, with no declaration.** The collector calls
+DescribeVpcEndpoints for the endpoints its own traffic pointed at, ships the
+service name alongside the address, and the classifier treats the last segment
+— `bedrock-runtime`, `bedrock-agent-runtime`, `sagemaker-runtime` — as model
+inference. Narrow on purpose, the same way `MODEL_RANGES` is: `bedrock` without
+the suffix is the control plane and is not inference, and an endpoint for
+`com.amazonaws.<region>.s3` is traffic to S3.
+
+Three things came out of it that were not the point:
+
+- **The question metric improved by asking less.** It was 2 questions and 1
+  worth asking; adding the endpoint made it 3 and 2; resolving it made it 2 and
+  1 again. The best outcome for a question is not having to ask it, and a test
+  now asserts this one is not asked — so a regression that stops resolving it
+  and starts asking instead scores as the near miss it is.
+- **Bedrock traffic had no provider at all.** `provider_for` decides `bedrock`
+  from the flow log's service annotation, and the one caller passed only the
+  address, so three of eight corpus agents were attributed to nobody and priced
+  at a fallback rate. The dollar figures do not move on the built-in table —
+  it prices bedrock and unknown identically — but an account that supplied its
+  own Bedrock rate was not getting it applied to the agents using Bedrock.
+- **The report has to say which endpoints were resolved.** Without that line,
+  an account with a resolved endpoint produces a report word for word identical
+  to one about an account with a hidden gateway and nothing found.
+
+What is still true: this is one endpoint service family. An account reaching a
+model provider through a PrivateLink service somebody else published —
+`com.amazonaws.vpce.<region>.vpce-svc-...` — is exactly as invisible as before,
+and AWS will not say what is behind it either. That one is still a question for
+a human.
+
+---
+
 ---
 
 ## Why this result should be believed, and where it should not
