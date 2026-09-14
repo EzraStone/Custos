@@ -31,6 +31,7 @@ custos diff                 →  what changed since last week
 | Scan comparison | Works, against the same region's previous scan |
 | Behavioural baselines and drift | Works, per region. A new region does not read as drift |
 | HTTP API, container image, retention | Works |
+| CLI parity with the API | Works. Grant, retire, status, drift and audit, enforced by a test |
 | Delivery to Slack and SIEM | Works, with per-channel suppression |
 | Scheduled collection | Works, cursor-tracked, no gaps on restart |
 | Multi-account tokens | Works. One token covers a named set of accounts |
@@ -38,7 +39,7 @@ custos diff                 →  what changed since last week
 | Enforcement checkpoint | **Not started.** §12: not before a paying customer |
 | Operator console | Works. Read, filter, sanction, retire, and see what changed. Served by the control plane |
 | Destination naming | Works. Measured: 100% of a nameable estate, from seven sources |
-| Customer-supplied pricing | Works. Per account, dated, superseded rather than overwritten |
+| Customer-supplied pricing | Works. Per account, dated, superseded rather than overwritten. Agents on a fallback rate are named |
 | Gateway questions in the report | Works. Their own section, ranked across regions, with what was ruled out |
 | Gateway questions, measured | Works. `make questions`: precision 0.50, real gateway first, was 0.00 and eighth |
 | Review band, kept and readable | Works. In the console, the CLI, and both reports, with evidence and recurrence |
@@ -138,6 +139,17 @@ A PrivateLink service somebody else published is not: `com.amazonaws.vpce.
 <region>.vpce-svc-0a1b2c3d` names nothing AWS will explain, so whatever is
 behind it is exactly as invisible as before. That one is still a question for a
 human, and it is the shape a model provider selling into AWS would take.
+
+**Spend is attributed to a provider now, and when it is not, the report says
+which agents.** Three of the corpus's eight agents reach Bedrock and all three
+were attributed to nobody, so their figures came from a fallback rate — which
+matters on an account that supplied its own pricing, because the report tells
+that account every figure is at their prices. It is true of every row except
+the ones whose provider nothing could name, and those are named now.
+
+What is still a guess is the conversion itself: wire bytes to tokens at four
+bytes each, which is right for English JSON and wrong for code, and wrong in
+a direction nobody has measured.
 
 **The byte ratios have only been measured against synthetic traffic.** The
 weights were fitted on the A0 corpus. What A0 establishes is that a separating
