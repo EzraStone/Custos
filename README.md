@@ -61,10 +61,17 @@ detector that asks "is this internal address your model gateway?" had never
 been scored against a corpus containing anything it could get wrong. Seven
 ordinary services were added — a log collector, a backup agent, a metrics
 pushgateway, a thumbnailer — and it asked nine questions, showed five, and
-ranked the real gateway eighth. It asks two now and the gateway is first;
-`make questions` reproduces it and CI prints it on every build. The fix is in
+ranked the real gateway eighth. It asks three now, two of them are real, and
+the one AWS would not explain is first; `make questions` reproduces it and CI
+prints it on every build. The fix is in
 [docs/A0-FINDINGS.md](docs/A0-FINDINGS.md) under Finding 8, with the three
 limitations that are still true.
+
+The same thing happened to the dollar figure. Every spend estimate divides wire
+bytes by four to get tokens, which is right for a JSON response and wrong for a
+streamed one by around forty-four times — a streaming API sends every token in
+its own frame, its own TLS record and its own packet. `make conversion` measures
+both, and the packet sizes turn out to say which happened. Finding 11.
 
 The result and its limitations are in [docs/A0-FINDINGS.md](docs/A0-FINDINGS.md).
 Two signals the original specification expected to carry the classifier were
@@ -76,7 +83,8 @@ make setup       # virtualenv, both Python packages
 make check       # lint and test everything
 make experiment  # run A0, print the G0 verdict, write a sample scan report
 make questions   # score the gateway detector against the noise corpus
-make gates       # all three measured numbers, in one run
+make conversion  # measure wire bytes per token, responses whole and streamed
+make gates       # all five measured numbers, in one run
 ```
 
 ## The loop, end to end
