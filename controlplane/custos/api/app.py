@@ -1131,6 +1131,12 @@ def _render(agent) -> dict:
         # region, so the scan's own figure is a fraction of the cost whenever
         # the agent runs in more than one.
         "est_monthly_spend_usd": agent.monthly_spend_usd,
+        # Which conversion produced the figure above. Forty-four times between
+        # the two answers, on the side that is priced highest, and inferred
+        # from packet sizes rather than supplied — so a client rendering the
+        # figure can say what it rests on, the same way it says when the rate
+        # was a fallback.
+        "responses_streamed": agent.model.streamed,
         # Which model providers this agent reached. `unknown` alone means the
         # figure above came from a fallback rate — the addresses are in no
         # published range we recognise and the flow log carried no AWS service

@@ -32,8 +32,8 @@ _COLUMNS = """
     id, account_id, principal, status, imprimatur_by, imprimatur_at,
     approved_tools, approved_data, key_id, first_seen, last_seen, source,
     confidence, evidence, owner_team, owner_human, compute, providers,
-    endpoints, est_monthly_spend, regions, region_spend, region_reach,
-    credentials, tools, data_stores, blast_radius
+    endpoints, est_monthly_spend, responses_streamed, regions, region_spend,
+    region_reach, credentials, tools, data_stores, blast_radius
 """
 
 
@@ -124,6 +124,7 @@ def _row_to_agent(row: sqlite3.Row) -> Agent:
             providers=set(loads(row["providers"])),
             endpoints=set(loads(row["endpoints"])),
             est_monthly_spend_usd=row["est_monthly_spend"],
+            streamed=bool(row["responses_streamed"]),
         ),
         reach=Reach(
             credentials=set(loads(row["credentials"])),
@@ -162,7 +163,7 @@ class AgentStore:
             self.conn.execute(
                 f"INSERT INTO agents ({_COLUMNS}) VALUES ("
                 "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-                "?, ?, ?)",
+                "?, ?, ?, ?)",
                 (
                     agent.id, agent.identity.account_id, agent.identity.principal,
                     str(agent.status), None, None, None, None, None,
@@ -172,7 +173,8 @@ class AgentStore:
                     agent.identity.owner_team, agent.identity.owner_human,
                     agent.identity.compute,
                     dumps(agent.model.providers), dumps(agent.model.endpoints),
-                    agent.model.est_monthly_spend_usd, dumps(agent.regions),
+                    agent.model.est_monthly_spend_usd,
+                    int(agent.model.streamed), dumps(agent.regions),
                     _json(agent.region_spend),
                     _reach_json(agent.region_reach),
                     dumps(agent.reach.credentials), dumps(agent.reach.tools),
@@ -200,7 +202,8 @@ class AgentStore:
                 last_seen = MAX(last_seen, ?),
                 confidence = ?, evidence = ?,
                 owner_team = ?, owner_human = ?, compute = ?,
-                providers = ?, endpoints = ?, est_monthly_spend = ?, regions = ?,
+                providers = ?, endpoints = ?, est_monthly_spend = ?,
+                responses_streamed = ?, regions = ?,
                 region_spend = ?, region_reach = ?,
                 credentials = ?, tools = ?, data_stores = ?, blast_radius = ?
             WHERE id = ?
@@ -212,6 +215,10 @@ class AgentStore:
                 agent.identity.compute or existing.identity.compute,
                 dumps(agent.model.providers), dumps(agent.model.endpoints),
                 agent.model.est_monthly_spend_usd,
+                # Which conversion produced the figure above, so the surfaces
+                # rendering it can say. Replaced rather than accumulated: it
+                # is a property of the most recent reading, like the figure.
+                int(agent.model.streamed),
                 # Accumulated, not replaced. A scan of a second region is not a
                 # correction of the first, and treating it as one would make an
                 # agent appear to move between regions as it was rescanned.
