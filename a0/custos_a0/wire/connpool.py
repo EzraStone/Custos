@@ -18,6 +18,12 @@ carries IP and TCP headers. The reverse direction carries pure ACKs. A new
 connection additionally pays a handshake, which is large and asymmetric — the
 certificate chain dominates and arrives inbound.
 
+**Streaming.** A third effect, added later and larger than either. A model API
+that streams flushes after every token, so each token becomes its own SSE
+event, its own TLS record and its own TCP segment: about 187 wire bytes for a
+four-byte token. It applies to the response side of every model call, which is
+the denominator of the signal the whole classifier reads.
+
 The handshake matters for a reason that is not obvious: it puts a floor under
 the inbound byte count of any short-lived connection, which compresses the
 egress-to-ingress ratio that the classifier reads. Ignoring it would make agents
@@ -57,6 +63,64 @@ def framed(payload: int) -> tuple[int, int]:
     tls = payload + ((payload + TLS_RECORD_MAX - 1) // TLS_RECORD_MAX) * TLS_RECORD_OVERHEAD
     packets = max(1, (tls + MSS - 1) // MSS)
     return tls + packets * IP_TCP_HEADER, packets
+
+
+SSE_EVENT_OVERHEAD = 114
+"""Bytes of Server-Sent Events envelope around one streamed token.
+
+Counted from the smaller of the two shapes a model API actually writes, which
+is Anthropic's:
+
+    event: content_block_delta\n
+    data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"..."}}\n
+    \n
+
+27 bytes for the event line, 6 for `data: `, 79 for the JSON around the text,
+and two newlines. OpenAI's `chat.completion.chunk` carries the request id, the
+model name, a system fingerprint and a choices array on every token, and comes
+to roughly double. The smaller one is used here deliberately: this number is
+about to make a point, and a number chosen to make a point is worth less than
+the one that understates it.
+
+What it is not is an assumption. Every model provider's streaming API is SSE
+over HTTP, the envelope is documented, and this is arithmetic on it.
+"""
+
+
+def streamed(payload: int, events: int) -> tuple[int, int]:
+    """Return (wire_bytes, packets) for a response delivered as `events` flushes.
+
+    The difference from `framed` is the whole point of this function, and it is
+    large enough to be worth stating plainly.
+
+    `framed` assumes a response arrives as one contiguous body: the sender
+    fills 16KB TLS records and 1460-byte segments, and per-token overhead
+    rounds to nothing. That is what a non-streaming JSON response does.
+
+    A streaming response does not. The server flushes after every token,
+    because the entire reason to stream is that the next token reaches the
+    client without waiting for the rest — so each token becomes its own SSE
+    event, its own TLS record, and its own TCP segment. The token itself is
+    about four bytes. The envelope around it is 114, the TLS record header is
+    29, and the IP and TCP headers are 40.
+
+    So a streamed token costs roughly 187 bytes on the wire where the corpus
+    has always modelled four, and the corpus models the response side of every
+    model call in it. Whether real agent traffic streams is a question about
+    customers rather than about arithmetic, and it is unanswered — which is why
+    this is a function the corpus can be run with and without rather than a
+    change to the byte model.
+    """
+    if payload <= 0:
+        return 0, 0
+    if events <= 0:
+        return framed(payload)
+    body = payload + events * SSE_EVENT_OVERHEAD
+    # One TLS record and one segment per flush. A flush larger than a segment
+    # still costs its own packets, which is what max() keeps honest.
+    per_event = max(1, ((payload // events) + SSE_EVENT_OVERHEAD + MSS - 1) // MSS)
+    packets = events * per_event
+    return body + events * TLS_RECORD_OVERHEAD + packets * IP_TCP_HEADER, packets
 
 
 def ack_traffic(data_packets: int) -> tuple[int, int]:
