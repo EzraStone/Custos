@@ -176,6 +176,17 @@ class Question:
     address: str
     question: str
     reached_by: tuple[str, ...] = ()
+    published_endpoint: bool = False
+    """AWS called this address an interface endpoint for a service another
+    account published, and would not say whose.
+
+    Worth its own badge rather than only a sentence in the question. The other
+    questions here are about machines inside the account, which somebody can
+    go and look at; this one cannot be answered that way by anybody, because
+    the thing behind it belongs to another company. That is a different kind
+    of unknown and the reader should be able to see which they are looking at
+    without reading the paragraph.
+    """
 
 
 def _review_row(review: Review) -> str:
@@ -789,7 +800,8 @@ def _questions_section(questions: list[Question]) -> str:
     <article class="finding question">
       <header>
         <h3 class="mono">{_e(q.address)}</h3>
-        <span class="radius">needs an answer</span>
+        <span class="radius">{"another account's service"
+                              if q.published_endpoint else "needs an answer"}</span>
       </header>
       <p>{_e(q.question)}</p>
       {f'<p class="who">Reached by {_e(", ".join(_short_principal(p) for p in q.reached_by))}.</p>'

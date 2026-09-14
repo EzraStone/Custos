@@ -896,7 +896,8 @@ def create_app(
         ]
         questions = [
             Question(address=q["address"], question=q["question"],
-                     reached_by=tuple(q["blind_principals"]))
+                     reached_by=tuple(q["blind_principals"]),
+                     published_endpoint=q["published_endpoint"])
             for q in _open_questions(account_id)
         ]
 

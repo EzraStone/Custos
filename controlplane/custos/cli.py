@@ -143,7 +143,8 @@ def _report_questions(conn, account_id: str) -> list:
 
     return [
         Question(address=c.address, question=c.question,
-                 reached_by=c.blind_principals)
+                 reached_by=c.blind_principals,
+                 published_endpoint=c.published_endpoint)
         for c in _open_questions(conn, account_id)
     ]
 
