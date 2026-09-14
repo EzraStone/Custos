@@ -174,11 +174,17 @@ the status control. Everything else about it is a guess.
 
 Nothing depends on it. The CLI and the HTML report still do everything it does.
 
-**An agent reaching a provider over IPv6 is invisible.** Every range in the
-model endpoint catalogue is IPv4, the providers are reachable over IPv6, and
-there are no published v6 ranges we can verify. Guessing one would be worse
-than having none: a false positive manufactures an agent out of unrelated
+**An agent reaching a third-party provider over IPv6 is invisible.** Every
+range in the model endpoint catalogue is IPv4, the providers are reachable over
+IPv6, and there are no published v6 ranges we can verify. Guessing one would be
+worse than having none: a false positive manufactures an agent out of unrelated
 traffic, which is why the catalogue is narrow in the first place.
+
+AWS's own model endpoints are not affected and the report used to say they
+were. `pkt-dst-aws-service` is an annotation about the destination rather than
+about its address family, so Bedrock over IPv6 is recognised exactly as Bedrock
+over IPv4 is. Overstating a limitation costs the limitations section the same
+credibility that understating one does.
 
 It has the same shape as the gateway problem and gets the same treatment —
 `--check` counts an account's public IPv6 destinations before the scan and the

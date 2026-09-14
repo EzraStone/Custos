@@ -269,10 +269,22 @@ func checkForIPv6(report *Report, records []wire.FlowRecord) {
 		if r.Direction == wire.Ingress {
 			peer = r.SrcAddr
 		}
+		service := r.DstAWSService
+		if r.Direction == wire.Ingress {
+			service = r.SrcAWSService
+		}
 		addr, err := netip.ParseAddr(peer)
 		// Private v6 classifies fine. Counting it would put this warning on
 		// every dual-stack account whether or not it had a blind spot.
 		if err != nil || !addr.Is6() || addr.IsPrivate() || addr.IsLinkLocalUnicast() {
+			continue
+		}
+		// Nor is an AWS destination a blind spot. The service annotation
+		// describes the destination, not its address family, so Bedrock over
+		// IPv6 is recognised exactly as Bedrock over IPv4 is — and warning
+		// about it would be claiming a blindness that does not exist, in the
+		// one report a customer reads to decide whether to trust the rest.
+		if service != "" {
 			continue
 		}
 		seen[peer] = true
@@ -285,9 +297,12 @@ func checkForIPv6(report *Report, records []wire.FlowRecord) {
 	report.add("ipv6 destinations", Warn,
 		fmt.Sprintf("%d public IPv6 addresses reached; the model endpoint "+
 			"catalogue is IPv4 only", len(seen)),
-		"an agent reaching a provider over IPv6 will not appear in the report "+
-			"at all; if these workloads call model APIs, prefer IPv4 egress "+
-			"for them or tell us the addresses so they can be declared")
+		"an agent reaching Anthropic or OpenAI over IPv6 will not appear in "+
+			"the report at all; AWS's own model endpoints are unaffected, "+
+			"because the flow log names the service rather than the address "+
+			"family. If these workloads call third-party model APIs, prefer "+
+			"IPv4 egress for them or tell us the addresses so they can be "+
+			"declared")
 }
 
 // checkFormat says what the account's flow log format costs, before the scan.

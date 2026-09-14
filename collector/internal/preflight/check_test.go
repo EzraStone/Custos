@@ -964,3 +964,37 @@ func (n *namedNamer) Resolve(_ context.Context, addresses []string) ([]wire.Dest
 	}
 	return out, nil
 }
+
+// TestAnAwsDestinationOverIpv6IsNotABlindSpot: the service annotation
+// describes the destination, not its address family, so Bedrock over IPv6 is
+// recognised exactly as Bedrock over IPv4 is. Warning about it would claim a
+// blindness that does not exist, in the report a customer reads to decide
+// whether to trust the rest.
+func TestAnAwsDestinationOverIpv6IsNotABlindSpot(t *testing.T) {
+	records := []wire.FlowRecord{{
+		Direction: wire.Egress, DstAddr: "2600:1f18::1", DstPort: 443,
+		DstAWSService: "BEDROCK", Bytes: 140_000, SrcAddr: "10.0.1.5",
+	}}
+	result := find(t, run(good(), stubFlows{records: append(modelTraffic(1), records...)}),
+		"ipv6 destinations")
+	if result.Status != Pass {
+		t.Fatalf("warned about an AWS destination: %+v", result)
+	}
+}
+
+// TestAnUnannotatedIpv6DestinationStillWarns: a third-party provider reached
+// over IPv6 has no annotation and no published range we can verify.
+func TestAnUnannotatedIpv6DestinationStillWarns(t *testing.T) {
+	records := []wire.FlowRecord{{
+		Direction: wire.Egress, DstAddr: "2606:4700::6810:85e5", DstPort: 443,
+		Bytes: 140_000, SrcAddr: "10.0.1.5",
+	}}
+	result := find(t, run(good(), stubFlows{records: append(modelTraffic(1), records...)}),
+		"ipv6 destinations")
+	if result.Status != Warn {
+		t.Fatalf("did not warn: %+v", result)
+	}
+	if !strings.Contains(result.Remedy, "Anthropic or OpenAI") {
+		t.Fatalf("remedy overstates what is blind: %q", result.Remedy)
+	}
+}
