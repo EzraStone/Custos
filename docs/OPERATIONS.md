@@ -127,16 +127,25 @@ with separate deployment pipelines will do; the control plane keys a batch on
 
 ### Re-applying the customer's Terraform
 
-Needed once, for every customer onboarded before `ec2:DescribeVpcEndpoints`
-was added to the role. Their role refuses that call, the collector swallows
-the refusal — a naming failure must never cost a scan — and if their model
-traffic goes to Bedrock over PrivateLink, every agent behind it stays
-invisible with nothing in the report to say so.
+Needed for every customer onboarded before `ec2:DescribeVpcEndpoints` and
+`ec2:DescribeVpcEndpointServices` were added to the role. Their role refuses
+those calls, the collector swallows the refusal — a naming failure must never
+cost a scan — and what it costs is silent.
 
-`custos-collector --check` names it: an interface endpoint that comes back with
-a `vpce-` id and no service is what the refusal looks like from outside. The
-remedy is one `terraform apply` in their account and nothing else; the role's
-other permissions are unchanged.
+The first one is the expensive miss. If their model traffic goes to Bedrock
+over PrivateLink, every agent behind it stays invisible with nothing in the
+report to say so. `custos-collector --check` names it under `model traffic over
+privatelink`: an interface endpoint that comes back with a `vpce-` id and no
+service is what that refusal looks like from outside.
+
+The second costs a name rather than a finding. Without it, a PrivateLink
+service another account published stays `vpce-svc-0a1b2c3d` in the approval
+scope even where the publisher configured a DNS name that says what it is.
+That is the same answer the account had before the read existed, so nothing
+looks wrong — which is the reason to do this rather than wait.
+
+The remedy is one `terraform apply` in their account and nothing else; the
+role's other permissions are unchanged.
 
 Worth doing proactively rather than waiting for the line to appear, because the
 account it matters for is the one already running — and nobody re-runs

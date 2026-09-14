@@ -52,7 +52,7 @@ an email address and an API key.
 | VPC Flow Logs | Addresses, ports, byte counts, packet counts, timings, TCP flags |
 | CloudTrail | Which principal is attached to which network interface |
 | IAM (read-only) | Role tags, IAM paths, attached policy actions |
-| EC2 network metadata | What the interfaces your traffic reached are called, and which AWS service an interface VPC endpoint is for |
+| EC2 network metadata | What the interfaces your traffic reached are called, which AWS service an interface VPC endpoint is for, and the DNS name the publisher of a third-party endpoint service configured |
 | ALB access logs *(optional)* | Timestamp, target address, and two byte counts — nothing else |
 
 **Why we ask what an endpoint is for.** If your model calls go to Bedrock over
@@ -62,6 +62,14 @@ no agents, confidently and wrongly. `ec2:DescribeVpcEndpoints` is the one call
 that answers it, and it is asked only about the endpoints your own traffic
 already reached. Without it, the alternative is asking you to tell us your
 model endpoints by hand.
+
+The second read, `ec2:DescribeVpcEndpointServices`, is for the endpoints AWS's
+own naming does not explain. A service another AWS account published is named
+`com.amazonaws.vpce.<region>.vpce-svc-0a1b2c3d`, which tells an operator
+approving a scope nothing at all — and its own record carries the DNS name its
+publisher configured, which for a provider selling into AWS is their API
+hostname. Asked only for published services you have not already tagged
+yourself, so an account whose endpoints are all AWS's own makes no extra call.
 
 Flow logs are read from wherever you already deliver them — set
 `CUSTOS_FLOW_LOGS` to a CloudWatch Logs group name or to `s3://bucket/prefix`.
