@@ -314,3 +314,50 @@ def test_questions_are_ranked_across_regions_not_grouped_by_them(candidates):
     assert [c["address"] for c in candidates.latest_for(ACCOUNT)] == [
         "10.0.7.40", "10.1.7.40",
     ]
+
+
+def test_a_door_outranks_a_louder_internal_address_across_regions(candidates):
+    """The detector's ranking within a region, applied across them.
+
+    Two places have to agree on what "first" means: the detector that ranks a
+    scan's questions and the store that merges every region's open ones. They
+    are separate code and the second is what an operator actually reads weeks
+    later, so a rule added to one and not the other is invisible until somebody
+    compares them.
+    """
+    from custos.gateway import Candidate
+
+    loud = Candidate(
+        address="10.0.7.40", egress=90_000_000, ingress=10_000_000,
+        principals=("role/a", "role/b"), blind_principals=("role/a", "role/b"),
+        interleave=0.9,
+    )
+    door = Candidate(
+        address="10.1.15.21", egress=2_000_000, ingress=500_000,
+        principals=("role/c",), blind_principals=("role/c",), interleave=0.9,
+        published_endpoint=True,
+    )
+    candidates.record(1, ACCOUNT, [loud], region="us-east-1")
+    candidates.record(2, ACCOUNT, [door], region="eu-west-1")
+
+    asked = candidates.latest_for(ACCOUNT)
+    assert [c["address"] for c in asked] == ["10.1.15.21", "10.0.7.40"]
+    assert asked[0]["published_endpoint"] is True
+    assert asked[1]["published_endpoint"] is False
+
+
+def test_a_stored_question_rebuilds_into_the_candidate_it_came_from(candidates):
+    """A declaration is matched against a question that was asked, which means
+    a row has to turn back into a Candidate. A field that writes and does not
+    read is a field the matching silently ignores."""
+    from custos.gateway import Candidate
+
+    door = Candidate(
+        address="10.0.15.21", egress=9_000_000, ingress=1_000_000,
+        principals=("role/c",), blind_principals=("role/c",), interleave=0.9,
+        published_endpoint=True,
+    )
+    candidates.record(1, ACCOUNT, [door], region="us-east-1")
+    rebuilt = Candidate.from_row(candidates.latest_for(ACCOUNT)[0])
+    assert rebuilt.published_endpoint
+    assert rebuilt.question == door.question
