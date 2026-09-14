@@ -104,9 +104,9 @@ accident.
 
 ## SEC-23 — Only recognised names leave the account
 
-The collector names a destination from an ENI's `Name` tag or from a
-description matching a shape AWS itself writes. A description it does not
-recognise is not sent; the address is, and the register shows that.
+The collector names a destination from one of seven sources, and sends nothing
+that is not one of them. What it cannot name, it does not describe: the address
+is sent and the register shows that.
 
 An ENI description is a free-text field a person typed into. What people
 actually put there is "temp box for INC-4471, ask Sam before deleting" — a
@@ -115,13 +115,36 @@ infrastructure metadata, and shipping it would quietly widen what leaves a
 customer account from *what their software is* to *what their engineers wrote
 down*, which is the line the whole ethical position rests on.
 
-The Name tag is treated differently on purpose: it is the label a customer
-chose for the thing, which is the closest available answer to "what is this
-service called". Descriptions are matched against known AWS shapes and parsed,
-never forwarded whole.
+Three of the sources are labels a customer chose, and are trusted for the
+reason the Name tag always was — they are the closest available answer to "what
+is this service called":
+
+- the ENI's `Name` tag
+- the `Name` tag of the instance it is attached to
+- the name of the one security group somebody named, when nothing else
+  answered and exactly one group is not generated
+
+Four are AWS's own words about AWS's own resources, and carry no free text at
+all:
+
+- a description matching a shape AWS writes, parsed rather than forwarded, and
+  anchored at both ends so a note that begins with a known prefix is not read
+  as one
+- the interface type, a closed enum
+- tags in the reserved `aws:` namespace, which a customer cannot write
+- the endpoint service an interface VPC endpoint is for
+
+Two exclusions matter as much as the list. A name that is an identifier —
+`i-0a1b2c3d4e5f60718`, `tf-2026081409...` — is refused, because the scope has
+one readable column and a second copy of the address is not worth spending it
+on. And a generated security group name, `default` or `launch-wizard-3`, is
+what AWS called it rather than what anybody called the service.
 
 **Enforced by:** `TestFreeTextIsNotForwarded`, `TestKnownAWSShapesAreParsed`,
-`TestPublicAddressesAreNotAskedAbout`.
+`TestPublicAddressesAreNotAskedAbout`,
+`TestFreeTextStartingWithAKnownShapeIsNotParsed`,
+`TestANameTagThatIsAnIdentifierIsNotAName`,
+`TestAGeneratedGroupNameNamesNothing`.
 
 ## SEC-24 — A declaration cannot manufacture agents where it was not made
 
