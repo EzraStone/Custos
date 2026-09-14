@@ -29,7 +29,12 @@ func destEni(address, description string, tags ...string) ec2types.NetworkInterf
 
 func resolveNames(t *testing.T, ifaces []ec2types.NetworkInterface, addresses ...string) map[string]string {
 	t.Helper()
-	r := &DestinationResolver{API: &fakeEC2{interfaces: ifaces}}
+	return resolveNamesWith(t, &fakeEC2{interfaces: ifaces}, addresses...)
+}
+
+func resolveNamesWith(t *testing.T, api *fakeEC2, addresses ...string) map[string]string {
+	t.Helper()
+	r := &DestinationResolver{API: api}
 	got, err := r.Resolve(context.Background(), addresses)
 	if err != nil {
 		t.Fatal(err)
@@ -509,5 +514,66 @@ func TestANameTagStillWinsOverWhatAwsWrote(t *testing.T) {
 	names := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.13.4")
 	if names["10.0.13.4"] != "checkout-api/tag" {
 		t.Fatalf("got %v", names)
+	}
+}
+
+// TestAnInterfaceIsNamedAfterTheInstanceBehindIt: the common case in a real
+// account. The console shows a Name field when launching an instance and does
+// not show one for the interface it creates, so an account with careful tag
+// hygiene still has ENIs named nothing at all.
+func TestAnInterfaceIsNamedAfterTheInstanceBehindIt(t *testing.T) {
+	iface := destEni("10.0.14.1", "")
+	iface.Attachment = &ec2types.NetworkInterfaceAttachment{InstanceId: aws.String("i-0a1b")}
+	names := resolveNamesWith(t, &fakeEC2{
+		interfaces:    []ec2types.NetworkInterface{iface},
+		instanceNames: map[string]string{"i-0a1b": "checkout-api"},
+	}, "10.0.14.1")
+	if names["10.0.14.1"] != "checkout-api/instance" {
+		t.Fatalf("got %v", names)
+	}
+}
+
+// TestTheInstanceIsOnlyAskedAboutWhenNothingElseAnswered: the call is free of
+// new permissions but not free of quota. An account with tidy ENIs must never
+// pay for it.
+func TestTheInstanceIsOnlyAskedAboutWhenNothingElseAnswered(t *testing.T) {
+	tagged := destEni("10.0.4.21", "", "Name", "billing-api")
+	tagged.Attachment = &ec2types.NetworkInterfaceAttachment{InstanceId: aws.String("i-0a1b")}
+	api := &fakeEC2{
+		interfaces:    []ec2types.NetworkInterface{tagged},
+		instanceNames: map[string]string{"i-0a1b": "something-else"},
+	}
+	names := resolveNamesWith(t, api, "10.0.4.21")
+
+	if names["10.0.4.21"] != "billing-api/tag" {
+		t.Fatalf("got %v", names)
+	}
+	if api.describedInstances != 0 {
+		t.Fatalf("asked about the instance %d times when the ENI was named",
+			api.describedInstances)
+	}
+}
+
+// TestAnInstanceTaggedWithItsOwnIdIsNotAName: the same rule one level up.
+func TestAnInstanceTaggedWithItsOwnIdIsNotAName(t *testing.T) {
+	iface := destEni("10.0.14.2", "")
+	iface.Attachment = &ec2types.NetworkInterfaceAttachment{InstanceId: aws.String("i-0b2c")}
+	names := resolveNamesWith(t, &fakeEC2{
+		interfaces:    []ec2types.NetworkInterface{iface},
+		instanceNames: map[string]string{"i-0b2c": "i-0b2c3d4e5f6071829"},
+	}, "10.0.14.2")
+	if len(names) != 0 {
+		t.Fatalf("got %v", names)
+	}
+}
+
+// TestAnInterfaceWithNoInstanceIsNotAskedAbout: a NAT gateway, a load balancer
+// and a VPC endpoint all have attachments that name no instance, and they were
+// named by their type before this ran.
+func TestAnInterfaceWithNoInstanceIsNotAskedAbout(t *testing.T) {
+	api := &fakeEC2{interfaces: []ec2types.NetworkInterface{destEni("10.0.11.8", "")}}
+	resolveNamesWith(t, api, "10.0.11.8")
+	if api.describedInstances != 0 {
+		t.Fatalf("asked about an instance that does not exist")
 	}
 }

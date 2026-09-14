@@ -30,7 +30,11 @@ import (
 type estateEni struct {
 	iface ec2types.NetworkInterface
 	want  string
-	why   string
+	// instance is what the instance behind this interface is called, when
+	// there is one and somebody named it. Interfaces are tagged far less often
+	// than the instances they are attached to, and this is what that costs.
+	instance string
+	why      string
 }
 
 func withType(i ec2types.NetworkInterface, kind ec2types.NetworkInterfaceType) ec2types.NetworkInterface {
@@ -211,9 +215,21 @@ func estate() []estateEni {
 
 		// --- tagged on the instance, not the interface ----------------------
 		{
-			iface: attachedTo(destEni("10.0.14.1", ""), "i-0a1b2c3d4e5f60718"),
+			iface:    attachedTo(destEni("10.0.14.1", ""), "i-0a1b2c3d4e5f60718"),
+			want:     "checkout-api",
+			instance: "checkout-api",
+			why:      "THE COMMON CASE. People tag instances, not interfaces, and the ENI carries only the attachment",
+		},
+		{
+			iface:    attachedTo(destEni("10.0.14.2", ""), "i-0b2c3d4e5f6071829"),
+			want:     "",
+			instance: "i-0b2c3d4e5f6071829",
+			why:      "an instance tagged with its own id. The same rule applies one level up",
+		},
+		{
+			iface: attachedTo(destEni("10.0.14.3", ""), "i-0c3d4e5f60718293a"),
 			want:  "",
-			why:   "THE COMMON CASE. People tag instances, not interfaces, and the ENI carries only the attachment",
+			why:   "an instance nobody tagged either. The bottom of the search",
 		},
 
 		// --- named, and no more readable than an address --------------------
@@ -275,7 +291,7 @@ func TestTheEstateHasTheTagHygieneItClaims(t *testing.T) {
 // threshold somebody picked stops meaning anything the moment it is met.
 //
 //	6 of 13 — the Name tag and four of the five AWS description shapes
-const readableFloor = 19
+const readableFloor = 20
 
 // TestScopeReadability is the measurement, and the only number in this package
 // that a customer feels directly. An entry an operator cannot read is an
@@ -290,7 +306,14 @@ func TestScopeReadability(t *testing.T) {
 		addresses = append(addresses, *e.iface.PrivateIpAddresses[0].PrivateIpAddress)
 	}
 
-	names := resolveNames(t, ifaces, addresses...)
+	instanceNames := map[string]string{}
+	for _, e := range all {
+		if e.instance != "" {
+			instanceNames[*e.iface.Attachment.InstanceId] = e.instance
+		}
+	}
+	names := resolveNamesWith(t, &fakeEC2{interfaces: ifaces, instanceNames: instanceNames},
+		addresses...)
 
 	var wrong, missing []string
 	readable, nameable := 0, 0

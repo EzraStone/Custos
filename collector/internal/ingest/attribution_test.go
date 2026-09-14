@@ -14,7 +14,11 @@ import (
 type fakeEC2 struct {
 	interfaces []ec2types.NetworkInterface
 	instances  map[string]string // instance id -> instance profile ARN
-	describes  int
+	// instanceNames is what somebody called the instance, which is what
+	// destination naming reads when the interface itself carries nothing.
+	instanceNames      map[string]string
+	describes          int
+	describedInstances int
 }
 
 func (f *fakeEC2) DescribeNetworkInterfaces(_ context.Context, in *ec2.DescribeNetworkInterfacesInput,
@@ -60,12 +64,16 @@ func (f *fakeEC2) DescribeNetworkInterfaces(_ context.Context, in *ec2.DescribeN
 
 func (f *fakeEC2) DescribeInstances(_ context.Context, in *ec2.DescribeInstancesInput,
 	_ ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error) {
+	f.describedInstances++
 	out := &ec2.DescribeInstancesOutput{}
 	var instances []ec2types.Instance
 	for _, id := range in.InstanceIds {
 		instance := ec2types.Instance{InstanceId: aws.String(id)}
 		if arn, ok := f.instances[id]; ok {
 			instance.IamInstanceProfile = &ec2types.IamInstanceProfile{Arn: aws.String(arn)}
+		}
+		if name, ok := f.instanceNames[id]; ok {
+			instance.Tags = []ec2types.Tag{{Key: aws.String("Name"), Value: aws.String(name)}}
 		}
 		instances = append(instances, instance)
 	}

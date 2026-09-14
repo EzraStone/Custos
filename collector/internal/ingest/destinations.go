@@ -88,13 +88,27 @@ func (r *DestinationResolver) Resolve(ctx context.Context, addresses []string) (
 		}
 
 		resolved := map[string]wire.Destination{}
+		// Interfaces nothing on the interface itself could name, which are
+		// attached to an instance. Resolved in one further call below.
+		byInstance := map[string][]string{}
 		for _, iface := range ifaces {
 			name, kind := nameOf(iface)
 			if name == "" {
+				if id := attachedInstance(iface); id != "" {
+					byInstance[id] = append(byInstance[id], privateAddresses(iface)...)
+				}
 				continue
 			}
 			for _, address := range privateAddresses(iface) {
 				resolved[address] = wire.Destination{Address: address, Name: name, Kind: kind}
+			}
+		}
+
+		for id, name := range r.instanceNames(ctx, byInstance) {
+			for _, address := range byInstance[id] {
+				resolved[address] = wire.Destination{
+					Address: address, Name: name, Kind: "instance",
+				}
 			}
 		}
 
@@ -457,4 +471,84 @@ func byManagedTag(tags []ec2types.Tag) (name, kind string) {
 		}
 	}
 	return "", ""
+}
+
+// attachedInstance is the instance an interface belongs to, or "".
+//
+// Only interfaces attached to an instance are worth a second call. A NAT
+// gateway, a load balancer and a VPC endpoint all have attachments that name
+// no instance, and they were already named by their type.
+func attachedInstance(iface ec2types.NetworkInterface) string {
+	if iface.Attachment == nil || iface.Attachment.InstanceId == nil {
+		return ""
+	}
+	return strings.TrimSpace(*iface.Attachment.InstanceId)
+}
+
+// instanceNames asks what the instances behind these interfaces are called.
+//
+// The common case in a real account, and the one the estate fixture calls out:
+// people tag instances, not interfaces. The console shows a Name field when
+// launching an instance and does not show one for the interface it creates, so
+// an account with careful tag hygiene still has ENIs named nothing at all.
+//
+// Two things make the cost acceptable. The call is DescribeInstances, which
+// the collector already makes and is already granted for source attribution —
+// this adds no permission. And it is only made for interfaces that nothing
+// else could name, so an account with tidy ENIs never pays for it.
+//
+// A failure is not an error. The addresses fall back to being shown as
+// addresses, which is what they would have been anyway, and a scan is not
+// worth losing over a name.
+func (r *DestinationResolver) instanceNames(
+	ctx context.Context, byInstance map[string][]string,
+) map[string]string {
+	if len(byInstance) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(byInstance))
+	for id := range byInstance {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	names := map[string]string{}
+	var token *string
+	for {
+		out, err := r.API.DescribeInstances(ctx, &ec2.DescribeInstancesInput{
+			InstanceIds: ids, NextToken: token,
+		})
+		if err != nil {
+			return names
+		}
+		for _, reservation := range out.Reservations {
+			for _, instance := range reservation.Instances {
+				if instance.InstanceId == nil {
+					continue
+				}
+				if name := instanceName(instance.Tags); name != "" {
+					names[*instance.InstanceId] = name
+				}
+			}
+		}
+		if out.NextToken == nil || *out.NextToken == "" {
+			return names
+		}
+		token = out.NextToken
+	}
+}
+
+// instanceName applies the same rule to an instance's tags as to an
+// interface's: the Name a person chose, and not an identifier their tooling
+// wrote into the same field.
+func instanceName(tags []ec2types.Tag) string {
+	for _, tag := range tags {
+		if tag.Key == nil || *tag.Key != "Name" || tag.Value == nil {
+			continue
+		}
+		if name := strings.TrimSpace(*tag.Value); name != "" && !isResourceID(name) {
+			return name
+		}
+	}
+	return ""
 }
