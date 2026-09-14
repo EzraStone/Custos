@@ -65,6 +65,14 @@ class Window:
     tool_classes: set[DestinationClass] = field(default_factory=set)
     tool_addresses: set[str] = field(default_factory=set)
     model_addresses: set[str] = field(default_factory=set)
+    model_services: dict[str, str] = field(default_factory=dict)
+    """AWS service annotation per model address, when the flow log carried one.
+
+    Kept because it is the only place the provider is knowable. A Bedrock
+    endpoint is not in a published range Custos can recognise from the address
+    — AWS says which service it is in `pkt-dst-aws-service`, and dropping that
+    here left every Bedrock agent's spend estimated at the rate for a provider
+    nobody could name."""
     tool_seen: dict[str, Seen] = field(default_factory=dict)
     """Per-address facts, for naming a destination and for saying what it is.
 
@@ -188,6 +196,8 @@ def build_windows(
 
         if cls is DestinationClass.MODEL:
             w.model_addresses.add(peer)
+            if peer_service:
+                w.model_services[peer] = peer_service
             if egress:
                 w.model_egress += r.bytes
                 if r.tcp_flags & SYN:

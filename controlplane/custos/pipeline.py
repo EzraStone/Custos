@@ -158,6 +158,9 @@ def to_scan_input(
         destination_names={
             d.address: d.name for d in batch.destinations if d.name
         },
+        destination_services={
+            d.address: d.service for d in batch.destinations if d.service
+        },
         declared=_with_aws_endpoints(
             declared if declared is not None else Declared(), batch
         ),

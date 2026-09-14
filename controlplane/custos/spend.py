@@ -114,10 +114,27 @@ def estimate_monthly_usd(
     return window_cost * (30.0 / observed_days)
 
 
-def provider_for(address: str, aws_service: str = "") -> str:
-    """Best-effort provider label from what a flow log carries."""
+def provider_for(address: str, aws_service: str = "", endpoint_service: str = "") -> str:
+    """Best-effort provider label from what a flow log and an ENI carry.
+
+    Three sources, because a model endpoint can be reached three ways. A public
+    provider range is recognisable from the address. AWS's own inference
+    endpoints are not — 52.94.236.10 is in no range we publish — and are named
+    by the flow log's service annotation instead. And an interface VPC endpoint
+    has neither: it is a private address in the customer's subnet with no
+    annotation at all, and the only thing that says what it is, is the endpoint
+    service the collector resolved.
+
+    The label matters beyond the label. It picks the rate card, so an address
+    nothing could attribute is an agent whose spend is estimated at a fallback
+    rate — and spend is the number on the report that a budget owner acts on.
+    """
     if aws_service in ("BEDROCK", "SAGEMAKER"):
         return "bedrock"
+    if endpoint_service:
+        last = endpoint_service.rsplit(".", 1)[-1]
+        if last in ("bedrock-runtime", "bedrock-agent-runtime", "sagemaker-runtime"):
+            return "bedrock"
     if address.startswith("160.79."):
         return "anthropic"
     if address.startswith("104.18."):

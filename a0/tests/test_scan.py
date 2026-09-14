@@ -74,3 +74,27 @@ def test_rescanning_does_not_duplicate_or_promote(result):
     again = run()
     assert set(again.register.agents) == ids
     assert all(a.status is Status.DISCOVERED for a in again.register.agents.values())
+
+
+def test_every_agents_provider_is_named():
+    """An agent whose provider is `unknown` has its spend estimated at a
+    fallback rate, and spend is the figure on the report a budget owner acts
+    on. Three of the corpus's agents reach Bedrock — two directly and one
+    through an interface VPC endpoint — and all three were unattributed.
+    """
+    from custos.pipeline import to_scan_input
+    from custos.scan import run as run_scan
+
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+
+    result = run_scan(to_scan_input(build_batch(
+        corpus.build(corpus.CorpusSpec(days=1, hard=True))
+    )))
+
+    unattributed = sorted(
+        a.identity.principal.rsplit("/", 1)[-1]
+        for a in result.register.agents.values()
+        if a.model.providers == {"unknown"}
+    )
+    assert unattributed == [], f"no provider for {unattributed}"

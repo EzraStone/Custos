@@ -96,3 +96,46 @@ def test_the_built_in_table_is_still_unverified():
     from custos.spend import PRICES_REVISION
 
     assert PRICES_REVISION == "unverified-placeholder"
+
+
+# --- which provider, and therefore whose rate ---------------------------------
+
+def test_bedrock_is_recognised_from_the_flow_logs_annotation():
+    """AWS's inference endpoints are in no range Custos publishes. The flow
+    log's service annotation is the only thing that names them, and it was
+    being dropped — so every Bedrock agent's spend was estimated at the rate
+    for a provider nobody could name."""
+    from custos.spend import provider_for
+
+    assert provider_for("52.94.236.10", "BEDROCK") == "bedrock"
+    assert provider_for("52.94.236.10", "SAGEMAKER") == "bedrock"
+    assert provider_for("52.94.236.10") == "unknown"
+
+
+def test_bedrock_is_recognised_through_an_interface_endpoint():
+    """A private address in the customer's own subnet, with no annotation at
+    all. The endpoint service the collector resolved is the only source."""
+    from custos.spend import provider_for
+
+    assert provider_for(
+        "10.0.15.20", "", "com.amazonaws.us-east-1.bedrock-runtime"
+    ) == "bedrock"
+    assert provider_for(
+        "10.0.15.20", "", "com.amazonaws.us-east-1.s3"
+    ) == "unknown"
+
+
+def test_a_customers_bedrock_rate_reaches_a_bedrock_agent():
+    """The point of the label. The built-in table happens to price bedrock and
+    unknown identically, so the figure does not move on placeholder rates —
+    what moves is that an account which supplied its own Bedrock pricing gets
+    it applied instead of the fallback."""
+    from custos.spend import Price, Rates, estimate_monthly_usd
+
+    theirs = Rates(
+        prices={"bedrock": Price(input_per_mtok=0.30, output_per_mtok=1.50)},
+        revision="customer-supplied 2026-09-14",
+    )
+    cheap = estimate_monthly_usd(10_000_000, 1_000_000, 3.0, "bedrock", theirs)
+    fallback = estimate_monthly_usd(10_000_000, 1_000_000, 3.0, "unknown", theirs)
+    assert cheap < fallback / 5

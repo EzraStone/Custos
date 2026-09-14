@@ -48,6 +48,10 @@ class ScanInput:
     facts: dict[str, PrincipalFacts] = field(default_factory=dict)
     capabilities: dict[str, IamCapability] = field(default_factory=dict)
     destination_names: dict[str, str] = field(default_factory=dict)
+    destination_services: dict[str, str] = field(default_factory=dict)
+    """AWS endpoint service per address, for the interface VPC endpoints the
+    collector resolved. The only thing that says a private address in the
+    customer's own subnet is Bedrock."""
     """Address to name, as resolved by the collector from ENIs in the account.
 
     The only source that can name an ordinary internal service. Nothing in a
@@ -116,7 +120,13 @@ def _compute_for(t: PrincipalTelemetry, inp: ScanInput) -> str:
 
 def _model_use(t: PrincipalTelemetry, inp: ScanInput) -> ModelUse:
     endpoints = {a for w in t.windows for a in w.model_addresses}
-    providers = {spend.provider_for(a) for a in endpoints}
+    annotated: dict[str, str] = {}
+    for w in t.windows:
+        annotated |= w.model_services
+    providers = {
+        spend.provider_for(a, annotated.get(a, ""), inp.destination_services.get(a, ""))
+        for a in endpoints
+    }
     egress = sum(w.model_egress for w in t.windows)
     ingress = sum(w.model_ingress for w in t.windows)
     provider = next(iter(providers - {"unknown"}), "unknown")
