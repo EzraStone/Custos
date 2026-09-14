@@ -899,3 +899,73 @@ def test_audit_says_so_when_there_is_no_such_agent(tmp_path, capsys):
     _one_agent(db)
     assert main(["--db", str(db), "audit", "agt_nope"]) == 2
     assert "no agent" in capsys.readouterr().err
+
+
+# --- drift, which the CLI printed once and could never show again -------------
+
+def _with_history(db, tools_last):
+    """One agent with eight observations behind it, and a ninth."""
+    from datetime import timedelta
+
+    from custos.store.db import open_database
+    from custos.store.scans import ScanStore
+
+    agent_id_ = _one_agent(db)
+    conn = open_database(str(db))
+    scans = ScanStore(conn)
+    at = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+    batch = scans.record_batch(
+        account_id="447120043318", region="us-east-1", window_start=at,
+        window_end=at + timedelta(hours=1), collector="t", received_at=at,
+        flow_records=1, requests=0, have_alb_logs=True,
+    )
+    scan_id = scans.record_scan(
+        batch_id=batch.id, account_id="447120043318", started_at=at,
+        principals_seen=1, agents_found=1, review_candidates=0, coverage=1.0,
+        truncated=False, catalogue_revision="r", regions=("us-east-1",),
+    )
+    for hour in range(8):
+        scans.record_observation(
+            scan_id=scan_id, agent_id=agent_id_, observed_at=at + timedelta(hours=hour),
+            confidence=0.99, model_egress=10, model_ingress=1, episodes=1,
+            calls_per_hour=4.0, tools={"billing-api 10.0.4.21"},
+            active_hours={12: 1.0}, blast_radius="read", region="us-east-1",
+        )
+    scans.record_observation(
+        scan_id=scan_id, agent_id=agent_id_, observed_at=at + timedelta(hours=9),
+        confidence=0.99, model_egress=10, model_ingress=1, episodes=1,
+        calls_per_hour=4.0, tools=set(tools_last), active_hours={12: 1.0},
+        blast_radius="read", region="us-east-1",
+    )
+    conn.commit()
+    return agent_id_
+
+
+def test_drift_can_be_asked_about_later(tmp_path, capsys):
+    """The CLI printed drift once, at the end of the scan that found it —
+    which is the wrong moment for the person it is addressed to. A drift
+    finding is a question put to a workload's owner, and the owner reads it a
+    day later when somebody forwards them the line."""
+    db = tmp_path / "d.db"
+    agent_id_ = _with_history(db, {"billing-api 10.0.4.21", "vectors 10.0.6.30"})
+
+    assert main(["--db", str(db), "drift", agent_id_]) == 0
+    out = capsys.readouterr().out
+    assert "vectors 10.0.6.30" in out
+    assert "us-east-1" in out
+
+
+def test_drift_says_when_there_is_not_enough_history(tmp_path, capsys):
+    """The correct outcome for a young agent, not a gap to fill with weaker
+    signals. An empty list reads as "we looked and it is behaving"."""
+    db = tmp_path / "d2.db"
+    agent_id_ = _one_agent(db)
+    assert main(["--db", str(db), "drift", agent_id_]) == 0
+    assert "not enough history" in capsys.readouterr().out
+
+
+def test_drift_says_when_nothing_changed(tmp_path, capsys):
+    db = tmp_path / "d3.db"
+    agent_id_ = _with_history(db, {"billing-api 10.0.4.21"})
+    assert main(["--db", str(db), "drift", agent_id_]) == 0
+    assert "behaving as it has been" in capsys.readouterr().out

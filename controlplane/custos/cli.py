@@ -628,6 +628,59 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_drift(args: argparse.Namespace) -> int:
+    """How one agent's behaviour compares with its own history.
+
+    The CLI prints drift once, at the end of the scan that found it. That is
+    the wrong moment for the person it is addressed to: a drift finding is a
+    question put to a workload's owner, and the owner reads it a day later
+    when somebody forwards them the line.
+
+    Per agent rather than per account, for the same reason the API route is:
+    an account-wide list of "is this expected?" is a list nobody owns.
+
+    One baseline per region. An agent's behaviour in us-east-1 is a trend; its
+    observations in two regions interleaved are two trends sampled alternately,
+    and the step between them reads as a change in the workload.
+    """
+    from .baseline import detect_from_history
+    from .store.scans import ScanStore
+
+    conn = open_database(args.db)
+    agents = AgentStore(conn)
+
+    existing = agents.get(args.agent_id)
+    if existing is None:
+        print(f"error: no agent {args.agent_id}", file=sys.stderr)
+        return 2
+
+    history = ScanStore(conn).observation_history(args.agent_id)
+    print(existing.identity.principal)
+    print(f"  observations  {len(history)}")
+
+    found, established = [], False
+    for region in sorted({row.get("region", "") for row in history}):
+        per_region = [row for row in history if row.get("region", "") == region]
+        baseline, drift = detect_from_history(args.agent_id, per_region, region=region)
+        found.extend(drift)
+        established = established or baseline.established
+
+    if not established:
+        # The correct outcome for a young agent, not a gap to fill with weaker
+        # signals. Saying so beats printing an empty list, which reads as "we
+        # looked and it is behaving".
+        print("  not enough history yet; drift measured against this would be noise")
+        return 0
+    if not found:
+        print("  behaving as it has been")
+        return 0
+
+    for d in sorted(found, key=lambda d: d.severity):
+        where = f" [{d.region}]" if d.region else ""
+        print(f"  {d.question}{where}")
+    return 0
+
+
 def cmd_audit(args: argparse.Namespace) -> int:
     """Every decision anybody made about one agent, oldest first.
 
@@ -858,6 +911,10 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("gateways", help="internal addresses that look like model endpoints")
     p.add_argument("--account", required=True)
     p.set_defaults(func=cmd_gateways)
+
+    p = sub.add_parser("drift", help="how one agent compares with its own history")
+    p.add_argument("agent_id")
+    p.set_defaults(func=cmd_drift)
 
     p = sub.add_parser("audit", help="every decision anybody made about one agent")
     p.add_argument("agent_id")
