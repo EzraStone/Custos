@@ -261,6 +261,11 @@ func estate() []estateEni {
 			why:   "a tag value is text somebody typed; a tab in it breaks a column-aligned scope",
 		},
 		{
+			iface: destEni("10.0.16.3", "", "Name", "請求API-サービス"),
+			want:  "請求API-サービス",
+			why:   "eleven characters and thirty-one bytes. A bound counted in bytes cuts a name that fits",
+		},
+		{
 			iface: destEni("10.0.16.2", "", "Name",
 				"a-very-long-service-name-that-somebody-pasted-in-from-a-runbook-and-never-shortened"),
 			want: "a-very-long-service-name-that-somebody-pasted-in-from-a-runbook-\u2026",
@@ -325,7 +330,7 @@ func TestTheEstateHasTheTagHygieneItClaims(t *testing.T) {
 // threshold somebody picked stops meaning anything the moment it is met.
 //
 //	6 of 13 — the Name tag and four of the five AWS description shapes
-const readableFloor = 23
+const readableFloor = 24
 
 // TestScopeReadability is the measurement, and the only number in this package
 // that a customer feels directly. An entry an operator cannot read is an
