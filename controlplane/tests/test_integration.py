@@ -994,3 +994,36 @@ def test_a_scope_label_from_a_security_group_is_marked_in_the_report(client):
 
     page = client.get("/v1/report", headers=AUTH).text
     assert "orders-service 10.0.4.50 (security group)" in page
+
+
+def test_the_served_report_names_a_fallback_priced_agent():
+    """The figure is derived from a column on the agents table, and the served
+    report builds its register from that table. If `providers` did not survive
+    the round trip, the sentence would be absent from the copy a customer
+    keeps and present in the one printed on the day."""
+    from custos.register.model import Agent, Identity, Provenance, Source, Status
+    from custos.register.store import agent_id
+    from custos.store.agents import AgentStore
+    from custos.store.db import open_database
+
+    conn = open_database()
+    client = TestClient(create_app(conn=conn, tokens=TokenStore({"tok": ACCOUNT})))
+    at = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+    principal = f"arn:aws:iam::{ACCOUNT}:role/unpriced"
+    agent = Agent(
+        id=agent_id(ACCOUNT, principal), first_seen=at, last_seen=at,
+        status=Status.DISCOVERED,
+        provenance=Provenance(source=Source.DISCOVERED, confidence=0.99,
+                              observed_principal=principal, evidence=["bytes"]),
+        identity=Identity(principal=principal, account_id=ACCOUNT),
+    )
+    agent.model.providers = {"unknown"}
+    AgentStore(conn).upsert(agent)
+    conn.commit()
+
+    page = client.get("/v1/report", headers=AUTH).text
+    assert "could not be named" in page
+    assert "unpriced" in page
+
+    listed = client.get("/v1/register", headers=AUTH).json()["agents"]
+    assert listed[0]["providers"] == ["unknown"]
