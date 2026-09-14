@@ -164,13 +164,53 @@ func (r *DestinationResolver) fromCache(addresses []string) (known []wire.Destin
 	return known, ask
 }
 
+// MaxCached bounds the resolver's memory.
+//
+// The cache used to live for one collection, so its size was the size of one
+// window. It lives for the life of the daemon now, and an account with churn —
+// ECS tasks get a new address every deploy, Lambda ENIs come and go — adds
+// entries for ever without this.
+//
+// Generous on purpose. An account reaching more than this many distinct
+// internal addresses in six hours is one where the cache was not going to help
+// anyway, and the eviction below is a sweep rather than an LRU: the entries
+// worth keeping are the ones still inside their TTL, and ranking the rest
+// would be bookkeeping to decide which of two answers we are about to re-ask
+// for anyway.
+const MaxCached = 50_000
+
 func (r *DestinationResolver) remember(address string, d wire.Destination, found bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.cache == nil {
 		r.cache = map[string]cached{}
 	}
+	if len(r.cache) >= MaxCached {
+		r.evictExpired(time.Now())
+	}
 	r.cache[address] = cached{destination: d, at: time.Now(), found: found}
+}
+
+// evictExpired drops everything past its TTL, and everything if that was not
+// enough. Called with the lock held.
+//
+// Dropping the whole cache when a sweep frees nothing is deliberate. The
+// alternative is a resolver that has reached its limit with live entries and
+// stops caching anything new for ever — which is the same as no cache, except
+// silent and holding 50,000 entries.
+func (r *DestinationResolver) evictExpired(now time.Time) {
+	ttl := r.TTL
+	if ttl <= 0 {
+		ttl = DefaultTTL
+	}
+	for address, entry := range r.cache {
+		if now.Sub(entry.at) > ttl {
+			delete(r.cache, address)
+		}
+	}
+	if len(r.cache) >= MaxCached {
+		r.cache = map[string]cached{}
+	}
 }
 
 func (r *DestinationResolver) describeByAddress(ctx context.Context, addresses []string) ([]ec2types.NetworkInterface, error) {

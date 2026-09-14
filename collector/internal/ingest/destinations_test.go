@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -653,5 +654,55 @@ func TestAPrivateLinkServiceSomebodyElsePublishedKeepsItsId(t *testing.T) {
 	}, "10.0.15.21")
 	if names["10.0.15.21"] != "vpce-svc-0a1b2c3d/vpc-endpoint" {
 		t.Fatalf("got %v", names)
+	}
+}
+
+// TestTheCacheIsBounded: the cache used to live for one collection, so its
+// size was the size of one window. It lives for the life of the daemon now,
+// and an account with churn — ECS tasks get a new address every deploy — adds
+// entries for ever without a bound.
+func TestTheCacheIsBounded(t *testing.T) {
+	r := &DestinationResolver{API: &fakeEC2{}}
+	for i := range MaxCached + 100 {
+		r.remember(fmt.Sprintf("10.%d.%d.%d", i/65536, (i/256)%256, i%256),
+			wire.Destination{}, false)
+	}
+	if len(r.cache) > MaxCached {
+		t.Fatalf("cache holds %d entries, bound is %d", len(r.cache), MaxCached)
+	}
+}
+
+// TestASweepKeepsWhatIsStillLive: eviction is a sweep of expired entries, not
+// an LRU. What is worth keeping is what is still inside its TTL.
+func TestASweepKeepsWhatIsStillLive(t *testing.T) {
+	r := &DestinationResolver{API: &fakeEC2{}, TTL: time.Hour}
+	r.cache = map[string]cached{
+		"10.0.0.1": {at: time.Now().Add(-2 * time.Hour)},
+		"10.0.0.2": {at: time.Now()},
+	}
+	r.evictExpired(time.Now())
+
+	if _, ok := r.cache["10.0.0.1"]; ok {
+		t.Fatal("an expired entry survived the sweep")
+	}
+	if _, ok := r.cache["10.0.0.2"]; !ok {
+		t.Fatal("a live entry was swept")
+	}
+}
+
+// TestAFullCacheOfLiveEntriesIsDropped: the alternative is a resolver that has
+// reached its limit with live entries and stops caching anything new for ever
+// — the same as no cache, except silent and holding 50,000 entries.
+func TestAFullCacheOfLiveEntriesIsDropped(t *testing.T) {
+	r := &DestinationResolver{API: &fakeEC2{}, TTL: time.Hour}
+	r.cache = map[string]cached{}
+	for i := range MaxCached {
+		r.cache[fmt.Sprintf("10.%d.%d.%d", i/65536, (i/256)%256, i%256)] =
+			cached{at: time.Now()}
+	}
+	r.evictExpired(time.Now())
+
+	if len(r.cache) != 0 {
+		t.Fatalf("a full cache of live entries kept %d", len(r.cache))
 	}
 }
