@@ -4,6 +4,47 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### Four bytes a token, when a streamed response is 187
+
+Every dollar figure on a Custos report comes from one conversion: observed wire
+bytes divided by a constant. That constant was four in both directions, which
+is right for a JSON body and wrong for a streamed response by around forty-four
+times — concentrated in output tokens, which every provider prices at five
+times input. The report could have been telling a budget owner that an agent
+costs ten thousand dollars a month when it costs a few hundred.
+
+A streaming API flushes after every token, so each token is its own Server-Sent
+Events frame, its own TLS record and its own TCP segment: four bytes of text
+inside about 183 of protocol. Arithmetic on a documented protocol rather than
+an opinion.
+
+A flow record does not say whether a response streamed, which is why this had
+been one number for as long as it existed. It carries packet counts, and those
+are enough: subtract the acknowledgements the outbound segments imply and the
+mean inbound data packet is 1,444–2,740 bytes when responses arrive whole and
+232–288 when they stream, with nothing between. Decided per principal, because
+an account whose agents stream and whose chatbots do not is two regimes in one
+number.
+
+`make conversion` measures it, `make gates` prints five numbers rather than
+four, and both reports say which reading produced their figures — it was
+inferred rather than supplied, and a figure that sensitive resting on a reading
+nobody stated is the shape of the problems the limitations section exists for.
+
+### G0 gates on headroom, not only on margin
+
+Streaming was measured against the classifier as well, and the separation
+margin went **up**: 0.260 to 0.371, because the negatives lose more confidence
+than the agents do. In the same run the weakest agent went from 0.151 above the
+reporting threshold to 0.054 above it.
+
+Both are true of one run and only one was in the gate. A margin is a gap
+between two classes and says nothing about where the gap sits, so a change that
+widened it and pushed an agent under 0.80 would have read as an improvement in
+every recorded number and been a row missing from a customer's report. G0 now
+requires the weakest agent to clear the threshold by 0.05 as well, and the
+sweep prints both.
+
 ### "A question for a human" was three questions, and two had answers
 
 An account reaching a model provider over PrivateLink sends every model call to
