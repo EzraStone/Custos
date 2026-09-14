@@ -777,6 +777,28 @@ func checkPrivateLinkModels(report *Report, named []wire.Destination) {
 			found = append(found, fmt.Sprintf("%s (%s)", last, d.Address))
 		}
 	}
+	// An endpoint we saw and could not identify. The resolver keeps the id
+	// from the description when DescribeVpcEndpoints fails, so this is what an
+	// AccessDenied looks like from here — and a role created before that
+	// permission existed produces exactly it, silently, for ever.
+	var unidentified []string
+	for _, d := range named {
+		if d.Kind == "vpc-endpoint" && d.Service == "" {
+			unidentified = append(unidentified, d.Address)
+		}
+	}
+	if len(unidentified) > 0 {
+		sort.Strings(unidentified)
+		report.add("model traffic over privatelink", Warn,
+			fmt.Sprintf("%d interface endpoint(s) could not be identified: %s",
+				len(unidentified), strings.Join(unidentified, ", ")),
+			"the role needs ec2:DescribeVpcEndpoints - a role created before "+
+				"that grant existed will not have it, and if one of these is "+
+				"bedrock-runtime then every agent behind it is invisible; "+
+				"re-apply the Terraform module")
+		return
+	}
+
 	if len(found) == 0 {
 		return
 	}

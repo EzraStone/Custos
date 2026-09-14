@@ -998,3 +998,45 @@ func TestAnUnannotatedIpv6DestinationStillWarns(t *testing.T) {
 		t.Fatalf("remedy overstates what is blind: %q", result.Remedy)
 	}
 }
+
+// TestAnEndpointWeCannotIdentifyIsAWarning: the resolver keeps the id from the
+// description when DescribeVpcEndpoints fails, so this is what an AccessDenied
+// looks like from here. A role created before that grant existed produces
+// exactly it, silently, for ever — and if one of those endpoints is
+// bedrock-runtime, every agent behind it is invisible.
+func TestAnEndpointWeCannotIdentifyIsAWarning(t *testing.T) {
+	records := append(modelTraffic(1), gatewayTraffic("10.0.15.20", 140_000, 9_000)...)
+	report := RunWith(context.Background(), good(), stubFlows{records: records},
+		namedAs(map[string]wire.Destination{
+			"10.0.15.20": {
+				Address: "10.0.15.20", Name: "vpce-0b3d5f7a", Kind: "vpc-endpoint",
+			},
+		}), oneRegion{})
+
+	result := find(t, report, "model traffic over privatelink")
+	if result.Status != Warn {
+		t.Fatalf("got %v: %+v", result.Status, result)
+	}
+	if !strings.Contains(result.Remedy, "ec2:DescribeVpcEndpoints") {
+		t.Fatalf("remedy does not say what to grant: %q", result.Remedy)
+	}
+	if !strings.Contains(result.Remedy, "re-apply the Terraform") {
+		t.Fatalf("remedy does not say what to do: %q", result.Remedy)
+	}
+}
+
+// TestAnAccountWithNoEndpointsSaysNothingEitherWay: most accounts have none,
+// and a line that appears on every report is one nobody reads.
+func TestAnAccountWithNoEndpointsSaysNothingEitherWay(t *testing.T) {
+	records := append(modelTraffic(1), gatewayTraffic("10.0.4.23", 140_000, 9_000)...)
+	report := RunWith(context.Background(), good(), stubFlows{records: records},
+		namedAs(map[string]wire.Destination{
+			"10.0.4.23": {Address: "10.0.4.23", Name: "billing-api", Kind: "tag"},
+		}), oneRegion{})
+
+	for _, r := range report.Results {
+		if r.Name == "model traffic over privatelink" {
+			t.Fatalf("reported on an account with no endpoints: %+v", r)
+		}
+	}
+}
