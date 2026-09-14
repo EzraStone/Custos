@@ -49,6 +49,20 @@ export interface Agent {
   data_stores: string[];
   est_monthly_spend_usd: number;
   /**
+   * Whether this agent's model responses were read as arriving one token at
+   * a time, which is what produced the figure above.
+   *
+   * A streamed response costs about 175 wire bytes per output token and a
+   * whole one about four, and output tokens are priced at five times input —
+   * so the two readings of the same bytes are roughly forty-four times apart
+   * in what they imply about cost. A flow record does not say which happened;
+   * this was inferred from packet sizes.
+   *
+   * Optional because a control plane older than the field sends none, which
+   * is not the same claim as false.
+   */
+  responses_streamed?: boolean;
+  /**
    * Which model providers this agent reached.
    *
    * `["unknown"]` means the spend figure came from a fallback rate: the

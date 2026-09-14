@@ -332,3 +332,28 @@ describe("a spend figure from a fallback rate", () => {
     expect(screen.queryByText(/not recognised/)).toBeNull();
   });
 });
+
+describe("which conversion produced a spend figure", () => {
+  it("says so when the responses were read as streamed", () => {
+    render(<Finding agent={agent({ responses_streamed: true })} operator="ezra"
+                    onGrant={vi.fn()} onTransition={vi.fn()} />);
+    expect(screen.getByText(/responses streamed/)).toBeInTheDocument();
+  });
+
+  it("says nothing when they were read as arriving whole", () => {
+    // The reading this product has always used, and the figure would have
+    // been the same without it. A label on every row is a label nobody reads.
+    render(<Finding agent={agent({ responses_streamed: false })} operator="ezra"
+                    onGrant={vi.fn()} onTransition={vi.fn()} />);
+    expect(screen.queryByText(/responses streamed/)).toBeNull();
+  });
+
+  it("says nothing when the control plane never sent the field", () => {
+    // Older than the field is not the same claim as false, and asserting
+    // either way would be a statement about our schema rather than about the
+    // account.
+    render(<Finding agent={agent()} operator="ezra"
+                    onGrant={vi.fn()} onTransition={vi.fn()} />);
+    expect(screen.queryByText(/responses streamed/)).toBeNull();
+  });
+});

@@ -120,6 +120,20 @@ export function Finding({
           <dd>
             {formatSpend(agent.est_monthly_spend_usd)}/mo
             {spendIsEstimate ? <span className="muted"> (estimate)</span> : null}
+            {/*
+              Which conversion produced it. Forty-four times between the two
+              readings of the same bytes, on the side that is priced highest,
+              and inferred from packet sizes rather than supplied — so an
+              operator comparing two agents with similar traffic and very
+              different figures can see why.
+
+              Said only when the answer is streamed. False is the reading this
+              product has always used and the one the figure would have had
+              anyway, and a label on every row is a label nobody reads.
+            */}
+            {agent.responses_streamed ? (
+              <span className="muted"> (responses streamed)</span>
+            ) : null}
           </dd>
         </div>
         <div>
