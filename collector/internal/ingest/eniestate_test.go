@@ -324,13 +324,27 @@ func TestTheEstateHasTheTagHygieneItClaims(t *testing.T) {
 	}
 }
 
-// readableFloor is how many of the estate's nameable interfaces the resolver
-// gets right today. It is a floor rather than a target: the measurement exists
-// to make the number move deliberately, and a test that only checks a
-// threshold somebody picked stops meaning anything the moment it is met.
+// nameableFloor is how many interfaces in this estate a human should be able
+// to read a name for. Not how many the resolver gets right — that is required
+// to be all of them.
 //
-//	6 of 13 — the Name tag and four of the five AWS description shapes
-const readableFloor = 24
+// It started as a floor on the successes, which had a hole in it wide enough
+// to drive the next arc through. Counting successes means a nameable interface
+// that nothing can name changes neither side of the comparison: readable stays
+// where it was, the floor is still met, and the only thing that moves is a
+// percentage printed in a log line nobody is asserting on. Adding a hard case
+// — which CONTRIBUTING.md says to do the moment this reaches 100% — was
+// therefore a silent no-op, and the gate designed to make the number move
+// deliberately could not see the movement that matters.
+//
+// So the shape is inverted. Every nameable interface must be named, by name,
+// or the test fails with the address and the reason. This constant only
+// records the size of the question, and is checked in both directions: the
+// estate cannot quietly grow without somebody recording that it did, and it
+// cannot quietly shrink into something easier.
+//
+//	13 → 24 → 26, as harder shapes were added
+const nameableFloor = 24
 
 // TestScopeReadability is the measurement, and the only number in this package
 // that a customer feels directly. An entry an operator cannot read is an
@@ -390,12 +404,13 @@ func TestScopeReadability(t *testing.T) {
 		t.Errorf("named wrongly, which is worse than not naming:\n  %s",
 			strings.Join(wrong, "\n  "))
 	}
-	if readable < readableFloor {
-		t.Errorf("readability fell to %d of %d, from %d:\n  %s",
-			readable, nameable, readableFloor, strings.Join(missing, "\n  "))
+	if len(missing) > 0 {
+		t.Errorf("%d of %d nameable interfaces have no name:\n  %s",
+			len(missing), nameable, strings.Join(missing, "\n  "))
 	}
-	if readable > readableFloor {
-		t.Errorf("readability rose to %d of %d; raise readableFloor and say why",
-			readable, nameable)
+	if nameable != nameableFloor {
+		t.Errorf("the estate has %d nameable interfaces, not %d; "+
+			"move nameableFloor and say what was added or removed",
+			nameable, nameableFloor)
 	}
 }
