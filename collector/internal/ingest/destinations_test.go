@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
@@ -761,5 +762,31 @@ func TestASecurityGroupNameIsCleanedTheSameWay(t *testing.T) {
 	names := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.4.50")
 	if names["10.0.4.50"] != "orders service/security-group" {
 		t.Fatalf("got %v", names)
+	}
+}
+
+// TestALongNameIsCutOnACharacterBoundary: a tag value is UTF-8. A byte bound
+// cuts a name that fits, and can cut one mid-character and ship a broken
+// sequence into the report an operator reads.
+func TestALongNameIsCutOnACharacterBoundary(t *testing.T) {
+	// Eleven characters, thirty-one bytes. Well under the bound, and over it
+	// when the bound is counted in bytes.
+	short := "ab請求サービス請求サービス請求サービス請求サービス"
+	iface := destEni("10.0.4.21", "", "Name", short)
+	got := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.4.21")["10.0.4.21"]
+	if got != short+"/tag" {
+		t.Fatalf("a name that fits was cut: %q", got)
+	}
+
+	long := strings.Repeat("請", MaxNameLength+10)
+	iface = destEni("10.0.4.22", "", "Name", long)
+	got = resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.4.22")["10.0.4.22"]
+	name := strings.TrimSuffix(got, "/tag")
+	if !utf8.ValidString(name) {
+		t.Fatalf("a cut name is not valid UTF-8: %q", name)
+	}
+	if len([]rune(name)) != MaxNameLength+1 {
+		t.Fatalf("got %d characters, want %d plus the mark",
+			len([]rune(name)), MaxNameLength)
 	}
 }

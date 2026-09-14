@@ -703,13 +703,17 @@ func serviceShortName(service string) string {
 	return service
 }
 
-// MaxNameLength bounds a destination name.
+// MaxNameLength bounds a destination name, in characters.
 //
 // An AWS tag value may be 256 characters. A scope line is read by a person
 // deciding whether to grant authority, and a 256-character label in it pushes
 // the address — the part that identifies the host — off the end of the line.
 // Sixty-four is longer than any service name anybody uses and short enough to
 // sit beside an address.
+//
+// Characters and not bytes. A tag value is UTF-8: `請求API-サービス` is eleven
+// characters and thirty-one bytes, and a byte bound would cut a name that fits
+// — or, worse, cut it mid-character and ship a broken sequence into the report.
 const MaxNameLength = 64
 
 // renderable turns a customer-authored label into something that can be put in
@@ -745,9 +749,9 @@ func renderable(value string) string {
 			b.WriteRune(r)
 		}
 	}
-	name := b.String()
-	if len(name) > MaxNameLength {
-		return strings.TrimSpace(name[:MaxNameLength]) + "\u2026"
+	runes := []rune(b.String())
+	if len(runes) > MaxNameLength {
+		return strings.TrimSpace(string(runes[:MaxNameLength])) + "\u2026"
 	}
-	return name
+	return string(runes)
 }
