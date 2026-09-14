@@ -150,6 +150,67 @@ findings name the region they are about on every surface, and the region is
 part of a finding's fingerprint — appended only when there is one, so nothing
 that never had a region is re-delivered for the sake of a hash change.
 
+### Three things only the console could do
+
+**The CLI could sanction an agent and not retire one.** It could write to the
+audit trail and not read it. It printed drift once, at the end of the scan that
+found it, and could never show it again.
+
+That is not a cosmetic asymmetry. The control plane is deployed when a customer
+wants continuous monitoring; before that — through the whole entry motion,
+which is where every customer starts — there is no API at all. Anything only
+the API can do is something nobody can do during onboarding, and retiring is
+the control that keeps the queue readable: a decommissioned workload nobody
+retires keeps surfacing as a finding for ever.
+
+`custos status --to` takes all three states a person may set, with `retire` as
+the shorthand OPERATIONS already uses. SANCTIONED is not among them — it is
+reachable only through `grant`, which requires an explicit approval scope, and
+argparse refusing it at the boundary is a better place to enforce SEC-17 than
+an exception somebody has to read. `custos audit` and `custos drift` cover the
+two reads.
+
+Found one at a time, each after the previous was fixed, so there is a test that
+maps every API route to the command covering it — with two exemptions named,
+and a second assertion that the map does not describe routes which no longer
+exist.
+
+### Free text from the write surface had no bounds at all
+
+`operator`, `note`, `reason`, `value` and `provider` come from a person through
+the only write surface this product has, and end up in three places that
+matter: the audit trail, which is the record of who granted what; the report's
+provenance section, which is what a security team reads; and a column-aligned
+terminal table. Nothing bounded any of them.
+
+Not an injection problem — the report escapes what it renders and the store
+parameterises every query. A problem about a record staying readable: an
+operator name with a newline in it breaks the artefact somebody reads before
+granting authority, and a field with no length limit is a field somebody
+eventually puts a log file in.
+
+The collector had the same gap in the other direction: a `Name` tag with a tab
+in it, or 256 characters of it, went straight into the scope. Both surfaces
+clean through one function now, and a test compares the two files rather than
+trusting they agree.
+
+### The destination cache was empty on every window
+
+`DestinationResolver` exists to cache, and its own comment said that without
+one the collector re-asks AWS the same question hourly for ever. It was
+constructed inside `Collect`, so every window started with an empty one.
+
+Everything else in the daemon was rebuilt per window too: the AWS clients,
+whose credentials cache refreshes itself and which are meant to be kept. Both
+are kept now, per region — per region matters more than the saving does, since
+a private address is a different host in each one and a shared resolver would
+answer eu-west-1 with us-east-1's name in the scope an operator approves.
+
+The cache is bounded now that it outlives a window, by a sweep of expired
+entries, and dropped whole when a sweep frees nothing. The alternative is a
+resolver that reaches its limit with live entries and then silently stops
+caching for ever.
+
 ### Bedrock over PrivateLink was invisible, and AWS knew the answer
 
 **An account that reaches Bedrock through an interface VPC endpoint had no
