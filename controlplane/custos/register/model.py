@@ -89,6 +89,16 @@ class ModelUse:
     endpoints: set[str] = field(default_factory=set)
     est_monthly_spend_usd: float = 0.0
 
+    streamed: bool = False
+    """Whether this principal's model responses arrived one token at a time.
+
+    Carried because it is the single assumption the spend figure is most
+    sensitive to — forty-four times between the two answers, on the side that
+    is priced highest — and because it was inferred rather than told to us. A
+    reader asking why one agent's estimate is an order of magnitude below
+    another's with comparable traffic deserves that sentence rather than a
+    number they have to take on faith."""
+
 
 @dataclass(slots=True)
 class Reach:
