@@ -712,3 +712,120 @@ def test_history_omits_the_region_for_a_single_region_account(tmp_path, capsys):
     db = _history_db(tmp_path, ["us-east-1", "us-east-1"])
     assert main(["--db", str(db), "history", "--account", "1"]) == 0
     assert "region" not in capsys.readouterr().out
+
+
+# --- the same bound the API has -----------------------------------------------
+
+def test_an_operator_name_with_a_newline_is_one_line(tmp_path, capsys):
+    """Same record, same table. A name written into the audit trail with a
+    newline in it is a record nobody can read as a table."""
+    from custos.cli import operator
+
+    assert operator("ezra\nstone") == "ezra stone"
+
+
+def test_an_operator_of_only_whitespace_is_refused_by_argparse():
+    """SEC-17 needs a person, and refusing here beats storing it."""
+    import argparse
+
+    import pytest as _pytest
+
+    from custos.cli import operator
+
+    with _pytest.raises(argparse.ArgumentTypeError, match="not whitespace"):
+        operator("  \t ")
+
+
+def test_a_long_note_is_cut_and_marked():
+    from custos.cli import note
+
+    assert note("x" * 500).endswith("…")
+    assert len(note("x" * 500)) == 129
+
+
+def test_an_ordinary_operator_name_is_untouched():
+    from custos.cli import operator
+
+    assert operator("ezra@custos.dev") == "ezra@custos.dev"
+
+
+# --- retiring, which only the console could do --------------------------------
+
+def _one_agent(db):
+    """A register with one discovered agent in it."""
+    from custos.register.model import Agent, Identity, Provenance, Source, Status
+    from custos.register.store import agent_id
+    from custos.store.agents import AgentStore
+    from custos.store.db import open_database
+
+    conn = open_database(str(db))
+    principal = "arn:aws:iam::447120043318:role/decommissioned"
+    stored = AgentStore(conn).upsert(Agent(
+        id=agent_id("447120043318", principal),
+        first_seen=datetime(2026, 8, 10, tzinfo=UTC),
+        last_seen=datetime(2026, 8, 10, tzinfo=UTC),
+        status=Status.DISCOVERED,
+        provenance=Provenance(source=Source.DISCOVERED, confidence=0.99,
+                              observed_principal=principal, evidence=["bytes"]),
+        identity=Identity(principal=principal, account_id="447120043318"),
+    ))
+    conn.commit()
+    return stored.id
+
+
+def test_retire_marks_an_agent_and_records_why(tmp_path, capsys):
+    """A decommissioned workload nobody retires keeps surfacing as a finding
+    for ever, and a queue full of dead roles is a queue nobody reads. It
+    existed in the console and the API and not here — so a customer running
+    the CLI-only path could sanction an agent and never retire one."""
+    db = tmp_path / "r.db"
+    agent_id_ = _one_agent(db)
+
+    assert main([
+        "--db", str(db), "retire", agent_id_,
+        "--operator", "ezra@custos.dev", "--reason", "Decommissioned in INC-4471",
+    ]) == 0
+    out = capsys.readouterr().out
+    assert "retired" in out
+    assert "INC-4471" in out
+
+    from custos.store.agents import AgentStore
+    from custos.store.db import open_database
+
+    agent = AgentStore(open_database(str(db))).get(agent_id_)
+    assert str(agent.status) == "retired"
+
+
+def test_retire_refuses_without_a_reason(tmp_path):
+    """Whoever asks about this decision in six months is reading the audit
+    trail, and "retired" with nothing beside it answers nothing."""
+    db = tmp_path / "r2.db"
+    agent_id_ = _one_agent(db)
+
+    with pytest.raises(SystemExit):
+        main(["--db", str(db), "retire", agent_id_, "--operator", "ezra@custos.dev"])
+
+
+def test_retire_says_so_when_there_is_no_such_agent(tmp_path, capsys):
+    db = tmp_path / "r3.db"
+    _one_agent(db)
+    assert main([
+        "--db", str(db), "retire", "agt_nope",
+        "--operator", "ezra@custos.dev", "--reason", "gone",
+    ]) == 2
+    assert "no agent" in capsys.readouterr().err
+
+
+def test_the_audit_trail_carries_the_reason(tmp_path):
+    db = tmp_path / "r4.db"
+    agent_id_ = _one_agent(db)
+    main([
+        "--db", str(db), "retire", agent_id_,
+        "--operator", "ezra@custos.dev", "--reason", "Decommissioned in INC-4471",
+    ])
+
+    from custos.store.agents import AgentStore
+    from custos.store.db import open_database
+
+    entries = AgentStore(open_database(str(db))).audit_for(agent_id_)
+    assert any("INC-4471" in str(e) for e in entries), entries

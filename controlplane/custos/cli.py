@@ -18,6 +18,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+from . import text
 from .baseline import Drift
 from .batch import Batch
 from .diff import ScanDiff
@@ -26,6 +27,7 @@ from .report import render
 from .store.agents import AgentStore
 from .store.db import open_database
 from .store.scans import ScanStore
+from .text import one_line
 
 
 def _load(path: str) -> Batch:
@@ -154,6 +156,34 @@ def _write_report(
         reviews=reviews,
         questions=questions,
     ))
+
+
+def operator(value: str) -> str:
+    """An argparse type for a human identity.
+
+    Same bound as the API's, for the same reason and into the same table. A
+    name is written into the audit trail, which is the record of who granted
+    what, and a record that cannot be read as a table is a record nobody
+    audits. An argument of nothing but whitespace is refused here rather than
+    stored: SEC-17 needs a person.
+    """
+    cleaned = one_line(value, text.OPERATOR)
+    if not cleaned:
+        raise argparse.ArgumentTypeError("an operator is a person, not whitespace")
+    return cleaned
+
+
+def note(value: str) -> str:
+    """An argparse type for what a customer calls an endpoint."""
+    return one_line(value, text.NOTE)
+
+
+def reason(value: str) -> str:
+    """An argparse type for why a decision was made.
+
+    Longer than a note because it is read by whoever asks about the decision
+    later, and "decommissioned" on its own is not an answer."""
+    return one_line(value, text.REASON)
 
 
 def _open_questions(conn, account_id: str) -> list:
@@ -545,6 +575,48 @@ def cmd_grant(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_retire(args: argparse.Namespace) -> int:
+    """Mark an agent as no longer running.
+
+    The other half of `grant`, and the one that keeps the queue readable. A
+    decommissioned workload nobody retires keeps surfacing as a finding for
+    ever, and a queue full of dead roles is a queue nobody reads.
+
+    It existed in the console and the API and not here, so a customer running
+    the CLI-only path — which is every customer before the control plane is
+    deployed — could sanction an agent and never retire one.
+
+    A reason is required for the same purpose the scope is printed before a
+    grant: whoever asks about this decision in six months is reading the audit
+    trail, and "retired" with nothing beside it answers nothing.
+    """
+    from .register.model import Status
+    from .register.store import TransitionError
+    from .store.db import now
+
+    conn = open_database(args.db)
+    agents = AgentStore(conn)
+
+    existing = agents.get(args.agent_id)
+    if existing is None:
+        print(f"error: no agent {args.agent_id}", file=sys.stderr)
+        return 2
+
+    try:
+        agent = agents.transition(
+            args.agent_id, Status.RETIRED, actor=args.operator, at=now(),
+            detail=args.reason,
+        )
+    except (KeyError, TransitionError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    conn.commit()
+    print(f"retired {agent.identity.principal} by {args.operator}")
+    print(f"  reason  {args.reason}")
+    print("it stops appearing as a finding; the record of it does not go away")
+    return 0
+
+
 def cmd_prune(args: argparse.Namespace) -> int:
     """Drop telemetry past its retention window.
 
@@ -702,7 +774,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("set-rate", help="record what this account pays for a provider")
     p.add_argument("provider", help="anthropic, openai, bedrock, ...")
     p.add_argument("--account", required=True)
-    p.add_argument("--operator", required=True)
+    p.add_argument("--operator", required=True, type=operator)
     p.add_argument("--input", type=float, required=True, dest="input_per_mtok",
                    help="USD per million input tokens")
     p.add_argument("--output", type=float, required=True, dest="output_per_mtok",
@@ -721,8 +793,10 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("declare", help="declare a model endpoint")
     p.add_argument("value", help="a CIDR, an address, or an AWS service name")
     p.add_argument("--account", required=True)
-    p.add_argument("--operator", required=True, help="the human making the declaration")
-    p.add_argument("--note", default="", help="what you call this endpoint")
+    p.add_argument("--operator", required=True, type=operator,
+                   help="the human making the declaration")
+    p.add_argument("--note", default="", type=note,
+                   help="what you call this endpoint")
     p.add_argument("--kind", default="range", choices=["range", "aws_service"])
     p.add_argument(
         "--region", default="",
@@ -735,9 +809,18 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--account", required=True)
     p.set_defaults(func=cmd_gateways)
 
+    p = sub.add_parser("retire", help="mark an agent as no longer running")
+    p.add_argument("agent_id")
+    p.add_argument("--operator", required=True, type=operator,
+                   help="the human making the decision")
+    p.add_argument("--reason", required=True, type=reason,
+                   help="why, for whoever reads the audit trail later")
+    p.set_defaults(func=cmd_retire)
+
     p = sub.add_parser("grant", help="sanction an agent")
     p.add_argument("agent_id")
-    p.add_argument("--operator", required=True, help="the human granting authority")
+    p.add_argument("--operator", required=True, type=operator,
+                   help="the human granting authority")
     p.set_defaults(func=cmd_grant)
 
     args = parser.parse_args(argv)
