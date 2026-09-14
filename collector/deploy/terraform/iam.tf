@@ -43,6 +43,13 @@ data "aws_iam_policy_document" "read_only" {
       # read that can tell us. Asked only about endpoints the account's own
       # traffic already reached.
       "ec2:DescribeVpcEndpoints",
+      # What is behind an endpoint AWS did not publish. A service somebody
+      # else published is named `com.amazonaws.vpce.<region>.vpce-svc-...`,
+      # which explains nothing; the service's own record carries the DNS name
+      # its publisher configured, and that is the shape a model provider
+      # selling into AWS takes inside a customer's account. Asked only about
+      # the services the account's own endpoints are for.
+      "ec2:DescribeVpcEndpointServices",
     ]
     resources = ["*"] # these Describe calls do not support resource scoping
   }
