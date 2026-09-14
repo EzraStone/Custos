@@ -37,12 +37,13 @@ custos diff                 →  what changed since last week
 | Onboarding and preflight | Works. `custos onboard`, `custos-collector --check` |
 | Enforcement checkpoint | **Not started.** §12: not before a paying customer |
 | Operator console | Works. Read, filter, sanction, retire, and see what changed. Served by the control plane |
-| Destination naming | Works where an ENI, an AWS description, or a port says what something is |
+| Destination naming | Works. Measured: 100% of a nameable estate, from seven sources |
 | Customer-supplied pricing | Works. Per account, dated, superseded rather than overwritten |
 | Gateway questions in the report | Works. Their own section, ranked across regions, with what was ruled out |
 | Gateway questions, measured | Works. `make questions`: precision 0.50, real gateway first, was 0.00 and eighth |
 | Review band, kept and readable | Works. In the console, the CLI, and both reports, with evidence and recurrence |
 | Model gateway declaration | Works. Private ranges scoped to a region (SEC-24) |
+| Bedrock over PrivateLink | Works. The endpoint is resolved from AWS; nobody declares anything |
 | Fleet view across accounts | Works. One line per account, unscanned and destructive first |
 | Scope readability, measured | Works. Reported by `--check`, the report, the console, and `custos history` |
 
@@ -127,20 +128,37 @@ nothing obliges a second place to match. It has produced more defects in this
 codebase than any bug class, and none of them fail a test until somebody writes
 the test that compares the two places.
 
+**An account whose model traffic never leaves the VPC used to be invisible,
+and one kind of it still is.** An interface VPC endpoint for
+`com.amazonaws.<region>.bedrock-runtime` is now resolved from AWS and the
+agents behind it are found without anybody declaring anything — 0.039 to 0.970
+on the corpus workload added for it.
+
+A PrivateLink service somebody else published is not: `com.amazonaws.vpce.
+<region>.vpce-svc-0a1b2c3d` names nothing AWS will explain, so whatever is
+behind it is exactly as invisible as before. That one is still a question for a
+human, and it is the shape a model provider selling into AWS would take.
+
 **The byte ratios have only been measured against synthetic traffic.** The
 weights were fitted on the A0 corpus. What A0 establishes is that a separating
 signal exists and which features carry it — not that these weights generalise.
 One real scan answers it, and the thresholds sit in measured empty space so
 there is room to move them.
 
-**Destination naming is partial, and how partial is unmeasured.** The scope
-reads `billing-api 10.0.4.21`, `rds 10.0.9.45`, `s3` — from the ENI behind an
-address, from AWS's own description, and from the flow log's service
-annotation. What none of those cover stays a bare address. In the corpus that
-is one endpoint out of seven; in a real account the ratio depends entirely on
-whether the customer tags ENIs, and nobody has measured it. A scan whose scope
-is mostly addresses is a scan whose approvals are mostly guesses, so the
-collector reports the count and it belongs next to coverage in the first
+**Destination naming is measured now, and the number is about a fixture.**
+`collector/internal/ingest/eniestate_test.go` is an estate of interfaces shaped
+the way AWS returns them, with the tag hygiene a company that adopted agents
+bottom-up actually has. It went from 46% to 100% of the nameable ones as six
+discarded sources were added: the interface type, six more AWS descriptions,
+AWS-reserved tags, the instance behind the interface, and the one security
+group somebody named.
+
+What that does not establish is the shape of a real estate. The proportions in
+the fixture are a judgement about what accounts look like, not an observation
+of one, and the honest claim is that the resolver now handles the shapes rather
+than that it handles a customer's mix of them. A scan whose scope is mostly
+addresses is a scan whose approvals are mostly guesses, so the collector still
+reports the count and it still belongs next to coverage in the first
 design-partner conversation.
 
 **The console was built ahead of the schedule the specification set.** §12

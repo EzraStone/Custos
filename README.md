@@ -47,6 +47,15 @@ not scored at all rather than scored badly — the signals that would score it
 have nothing to measure — and it surfaces as a question about an undeclared
 address instead. Declaring the gateway recovers it completely.
 
+**An account whose model calls never leave the VPC was invisible.** An
+interface VPC endpoint for Bedrock puts an ENI in the customer's own subnet, so
+every model call goes to a private address and the flow record says nothing
+about it — which is what a security-conscious platform team's account looks
+like, and they are the ones most likely to buy this. The corpus workload for it
+scored 0.039, the floor. AWS knows what that ENI is and will say so in one
+read-only call, so it scores 0.970 now and nobody is asked to declare anything.
+Finding 9 in [docs/A0-FINDINGS.md](docs/A0-FINDINGS.md).
+
 **The questions have a number too, and the first measurement was 0.00.** The
 detector that asks "is this internal address your model gateway?" had never
 been scored against a corpus containing anything it could get wrong. Seven
