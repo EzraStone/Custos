@@ -18,7 +18,7 @@ from random import Random
 
 from ..arrivals import jitter, uniform_arrivals
 from ..endpoints import BEDROCK, OPENAI
-from ..episode import tok
+from ..episode import reply, tok
 from ..trace import Call, CallKind, Label, Workload
 
 
@@ -44,7 +44,7 @@ def batch_summariser(rng: Random, start: datetime, end: datetime) -> Workload:
             w.calls.append(
                 Call(at=t, kind=CallKind.MODEL, endpoint=BEDROCK,
                      req_bytes=tok(1500 + 1400 * rng.random()),
-                     resp_bytes=tok(180 + 220 * rng.random()), step=i)
+                     **reply(180 + 220 * rng.random()), step=i)
             )
             t += jitter(rng, timedelta(milliseconds=1900), 0.35)
         day += timedelta(days=1)
@@ -73,7 +73,7 @@ def ci_codegen(rng: Random, start: datetime, end: datetime) -> Workload:
             w.calls.append(
                 Call(at=t, kind=CallKind.MODEL, endpoint=OPENAI,
                      req_bytes=tok(1800 + 900 * rng.random()),
-                     resp_bytes=tok(400 + 500 * rng.random()), step=i)
+                     **reply(400 + 500 * rng.random()), step=i)
             )
             t += jitter(rng, timedelta(milliseconds=2600), 0.4)
     return w

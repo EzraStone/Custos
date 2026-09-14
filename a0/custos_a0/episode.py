@@ -40,6 +40,20 @@ def tok(n: float) -> int:
     return int(n * 4)
 
 
+def reply(tokens: float) -> dict:
+    """The response half of a text completion: payload bytes and flush count.
+
+    One SSE event per output token, which is what a streaming model API sends.
+    A capture built with `streaming=False` ignores the second number entirely,
+    so this is ground truth rather than a decision about how to read it.
+
+    Not for an embedding response. Those are one JSON array and there is
+    nothing to stream, which is why the two embedding workloads in this corpus
+    set their bytes directly.
+    """
+    return {"resp_bytes": tok(tokens), "resp_events": int(tokens)}
+
+
 def agent_episode(
     w: Workload,
     rng: Random,
@@ -69,14 +83,9 @@ def agent_episode(
                 kind=CallKind.MODEL,
                 endpoint=model,
                 req_bytes=tok(req_tok),
-                resp_bytes=tok(resp_tok),
+                **reply(resp_tok),
                 request_id=request_id,
                 step=step,
-                # One SSE event per output token, which is what a streaming
-                # model API sends. Charged only when the capture is built
-                # streaming; carried always, so the ground truth does not
-                # depend on how it is read.
-                resp_events=int(resp_tok),
             )
         )
         # Time to first token scales with context length; this is why long

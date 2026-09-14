@@ -10,7 +10,7 @@ from random import Random
 
 from ..arrivals import jitter, poisson_arrivals
 from ..endpoints import ALB, ANTHROPIC, BEDROCK, VECTOR_DB
-from ..episode import tok
+from ..episode import reply, tok
 from ..trace import Call, CallKind, Label, Workload
 
 
@@ -39,7 +39,7 @@ def chatbot_simple(rng: Random, start: datetime, end: datetime) -> Workload:
                 kind=CallKind.MODEL,
                 endpoint=ANTHROPIC,
                 req_bytes=tok(700 + 500 * rng.random()),
-                resp_bytes=tok(150 + 250 * rng.random()),
+                **reply(150 + 250 * rng.random()),
                 request_id=rid,
             )
         )
@@ -79,7 +79,7 @@ def chatbot_rag(rng: Random, start: datetime, end: datetime) -> Workload:
         w.calls.append(
             Call(at=t, kind=CallKind.MODEL, endpoint=ANTHROPIC,
                  req_bytes=tok(2800 + 900 * rng.random()),
-                 resp_bytes=tok(200 + 300 * rng.random()),
+                 **reply(200 + 300 * rng.random()),
                  request_id=rid, step=2)
         )
     return w
@@ -119,7 +119,7 @@ def chatbot_multiturn(rng: Random, start: datetime, end: datetime) -> Workload:
                     kind=CallKind.MODEL,
                     endpoint=ANTHROPIC,
                     req_bytes=tok(600 + accumulated),
-                    resp_bytes=tok(resp_tok),
+                    **reply(resp_tok),
                     request_id=rid,
                     step=k,
                 )

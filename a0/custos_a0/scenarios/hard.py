@@ -59,7 +59,7 @@ from ..endpoints import (
     Endpoint,
     EndpointClass,
 )
-from ..episode import agent_episode, tok
+from ..episode import agent_episode, reply, tok
 from ..trace import Call, CallKind, Label, Workload
 
 # A self-hosted LLM gateway. Private address, ordinary HTTPS port: nothing
@@ -163,7 +163,7 @@ def chatbot_function_call(rng: Random, start: datetime, end: datetime) -> Worklo
 
         w.calls.append(Call(at=t, kind=CallKind.MODEL, endpoint=ANTHROPIC,
                             req_bytes=tok(700 + 400 * rng.random()),
-                            resp_bytes=tok(60 + 40 * rng.random()),
+                            **reply(60 + 40 * rng.random()),
                             request_id=rid, step=0))
         t += jitter(rng, timedelta(milliseconds=110), 0.4)
 
@@ -177,7 +177,7 @@ def chatbot_function_call(rng: Random, start: datetime, end: datetime) -> Worklo
 
         w.calls.append(Call(at=t, kind=CallKind.MODEL, endpoint=ANTHROPIC,
                             req_bytes=tok(1400 + 700 * rng.random()),
-                            resp_bytes=tok(180 + 260 * rng.random()),
+                            **reply(180 + 260 * rng.random()),
                             request_id=rid, step=3))
 
     return w
