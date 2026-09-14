@@ -36,16 +36,44 @@ def test_a_real_model_endpoint_is_the_first_question_asked(measured):
     assert measured.found
 
 
-def test_at_most_two_questions_are_asked(measured):
+def test_at_most_three_questions_are_asked(measured):
     """Seven ordinary services with a gateway's traffic shape, and the list a
-    customer sees is short enough to read. The second is the agent's own deploy
-    API, which is a fair question — it is reached in the same loop and nothing
-    on the wire says which address in a loop is the model."""
-    assert len(measured.shown) <= 2, [a.address for a in measured.shown]
+    customer sees is short enough to read.
+
+    Three now, and two of them are real: the self-hosted gateway and the
+    PrivateLink service a model provider published. The wasted one is the
+    agent's own deploy API, which is a fair question — it is reached in the
+    same loop and nothing on the wire says which address in a loop is the
+    model.
+    """
+    assert len(measured.shown) <= 3, [a.address for a in measured.shown]
 
 
-def test_precision_is_not_worse_than_a_half(measured):
-    assert measured.precision >= 0.5
+def test_every_real_endpoint_that_can_be_asked_about_is(measured):
+    """Two of the corpus's three model endpoints reach this list. Missing
+    either is the failure the whole mechanism exists to prevent, and it is
+    invisible in a precision figure — a detector that asks one honest question
+    and misses the other scores 1.00."""
+    from custos_a0.endpoints import PROVIDER_PRIVATELINK
+    from custos_a0.scenarios.hard import GATEWAY
+
+    shown = {a.address for a in measured.shown}
+    assert {GATEWAY.ip, PROVIDER_PRIVATELINK.ip} <= shown, sorted(shown)
+
+
+def test_the_endpoint_aws_will_not_explain_is_asked_about_first(measured):
+    """Both real questions are shown, so which one is at the top is the whole
+    difference between them. Every other candidate is a machine inside the
+    account; this one is a door into another company, and nobody in the
+    account can answer it by going and looking."""
+    from custos_a0.endpoints import PROVIDER_PRIVATELINK
+
+    assert measured.shown[0].address == PROVIDER_PRIVATELINK.ip
+    assert measured.shown[0].candidate.published_endpoint
+
+
+def test_precision_is_not_worse_than_two_thirds(measured):
+    assert measured.precision >= 2 / 3
 
 
 def test_no_bulk_sender_is_asked_about(measured):

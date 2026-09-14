@@ -26,16 +26,24 @@ from dataclasses import dataclass
 
 from custos.classify import sessionize
 from custos.gateway import Candidate, candidates
-from custos.pipeline import to_scan_input
+from custos.pipeline import _published_endpoints, to_scan_input
 
 from . import corpus as corpus_mod
 from .batchbridge import build_batch
 from .corpus import CorpusSpec
-from .endpoints import BEDROCK_PRIVATELINK
+from .endpoints import BEDROCK_PRIVATELINK, PROVIDER_PRIVATELINK
 from .scenarios.hard import GATEWAY
 
-MODEL_ADDRESSES = frozenset({GATEWAY.ip, BEDROCK_PRIVATELINK.ip})
-"""Addresses in the corpus that really do carry model traffic."""
+MODEL_ADDRESSES = frozenset({
+    GATEWAY.ip, BEDROCK_PRIVATELINK.ip, PROVIDER_PRIVATELINK.ip,
+})
+"""Addresses in the corpus that really do carry model traffic.
+
+Three, and only two of them can ever reach the list. The Bedrock interface
+endpoint is resolved by the collector before any question is asked, and stays
+in this set so that a regression which stops resolving it — and starts asking
+about it instead — scores as the near miss it is rather than as a clean
+result."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,12 +54,11 @@ class Asked:
     real: bool
     """Whether this address really is carrying model traffic.
 
-    Two addresses in the corpus do. The self-hosted gateway is the case the
-    mechanism was built for and the only one that reaches this list, because
-    the other — a Bedrock interface VPC endpoint — is resolved by the collector
-    before any question is asked. It stays in this set so that a regression
-    which stops resolving it, and starts asking about it instead, is scored as
-    the near miss it is rather than as a clean result."""
+    Three addresses in the corpus do, and two of them reach this list: the
+    self-hosted gateway the mechanism was built for, and the PrivateLink
+    service a model provider published, which AWS names with an opaque id and
+    will not explain. The third — a Bedrock interface VPC endpoint — is
+    resolved by the collector before any question is asked."""
 
     @property
     def address(self) -> str:
@@ -105,7 +112,8 @@ def run(spec: CorpusSpec | None = None, limit: int = 5) -> QuestionResult:
     if spec is None:
         spec = CorpusSpec(hard=True, noise=True)
 
-    inp = to_scan_input(build_batch(corpus_mod.build(spec)))
+    batch = build_batch(corpus_mod.build(spec))
+    inp = to_scan_input(batch)
     # With whatever the pipeline already resolved. An interface VPC endpoint
     # AWS named is not a question any more, and a metric that still counted it
     # as one would reward asking about something we had already answered.
@@ -115,7 +123,14 @@ def run(spec: CorpusSpec | None = None, limit: int = 5) -> QuestionResult:
     )
     # No limit here: the detector's own cut is what `limit` measures, so the
     # scoring has to see the candidates it dropped.
-    found = candidates(telemetry, limit=1000)
+    found = candidates(
+        telemetry, limit=1000,
+        # Through the pipeline's own helper rather than a list written here.
+        # A0 measuring a mechanism that is not the one shipping is how a gate
+        # passes for a reason that does not generalise, and this one decides
+        # the order a customer reads the questions in.
+        published=_published_endpoints(batch),
+    )
     return QuestionResult(
         asked=tuple(
             Asked(candidate=c, real=c.address in MODEL_ADDRESSES) for c in found

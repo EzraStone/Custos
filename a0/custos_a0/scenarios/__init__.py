@@ -36,6 +36,7 @@ from .hard import (
     agent_human_in_loop,
     agent_via_gateway,
     agent_via_privatelink,
+    agent_via_published_endpoint,
     chatbot_function_call,
 )
 from .noise import (
@@ -70,6 +71,7 @@ HARD: list[Generator] = [
     chatbot_function_call,
     agent_via_gateway,
     agent_via_privatelink,
+    agent_via_published_endpoint,
 ]
 """Workloads that break the clean coupled/decoupled split the base corpus has.
 

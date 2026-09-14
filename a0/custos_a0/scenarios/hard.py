@@ -30,6 +30,12 @@ Four workloads, each aimed at a specific assumption:
                           from the other direction — and the one case where
                           nobody has to be asked, because AWS knows what that
                           ENI is and will say so.
+
+    agent_via_published_endpoint
+                          the residue. Model calls go over PrivateLink to a
+                          service another AWS account published, which AWS
+                          names with an opaque id and will not explain. The
+                          only one of the three that is still a question.
 """
 
 from __future__ import annotations
@@ -47,6 +53,7 @@ from ..endpoints import (
     DEPLOY_API,
     MCP_GITHUB,
     ORDERS_DB,
+    PROVIDER_PRIVATELINK,
     TICKET_API,
     VECTOR_DB,
     Endpoint,
@@ -218,5 +225,30 @@ def agent_via_privatelink(rng: Random, start: datetime, end: datetime) -> Worklo
 
     for at in uniform_arrivals(rng, start, end, 3.0):
         agent_episode(w, rng, at, 5 + rng.randrange(7), BEDROCK_PRIVATELINK, tools)
+
+    return w
+
+
+def agent_via_published_endpoint(rng: Random, start: datetime, end: datetime) -> Workload:
+    w = Workload(
+        name="underwriting-agent",
+        principal="arn:aws:iam::447120043318:role/underwriting",
+        scenario="agent_via_published_endpoint",
+        label=Label.AGENT,
+        compute="ECS",
+        note=(
+            "THE RESIDUE. Model calls go over PrivateLink to a service another "
+            "AWS account published — a model provider selling into AWS — so the "
+            "destination is a private address, the flow record says nothing, "
+            "and AWS names the service com.amazonaws.vpce.<region>.vpce-svc-... "
+            "and will not say what is behind it. Everything that can be looked "
+            "up has been; this one is still a question for a human, and it is "
+            "here to check that the question is actually asked."
+        ),
+    )
+    tools = [BILLING_API, TICKET_API]
+
+    for at in uniform_arrivals(rng, start, end, 3.0):
+        agent_episode(w, rng, at, 5 + rng.randrange(7), PROVIDER_PRIVATELINK, tools)
 
     return w
