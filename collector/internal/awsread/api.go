@@ -76,6 +76,13 @@ type NetworkAPI interface {
 	// flow record to say so — this is the one call that can tell us.
 	DescribeVpcEndpoints(context.Context, *ec2.DescribeVpcEndpointsInput,
 		...func(*ec2.Options)) (*ec2.DescribeVpcEndpointsOutput, error)
+	// DescribeVpcEndpointServices is the only thing that will say anything
+	// about a service somebody else published. `com.amazonaws.vpce.<region>.
+	// vpce-svc-0a1b2c3d` is an opaque id, and the service's own record
+	// carries the DNS name its publisher configured for it — which is how a
+	// model provider selling into AWS appears in a customer's account.
+	DescribeVpcEndpointServices(context.Context, *ec2.DescribeVpcEndpointServicesInput,
+		...func(*ec2.Options)) (*ec2.DescribeVpcEndpointServicesOutput, error)
 }
 
 // IdentityAPI reads roles, their tags, and what their policies permit.
