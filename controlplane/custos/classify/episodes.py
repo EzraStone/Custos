@@ -58,6 +58,15 @@ class Window:
     start: datetime
     model_egress: int = 0
     model_ingress: int = 0
+    model_egress_packets: int = 0
+    model_ingress_packets: int = 0
+    """Packet counts for the same traffic as the two above.
+
+    Not a signal. No classifier feature reads these, and adding one would need
+    the same justification as any other — they are here because packet counts
+    are the only thing in a flow record that says whether a model response
+    arrived whole or one token at a time, and those two readings of the same
+    bytes differ by forty-four times in what they imply about cost."""
     tool_egress: int = 0
     tool_ingress: int = 0
     model_connections: int = 0
@@ -117,6 +126,14 @@ class Episode:
     @property
     def model_ingress(self) -> int:
         return sum(w.model_ingress for w in self.windows)
+
+    @property
+    def model_egress_packets(self) -> int:
+        return sum(w.model_egress_packets for w in self.windows)
+
+    @property
+    def model_ingress_packets(self) -> int:
+        return sum(w.model_ingress_packets for w in self.windows)
 
     @property
     def tool_windows(self) -> int:
@@ -200,6 +217,7 @@ def build_windows(
                 w.model_services[peer] = peer_service
             if egress:
                 w.model_egress += r.bytes
+                w.model_egress_packets += r.packets
                 if r.tcp_flags & SYN:
                     marker = (key, r.srcport, peer)
                     if marker not in seen_syn:
@@ -207,6 +225,7 @@ def build_windows(
                         w.model_connections += 1
             else:
                 w.model_ingress += r.bytes
+                w.model_ingress_packets += r.packets
         elif is_tool_destination(cls):
             w.tool_classes.add(cls)
             w.tool_addresses.add(peer)
