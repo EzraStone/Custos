@@ -89,11 +89,20 @@ CUSTOS_DRY_RUN=1 ./custos-collector > batch.json    # prints, sends nothing
 custos --db acme.db scan batch.json --out report.html
 custos --db acme.db register --account 447120043318 --unsanctioned-only
 custos --db acme.db diff --account 447120043318     # after the second scan
+
+custos --db acme.db grant  agt_...  --operator you@example.com
+custos --db acme.db retire agt_...  --operator you@example.com --reason "decommissioned"
+custos --db acme.db drift  agt_...  # how it compares with its own history
+custos --db acme.db audit  agt_...  # every decision anybody made about it
 ```
 
 No server is needed for a first scan. `docs/OPERATIONS.md` walks the whole
 thing; the control plane API and container image exist for when a customer
 wants continuous monitoring.
+
+Everything the API can do, the CLI can do, and a test enforces it. The control
+plane is deployed when a customer wants continuous monitoring — before that
+there is no API at all, and the entry motion is where every customer starts.
 
 Run `./custos-collector --check` before the first scan. Every onboarding
 failure produces the same symptom — a report with no findings — and `--check`

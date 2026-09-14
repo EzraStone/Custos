@@ -176,6 +176,21 @@ What they cannot do there: start a scan, change a token, or move an agent
 directly to sanctioned. The console reads the register and records decisions;
 it does not drive collection.
 
+Every one of those decisions is also a CLI command, which matters before the
+control plane is deployed — which is the whole entry motion:
+
+```
+custos --db acme.db grant  agt_...  --operator you@example.com
+custos --db acme.db retire agt_...  --operator you@example.com --reason "..."
+custos --db acme.db status agt_...  --to pending_review --operator you@... --reason "..."
+custos --db acme.db drift  agt_...
+custos --db acme.db audit  agt_...
+```
+
+`retire` is the one that keeps the queue readable, and `status --to
+pending_review` is how a retire made by mistake is walked back — the state
+machine permits that transition for exactly this.
+
 ### Schedule pruning
 
 ```
