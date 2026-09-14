@@ -58,11 +58,32 @@ PORT_NAMES: dict[int, str] = {
 }
 
 
+INDIRECT_SOURCES: dict[str, str] = {
+    "security-group": "security group",
+    "instance": "instance name",
+}
+"""Naming sources that describe something other than the host itself.
+
+Every other source names the thing at the address: a tag on its interface, a
+description AWS wrote for it, the service an endpoint is for. These two name
+something it belongs to, and both can be shared. A security group called
+`web-tier` is attached to every web server in the account, and an instance can
+carry several interfaces doing different jobs.
+
+They earn their place — an account with no ENI tags has nothing else, and the
+alternative is an address — but an operator approving `orders-service
+10.0.4.50` should be able to tell a label that names that host from one that
+names a group it is in. Saying so costs four words. Not saying so spends the
+scope's credibility on the weakest source in it.
+"""
+
+
 def describe(
     addr: str,
     port: int = 0,
     aws_service: str = "",
     known: Mapping[str, str] | None = None,
+    kinds: Mapping[str, str] | None = None,
 ) -> str:
     """Name one destination, or return the address when nothing is known.
 
@@ -70,6 +91,10 @@ def describe(
     wins over everything below. It is the only source that can name an
     ordinary internal service: nothing in a flow log distinguishes the billing
     API from any other host on port 443, and the account does.
+
+    `kinds` says where each name came from, and is used for one thing: two of
+    the seven sources name something the host belongs to rather than the host,
+    and the scope says which.
     """
     if known:
         name = known.get(addr, "")
@@ -77,6 +102,9 @@ def describe(
             # The address stays. A private address is a specific host, and the
             # operator approving it is approving that host rather than every
             # host that shares a name.
+            qualifier = INDIRECT_SOURCES.get((kinds or {}).get(addr, ""), "")
+            if qualifier:
+                return f"{name} {addr} ({qualifier})"
             return f"{name} {addr}"
 
     if aws_service:

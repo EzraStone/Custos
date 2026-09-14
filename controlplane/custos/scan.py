@@ -48,6 +48,13 @@ class ScanInput:
     facts: dict[str, PrincipalFacts] = field(default_factory=dict)
     capabilities: dict[str, IamCapability] = field(default_factory=dict)
     destination_names: dict[str, str] = field(default_factory=dict)
+    destination_kinds: dict[str, str] = field(default_factory=dict)
+    """Where each destination's name came from.
+
+    Read for one thing: two of the seven naming sources describe something the
+    host belongs to rather than the host, and the scope an operator approves
+    says which."""
+
     destination_services: dict[str, str] = field(default_factory=dict)
     """AWS endpoint service per address, for the interface VPC endpoints the
     collector resolved. The only thing that says a private address in the
@@ -181,7 +188,9 @@ def run(inp: ScanInput, register: Register | None = None) -> ScanResult:
         )
         attribution = resolve(facts)
         capability = inp.capabilities.get(verdict.principal)
-        reach_report = reach_mod.build(t, capability, inp.destination_names)
+        reach_report = reach_mod.build(
+            t, capability, inp.destination_names, inp.destination_kinds
+        )
         compute = _compute_for(t, inp) or facts.compute
 
         reg.upsert(

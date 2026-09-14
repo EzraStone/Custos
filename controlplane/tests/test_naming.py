@@ -66,3 +66,54 @@ def test_every_datastore_port_has_a_name(port: int):
 def test_naming_never_invents_a_service_for_an_address_it_cannot_place():
     for addr in ("10.0.4.23", "192.168.1.1", "172.16.0.5"):
         assert describe(addr, 443) == addr
+
+
+# --- where a name came from ---------------------------------------------------
+#
+# Seven sources name a destination now. Five of them name the thing at the
+# address: a tag on its interface, a description AWS wrote for it, the service
+# an endpoint is for. Two name something it belongs to, and both can be shared.
+
+def test_a_name_from_a_security_group_says_so():
+    """A group called `web-tier` is attached to every web server in the
+    account. The label earns its place — an account with no ENI tags has
+    nothing else — but an approver should be able to tell it from a label that
+    names this host."""
+    from custos.naming import describe
+
+    assert describe(
+        "10.0.4.50", 443, known={"10.0.4.50": "orders-service"},
+        kinds={"10.0.4.50": "security-group"},
+    ) == "orders-service 10.0.4.50 (security group)"
+
+
+def test_a_name_from_an_instance_says_so():
+    """An instance can carry several interfaces doing different jobs."""
+    from custos.naming import describe
+
+    assert describe(
+        "10.0.14.1", 443, known={"10.0.14.1": "checkout-api"},
+        kinds={"10.0.14.1": "instance"},
+    ) == "checkout-api 10.0.14.1 (instance name)"
+
+
+def test_a_name_from_the_thing_itself_is_unqualified():
+    """Five of the seven sources name the host. Qualifying those would put four
+    words on every line of the scope to say nothing."""
+    from custos.naming import describe
+
+    for kind in ("tag", "load-balancer", "vpc-endpoint", "ecs", "rds"):
+        assert describe(
+            "10.0.4.21", 443, known={"10.0.4.21": "billing-api"},
+            kinds={"10.0.4.21": kind},
+        ) == "billing-api 10.0.4.21"
+
+
+def test_a_name_with_no_recorded_source_is_unqualified():
+    """An older collector sends no kind, and inventing a qualifier for a
+    source we do not know would be a claim about provenance we cannot make."""
+    from custos.naming import describe
+
+    assert describe(
+        "10.0.4.21", 443, known={"10.0.4.21": "billing-api"},
+    ) == "billing-api 10.0.4.21"

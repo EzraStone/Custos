@@ -172,6 +172,9 @@ def to_scan_input(
         destination_names={
             d.address: d.name for d in batch.destinations if d.name
         },
+        destination_kinds={
+            d.address: d.kind for d in batch.destinations if d.kind
+        },
         destination_services={
             d.address: d.service for d in batch.destinations if d.service
         },

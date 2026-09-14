@@ -82,7 +82,9 @@ class ReachReport:
 
 
 def observed_reach(
-    t: PrincipalTelemetry, names: Mapping[str, str] | None = None
+    t: PrincipalTelemetry,
+    names: Mapping[str, str] | None = None,
+    kinds: Mapping[str, str] | None = None,
 ) -> tuple[set[str], set[str]]:
     """Split observed destinations into (tools, data stores), by name.
 
@@ -110,7 +112,7 @@ def observed_reach(
     tools: set[str] = set()
     stores: set[str] = set()
     for address, seen in best.items():
-        label = describe(address, seen.port, seen.aws_service, names)
+        label = describe(address, seen.port, seen.aws_service, names, kinds)
         if seen.cls is DestinationClass.DATASTORE:
             stores.add(label)
         else:
@@ -132,9 +134,10 @@ def build(
     t: PrincipalTelemetry,
     capability: IamCapability | None = None,
     names: Mapping[str, str] | None = None,
+    kinds: Mapping[str, str] | None = None,
 ) -> ReachReport:
     """Combine observed reach with granted capability."""
-    tools, stores = observed_reach(t, names)
+    tools, stores = observed_reach(t, names, kinds)
     model_endpoints = {a for w in t.windows for a in w.model_addresses}
 
     granted = granted_blast_radius(capability) if capability else BlastRadius.READ
