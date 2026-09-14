@@ -3,6 +3,7 @@ package ingest
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -704,5 +705,61 @@ func TestAFullCacheOfLiveEntriesIsDropped(t *testing.T) {
 
 	if len(r.cache) != 0 {
 		t.Fatalf("a full cache of live entries kept %d", len(r.cache))
+	}
+}
+
+// TestANameWithATabDoesNotBreakTheScope: names come from tag values, which are
+// text a person typed. A label arriving in a column-aligned terminal table
+// with a tab in it breaks the one artefact an operator reads before granting
+// authority.
+func TestANameWithATabDoesNotBreakTheScope(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"billing\tapi", "billing api"},
+		{"billing\napi", "billing api"},
+		{"  billing-api  ", "billing-api"},
+		{"billing   api", "billing api"},
+		{"billing\x07api", "billingapi"},
+	} {
+		iface := destEni("10.0.4.21", "", "Name", tc.in)
+		names := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.4.21")
+		if names["10.0.4.21"] != tc.want+"/tag" {
+			t.Errorf("%q became %q, want %q", tc.in, names["10.0.4.21"], tc.want)
+		}
+	}
+}
+
+// TestALongNameIsCutAndMarked: an AWS tag value may be 256 characters, and a
+// scope line is read by a person deciding whether to grant authority. A
+// 256-character label pushes the address — the part that identifies the host —
+// off the end of the line.
+func TestALongNameIsCutAndMarked(t *testing.T) {
+	long := strings.Repeat("a", 200)
+	iface := destEni("10.0.4.21", "", "Name", long)
+	got := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.4.21")["10.0.4.21"]
+
+	name := strings.TrimSuffix(got, "/tag")
+	if len([]rune(name)) != MaxNameLength+1 {
+		t.Fatalf("got %d runes, want %d plus the mark", len([]rune(name)), MaxNameLength)
+	}
+	if !strings.HasSuffix(name, "…") {
+		t.Fatalf("a cut name is not marked: %q", name)
+	}
+}
+
+// TestANameOfOnlyWhitespaceNamesNothing: the address is the honest answer.
+func TestANameOfOnlyWhitespaceNamesNothing(t *testing.T) {
+	iface := destEni("10.0.4.21", "", "Name", " \t\n ")
+	if got := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.4.21"); len(got) != 0 {
+		t.Fatalf("got %v", got)
+	}
+}
+
+// TestASecurityGroupNameIsCleanedTheSameWay: it is the same kind of text from
+// the same kind of field.
+func TestASecurityGroupNameIsCleanedTheSameWay(t *testing.T) {
+	iface := groupedEni("10.0.4.50", "orders\tservice-sg")
+	names := resolveNames(t, []ec2types.NetworkInterface{iface}, "10.0.4.50")
+	if names["10.0.4.50"] != "orders service/security-group" {
+		t.Fatalf("got %v", names)
 	}
 }

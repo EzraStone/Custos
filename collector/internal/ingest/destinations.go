@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
@@ -301,7 +302,7 @@ func nameOf(iface ec2types.NetworkInterface) (name, kind string) {
 		if tag.Key == nil || *tag.Key != "Name" || tag.Value == nil {
 			continue
 		}
-		if name := strings.TrimSpace(*tag.Value); name != "" && !isResourceID(name) {
+		if name := renderable(*tag.Value); name != "" && !isResourceID(name) {
 			return name, "tag"
 		}
 	}
@@ -450,7 +451,7 @@ func bySecurityGroup(groups []ec2types.GroupIdentifier) string {
 		if group.GroupName == nil {
 			continue
 		}
-		name := strings.TrimSpace(*group.GroupName)
+		name := renderable(*group.GroupName)
 		if name == "" || generatedGroupName.MatchString(name) {
 			continue
 		}
@@ -509,7 +510,7 @@ func byManagedTag(tags []ec2types.Tag) (name, kind string) {
 	have := map[string]string{}
 	for _, tag := range tags {
 		if tag.Key != nil && tag.Value != nil {
-			have[*tag.Key] = strings.TrimSpace(*tag.Value)
+			have[*tag.Key] = renderable(*tag.Value)
 		}
 	}
 	for _, candidate := range managedTags {
@@ -593,7 +594,7 @@ func instanceName(tags []ec2types.Tag) string {
 		if tag.Key == nil || *tag.Key != "Name" || tag.Value == nil {
 			continue
 		}
-		if name := strings.TrimSpace(*tag.Value); name != "" && !isResourceID(name) {
+		if name := renderable(*tag.Value); name != "" && !isResourceID(name) {
 			return name
 		}
 	}
@@ -700,4 +701,53 @@ func serviceShortName(service string) string {
 		}
 	}
 	return service
+}
+
+// MaxNameLength bounds a destination name.
+//
+// An AWS tag value may be 256 characters. A scope line is read by a person
+// deciding whether to grant authority, and a 256-character label in it pushes
+// the address — the part that identifies the host — off the end of the line.
+// Sixty-four is longer than any service name anybody uses and short enough to
+// sit beside an address.
+const MaxNameLength = 64
+
+// renderable turns a customer-authored label into something that can be put in
+// a line of a report.
+//
+// Names come from tag values and security group names, which are text a person
+// typed. Nothing here is about safety in the injection sense — the report
+// escapes what it renders and the wire types cannot carry a payload (SEC-18) —
+// it is about a label arriving in a column-aligned terminal table with a tab in
+// it, or a newline, and breaking the one artefact an operator reads before
+// granting authority.
+//
+// Whitespace of any kind collapses to a single space, because a name that came
+// from a copy-paste is still that customer's name for the thing. Other control
+// characters are dropped: there is no reading of a name in which a bell
+// character is part of it. Over the cap, the name is cut and marked, because
+// the address beside it is what identifies the host and a half-name with an
+// ellipsis is more use than no name.
+func renderable(value string) string {
+	var b strings.Builder
+	space := false
+	for _, r := range value {
+		switch {
+		case unicode.IsSpace(r):
+			space = b.Len() > 0
+		case unicode.IsControl(r):
+			// Dropped entirely, and does not count as a separator.
+		default:
+			if space {
+				b.WriteRune(' ')
+				space = false
+			}
+			b.WriteRune(r)
+		}
+	}
+	name := b.String()
+	if len(name) > MaxNameLength {
+		return strings.TrimSpace(name[:MaxNameLength]) + "\u2026"
+	}
+	return name
 }
