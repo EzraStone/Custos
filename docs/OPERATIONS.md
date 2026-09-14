@@ -125,6 +125,23 @@ than skipped. Running one process per region works too and is what a customer
 with separate deployment pipelines will do; the control plane keys a batch on
 (account, region, window) either way.
 
+### Re-applying the customer's Terraform
+
+Needed once, for every customer onboarded before `ec2:DescribeVpcEndpoints`
+was added to the role. Their role refuses that call, the collector swallows
+the refusal — a naming failure must never cost a scan — and if their model
+traffic goes to Bedrock over PrivateLink, every agent behind it stays
+invisible with nothing in the report to say so.
+
+`custos-collector --check` names it: an interface endpoint that comes back with
+a `vpce-` id and no service is what the refusal looks like from outside. The
+remedy is one `terraform apply` in their account and nothing else; the role's
+other permissions are unchanged.
+
+Worth doing proactively rather than waiting for the line to appear, because the
+account it matters for is the one already running — and nobody re-runs
+preflight against an account that is working.
+
 ### Upgrading the control plane
 
 Stop it, replace the binary or image, start it. The schema migration runs on
@@ -182,7 +199,14 @@ agents is a conversation that ends a pilot.
 ## When something looks wrong
 
 **"0 agents found" on an account that definitely runs agents.**
-Check coverage first. Then check that `CUSTOS_FLOW_LOGS` points at the group
+Check whether their model traffic leaves the VPC at all. An interface VPC
+endpoint for Bedrock puts every model call on a private address in their own
+subnet, and a flow log says nothing about what is there — `--check` reports it
+under `model traffic over privatelink`, either as resolved or as an endpoint we
+could not identify. The second means their role predates
+`ec2:DescribeVpcEndpoints` and needs a re-apply.
+
+Then check coverage. Then check that `CUSTOS_FLOW_LOGS` points at the group
 carrying the traffic — an account can have several and the empty one still
 parses cleanly. Then check the catalogue revision: an agent using a provider we
 do not recognise is invisible.
