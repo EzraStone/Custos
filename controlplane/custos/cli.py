@@ -628,6 +628,45 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_audit(args: argparse.Namespace) -> int:
+    """Every decision anybody made about one agent, oldest first.
+
+    The register is the thing this product persists and the audit trail is why
+    it can be trusted: it is the record of who granted authority to what, and
+    when, and on what grounds. Both write surfaces have been writing to it
+    since SEC-17 existed and only the API could read it — so the customer
+    running the CLI-only path, which is every customer before the control
+    plane is deployed, was accumulating a record nobody could look at.
+
+    Oldest first, deliberately. This is read as a history, and a history that
+    starts at the end is a list.
+    """
+    conn = open_database(args.db)
+    agents = AgentStore(conn)
+
+    existing = agents.get(args.agent_id)
+    if existing is None:
+        print(f"error: no agent {args.agent_id}", file=sys.stderr)
+        return 2
+
+    entries = agents.audit_for(args.agent_id)
+    print(existing.identity.principal)
+    if not entries:
+        # Not possible through any path that exists — discovery writes one —
+        # but a database restored from somewhere else might have none, and an
+        # empty table printed as a blank is indistinguishable from a crash.
+        print("  no entries")
+        return 0
+
+    for entry in entries:
+        when = str(entry["at"])[:19].replace("T", " ")
+        line = f"  {when}  {entry['action']:<12} {entry['actor']}"
+        if entry["detail"]:
+            line += f"  — {entry['detail']}"
+        print(line)
+    return 0
+
+
 def cmd_prune(args: argparse.Namespace) -> int:
     """Drop telemetry past its retention window.
 
@@ -819,6 +858,10 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("gateways", help="internal addresses that look like model endpoints")
     p.add_argument("--account", required=True)
     p.set_defaults(func=cmd_gateways)
+
+    p = sub.add_parser("audit", help="every decision anybody made about one agent")
+    p.add_argument("agent_id")
+    p.set_defaults(func=cmd_audit)
 
     p = sub.add_parser("status", help="move an agent between states a person may set")
     p.add_argument("agent_id")

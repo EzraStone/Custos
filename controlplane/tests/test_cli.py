@@ -872,3 +872,30 @@ def test_retire_is_still_the_shorthand(tmp_path, capsys):
     assert main(["--db", str(db), "retire", agent_id_,
                  "--operator", "ezra@custos.dev", "--reason", "gone"]) == 0
     assert "retired" in capsys.readouterr().out
+
+
+def test_audit_shows_every_decision_oldest_first(tmp_path, capsys):
+    """The register is what this product persists and the audit trail is why
+    it can be trusted. Both write surfaces have been writing to it since
+    SEC-17 existed and only the API could read it."""
+    db = tmp_path / "a.db"
+    agent_id_ = _one_agent(db)
+    main(["--db", str(db), "retire", agent_id_,
+          "--operator", "ezra@custos.dev", "--reason", "Decommissioned in INC-4471"])
+    capsys.readouterr()  # the retire command's own output
+
+    assert main(["--db", str(db), "audit", agent_id_]) == 0
+    out = capsys.readouterr().out
+    assert "discovered" in out
+    assert "retired" in out
+    assert "ezra@custos.dev" in out
+    assert "INC-4471" in out
+    # Oldest first: this is read as a history.
+    assert out.index("discovered") < out.index("retired")
+
+
+def test_audit_says_so_when_there_is_no_such_agent(tmp_path, capsys):
+    db = tmp_path / "a2.db"
+    _one_agent(db)
+    assert main(["--db", str(db), "audit", "agt_nope"]) == 2
+    assert "no agent" in capsys.readouterr().err
