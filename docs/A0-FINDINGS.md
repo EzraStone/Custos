@@ -364,6 +364,68 @@ a human.
 
 ---
 
+## Finding 10 — most of "a question for a human" was three questions, and two had answers
+
+Finding 9 closed with the sentence above, and it was the right sentence to a
+question nobody had taken apart. Taking it apart, `com.amazonaws.vpce.<region>.
+vpce-svc-0a1b2c3d` is not one case. It is three, and only one of them needs a
+person.
+
+**The customer named it.** A VPC endpoint is the customer's own resource, and
+their Terraform very often calls it what it is. That tag comes back on the
+DescribeVpcEndpoints response the collector was already making, in the same
+object as the service name, and was being dropped — the resolver read one field
+and discarded the rest of the answer. Every other naming source in the
+collector puts a label the customer chose ahead of anything we look up, and
+this one did not, because nobody had looked at the whole response.
+
+**The publisher named it.** A service published for other accounts to consume
+carries a private DNS name its publisher configured, and for a model provider
+selling into AWS that is their own API hostname. It costs one further read,
+`DescribeVpcEndpointServices`, made only for published services the customer
+has not already named — so an account whose endpoints are all AWS's own makes
+no extra call at all.
+
+**Nobody named it.** No tag, no private DNS name. This is the residue, and it
+is a question for a human exactly as Finding 9 said.
+
+The measured effect is on the question metric rather than on the classifier,
+which is the right place for it. A corpus workload was added — an agent whose
+model calls go over PrivateLink to a service another account published — and
+the detector asks about it, ranks it above the self-hosted gateway, and
+precision goes **0.50 to 0.67**. Both of the corpus's askable model endpoints
+are now in the list a customer is shown, which is a property a precision figure
+cannot see: a detector that asks one honest question and misses the other
+scores 1.00.
+
+Ranked first because of what it is rather than how loud it is. Every other
+candidate is a machine inside the account and somebody can walk over and look
+at it. This one is a door into another company's network, sold to the customer
+as a service, carrying a transcript-shaped stream — and nothing else in an
+account has that shape.
+
+**The exception that was not made.** A published endpoint whose workloads reach
+nothing else is declined like any other candidate. It is better evidence and it
+is still not evidence: a workload with one destination has no tools to act
+through and is not what this product means by an agent. Being sold by another
+company does not change that, and an exception carved out here is how a
+mechanism that must never classify anything starts classifying.
+
+Two things fell out of it that were not the point:
+
+- **The readability gate could not see a harder interface.** `CONTRIBUTING.md`
+  says that when the estate reaches 100% the thing to do is add harder shapes.
+  Doing that was a no-op against the gate as written, which counted successes:
+  a nameable interface nothing could name left the success count where it was
+  and moved only a percentage no assertion read. The gate counts the question
+  now, and every nameable interface has to be named by name.
+- **A field can drift between the two reports one row at a time.** The existing
+  meta-test compares whole sections and the caveats on `Coverage`. It said
+  nothing about the fields inside a row, which is the same failure one level
+  down and fails just as silently.
+
+---
+
 ---
 
 ## Why this result should be believed, and where it should not
