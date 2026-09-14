@@ -60,9 +60,19 @@ falls to **0.14**. Quote that number, not the first one, wherever it would be
 doing work.
 
 Reproduce with `make experiment`. CI fails the build if it stops holding.
-`make gates` prints all three measured numbers in one run — the base corpus
-margin, the stress corpus margin, and the gateway detector's question score —
-which is the set anyone asking what is real will want together.
+`make gates` prints all four measured numbers in one run:
+
+```
+G0, base corpus          separation margin 0.260
+the classifier, stress   separation margin 0.142, recall 1.00, precision 1.00
+the gateway detector     2 questions, 1 worth asking, the real one first
+scope readability        24 of 24 nameable interfaces
+```
+
+That is the set anyone asking what is real will want together, and three of the
+four started at a number worth being embarrassed by: the stress margin at half
+the headline, the detector at 0.00, readability at 46%. The fourth has not
+moved since A0.
 
 The finding underneath it is the interesting part: the signal the specification
 leads with — burst timing and per-call payload growth — is not implementable,
