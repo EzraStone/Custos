@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from .attribute import PrincipalFacts
 from .baseline import Drift, detect_from_history
 from .batch import Batch
-from .catalog import is_ipv6, is_model_endpoint_service
+from .catalog import is_ipv6, is_model_endpoint, is_model_endpoint_service
 from .classify import Disposition
 from .declared import Declaration, Declared
 from .declared import build as build_declared
@@ -113,18 +113,27 @@ def scope_readability(batch: Batch, scan_input: ScanInput) -> tuple[int, int]:
 
 
 def ipv6_destinations(scan_input: ScanInput) -> int:
-    """Public IPv6 addresses this scan's traffic reached.
+    """Public IPv6 addresses this scan's traffic reached and could not classify.
 
-    The provider catalogue is IPv4 only, so a model endpoint reached over IPv6
-    is classified as an ordinary external address and the agent behind it makes
-    no finding at all. That is the same shape as an undeclared gateway, and it
-    gets the same treatment: counted, and said in the report, rather than left
-    to look like a clean account.
+    The provider *range* catalogue is IPv4 only, so a third-party model
+    endpoint reached over IPv6 is classified as an ordinary external address
+    and the agent behind it makes no finding at all. That is the same shape as
+    an undeclared gateway, and it gets the same treatment: counted, and said in
+    the report, rather than left to look like a clean account.
+
+    An AWS endpoint reached over IPv6 is *not* in that position, and counting
+    it here would overstate the blindness. `pkt-dst-aws-service` is an
+    annotation about the destination rather than about its address family, so
+    Bedrock over IPv6 is recognised exactly as Bedrock over IPv4 is — and a
+    report that claimed otherwise would be overstating a limitation in the one
+    document whose value is that it does not.
     """
     seen: set[str] = set()
     for record in scan_input.records:
-        peer = record.dstaddr if record.direction is Direction.EGRESS else record.srcaddr
-        if is_ipv6(peer) and not _is_private(peer):
+        egress = record.direction is Direction.EGRESS
+        peer = record.dstaddr if egress else record.srcaddr
+        service = record.dst_aws_service if egress else record.src_aws_service
+        if is_ipv6(peer) and not _is_private(peer) and not is_model_endpoint(peer, service):
             seen.add(peer)
     return len(seen)
 

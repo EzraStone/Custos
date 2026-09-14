@@ -728,3 +728,14 @@ def test_a_declaration_and_a_resolution_are_both_reported():
     )
     assert "This account declared" in page
     assert "reaches bedrock-runtime through an interface VPC endpoint" in page
+
+
+def test_the_ipv6_caveat_does_not_overstate_what_is_blind():
+    """It used to end "an agent reaching a provider over IPv6 does not appear
+    above at all", which is false for AWS's own model endpoints: the flow log
+    names the service rather than the address family. Overstating a limitation
+    is the one failure the limitations section cannot afford."""
+    page = render(result([agent()]), "acme", T0, coverage=Coverage(ipv6_destinations=4))
+    assert "reaching Anthropic or OpenAI over IPv6 does not appear" in page
+    assert "Bedrock over IPv6 is recognised" in page
+    assert "reaching a provider over IPv6 does not appear above at all" not in page

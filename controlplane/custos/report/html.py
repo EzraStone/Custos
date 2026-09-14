@@ -307,10 +307,15 @@ def _format_limits(coverage: Coverage | None) -> list[str]:
     if coverage.ipv6_destinations:
         items.append(
             f"{coverage.ipv6_destinations:,} of the public destinations reached "
-            "were IPv6. The model endpoint catalogue is IPv4 only — there are no "
-            "published provider ranges for IPv6 we can verify, and guessing one "
-            "would manufacture findings out of unrelated traffic. An agent "
-            "reaching a provider over IPv6 does not appear above at all."
+            "were IPv6 and could not be classified. The provider range "
+            "catalogue is IPv4 only — there are no published provider ranges "
+            "for IPv6 we can verify, and guessing one would manufacture "
+            "findings out of unrelated traffic. An agent reaching Anthropic or "
+            "OpenAI over IPv6 does not appear above at all. AWS's own model "
+            "endpoints are not affected: the flow log names the service rather "
+            "than the address family, so Bedrock over IPv6 is recognised the "
+            "same way Bedrock over IPv4 is, and those destinations are not in "
+            "the count."
         )
     if coverage.direction_undecided:
         items.append(
@@ -565,9 +570,10 @@ class Coverage:
     about their tagging."""
 
     ipv6_destinations: int = 0
-    """Public IPv6 addresses this scan's traffic reached.
+    """Public IPv6 addresses this scan's traffic reached and could not classify.
 
-    The provider catalogue is IPv4 only. A model endpoint reached over IPv6 is
+    The provider range catalogue is IPv4 only. A third-party model endpoint
+    reached over IPv6 is
     classified as an ordinary external address, so the agent behind it makes no
     finding at all — the same shape as an undeclared gateway, and it gets the
     same treatment here: said rather than left to look like a clean account."""
