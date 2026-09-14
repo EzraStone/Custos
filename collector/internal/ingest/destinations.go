@@ -619,13 +619,23 @@ func instanceName(tags []ec2types.Tag) string {
 // endpoint in the region. Custos reads what its own traffic already pointed
 // at, and a call that enumerates an account's endpoints is a different claim
 // about what this role does (SEC-16).
-// endpoint is what one DescribeVpcEndpoints answer says about an address.
+// endpoint is what AWS says about an address that is an interface endpoint.
 type endpoint struct {
 	// service is AWS's name for what the endpoint is for.
 	service string
 	// tag is the Name the customer put on the endpoint resource. Empty for
 	// most of them, and the whole answer for the ones AWS cannot explain.
 	tag string
+	// dns is the DNS name the publisher of the service configured, for a
+	// service AWS did not publish. Empty for AWS's own, where the service
+	// name already says everything.
+	dns string
+}
+
+// published reports whether this is a service somebody other than AWS
+// published. Those are the ones named after an opaque id.
+func published(service string) bool {
+	return strings.HasPrefix(service, "com.amazonaws.vpce.")
 }
 
 func (r *DestinationResolver) endpointServices(
@@ -673,9 +683,71 @@ func (r *DestinationResolver) endpointServices(
 			}
 		}
 		if out.NextToken == nil || *out.NextToken == "" {
-			return services
+			break
 		}
 		token = out.NextToken
+	}
+	r.describeServices(ctx, services)
+	return services
+}
+
+// describeServices asks what is behind the endpoints AWS's own naming does not
+// explain, and fills in the DNS name the publisher configured.
+//
+// Only for `com.amazonaws.vpce.<region>.vpce-svc-...`. For an AWS service the
+// service name is already the answer and this would be a call per scan for a
+// field we would discard.
+//
+// Only when the customer has not named the endpoint themselves, for the same
+// reason: their word wins, so looking this up would be work whose result is
+// thrown away.
+//
+// A failure is not an error. What it costs is a name, and the endpoint keeps
+// the opaque id — which is what the account had before this existed, and what
+// preflight is about to start calling out by name.
+func (r *DestinationResolver) describeServices(ctx context.Context, found map[string]endpoint) {
+	ask := map[string]bool{}
+	for _, e := range found {
+		if e.tag == "" && published(e.service) {
+			ask[e.service] = true
+		}
+	}
+	if len(ask) == 0 {
+		return
+	}
+	names := make([]string, 0, len(ask))
+	for name := range ask {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	dns := map[string]string{}
+	var token *string
+	for {
+		out, err := r.API.DescribeVpcEndpointServices(ctx,
+			&ec2.DescribeVpcEndpointServicesInput{ServiceNames: names, NextToken: token})
+		if err != nil {
+			break
+		}
+		for _, detail := range out.ServiceDetails {
+			if detail.ServiceName == nil || detail.PrivateDnsName == nil {
+				continue
+			}
+			if name := renderable(*detail.PrivateDnsName); name != "" {
+				dns[*detail.ServiceName] = name
+			}
+		}
+		if out.NextToken == nil || *out.NextToken == "" {
+			break
+		}
+		token = out.NextToken
+	}
+
+	for address, e := range found {
+		if name, ok := dns[e.service]; ok {
+			e.dns = name
+			found[address] = e
+		}
 	}
 }
 
@@ -710,6 +782,9 @@ func endpointID(iface ec2types.NetworkInterface) string {
 func endpointName(e endpoint) string {
 	if e.tag != "" {
 		return e.tag
+	}
+	if e.dns != "" {
+		return e.dns
 	}
 	return serviceShortName(e.service)
 }

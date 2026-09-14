@@ -31,6 +31,7 @@ type fakeEC2 struct {
 	describedByAddress int
 	describedInstances int
 	describedEndpoints int
+	describedServices  int
 }
 
 func (f *fakeEC2) DescribeVpcEndpoints(_ context.Context, in *ec2.DescribeVpcEndpointsInput,
@@ -51,6 +52,23 @@ func (f *fakeEC2) DescribeVpcEndpoints(_ context.Context, in *ec2.DescribeVpcEnd
 			}
 		}
 		out.VpcEndpoints = append(out.VpcEndpoints, endpoint)
+	}
+	return out, nil
+}
+
+func (f *fakeEC2) DescribeVpcEndpointServices(_ context.Context,
+	in *ec2.DescribeVpcEndpointServicesInput,
+	_ ...func(*ec2.Options)) (*ec2.DescribeVpcEndpointServicesOutput, error) {
+	f.describedServices++
+	out := &ec2.DescribeVpcEndpointServicesOutput{}
+	for _, name := range in.ServiceNames {
+		dns, ok := f.privateDNS[name]
+		if !ok {
+			continue
+		}
+		out.ServiceDetails = append(out.ServiceDetails, ec2types.ServiceDetail{
+			ServiceName: aws.String(name), PrivateDnsName: aws.String(dns),
+		})
 	}
 	return out, nil
 }
