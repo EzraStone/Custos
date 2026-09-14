@@ -104,7 +104,7 @@ accident.
 
 ## SEC-23 — Only recognised names leave the account
 
-The collector names a destination from one of seven sources, and sends nothing
+The collector names a destination from one of nine sources, and sends nothing
 that is not one of them. What it cannot name, it does not describe: the address
 is sent and the register shows that.
 
@@ -115,12 +115,14 @@ infrastructure metadata, and shipping it would quietly widen what leaves a
 customer account from *what their software is* to *what their engineers wrote
 down*, which is the line the whole ethical position rests on.
 
-Three of the sources are labels a customer chose, and are trusted for the
+Four of the sources are labels a customer chose, and are trusted for the
 reason the Name tag always was — they are the closest available answer to "what
 is this service called":
 
 - the ENI's `Name` tag
 - the `Name` tag of the instance it is attached to
+- the `Name` tag of the VPC endpoint an interface belongs to, which is the
+  customer's own resource even though the interface in front of it is AWS's
 - the name of the one security group somebody named, when nothing else
   answered and exactly one group is not generated
 
@@ -134,6 +136,20 @@ all:
 - tags in the reserved `aws:` namespace, which a customer cannot write
 - the endpoint service an interface VPC endpoint is for
 
+One is written by neither, and it is the only source in this list that
+describes somebody other than the account being scanned:
+
+- the private DNS name the publisher of an endpoint service configured for it
+
+That needs its own justification, because "text from outside AWS's namespace"
+is exactly what the rest of this invariant refuses. Two things make it safe.
+It is the same string for every customer of that service — a publisher sets it
+once, on their own service, and it cannot carry anything about the account
+reading it. And it is the only answer that exists: a service published by
+another account is named `com.amazonaws.vpce.<region>.vpce-svc-0a1b2c3d`, and
+without this the scope entry is that id. It is bounded and stripped by the same
+`renderable` every other name goes through.
+
 Two exclusions matter as much as the list. A name that is an identifier —
 `i-0a1b2c3d4e5f60718`, `tf-2026081409...` — is refused, because the scope has
 one readable column and a second copy of the address is not worth spending it
@@ -144,7 +160,10 @@ what AWS called it rather than what anybody called the service.
 `TestPublicAddressesAreNotAskedAbout`,
 `TestFreeTextStartingWithAKnownShapeIsNotParsed`,
 `TestANameTagThatIsAnIdentifierIsNotAName`,
-`TestAGeneratedGroupNameNamesNothing`.
+`TestAGeneratedGroupNameNamesNothing`,
+`TestTheCustomerSNameForAnEndpointWins`,
+`TestAnEndpointTaggedWithItsOwnIdIsNotANameEither`,
+`TestTheDNSNameThePublisherSetIsTheAnswer`.
 
 ## SEC-24 — A declaration cannot manufacture agents where it was not made
 

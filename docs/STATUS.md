@@ -38,7 +38,7 @@ custos diff                 →  what changed since last week
 | Onboarding and preflight | Works. `custos onboard`, `custos-collector --check` |
 | Enforcement checkpoint | **Not started.** §12: not before a paying customer |
 | Operator console | Works. Read, filter, sanction, retire, and see what changed. Served by the control plane |
-| Destination naming | Works. Measured: 100% of a nameable estate, from seven sources |
+| Destination naming | Works. Measured: 100% of a nameable estate, from nine sources |
 | Customer-supplied pricing | Works. Per account, dated, superseded rather than overwritten. Agents on a fallback rate are named |
 | Gateway questions in the report | Works. Their own section, ranked across regions, with what was ruled out |
 | Gateway questions, measured | Works. `make questions`: precision 0.50, real gateway first, was 0.00 and eighth |
