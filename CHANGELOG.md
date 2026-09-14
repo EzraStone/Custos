@@ -4,6 +4,55 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### "A question for a human" was three questions, and two had answers
+
+An account reaching a model provider over PrivateLink sends every model call to
+a private address in its own subnet, and AWS names the service
+`com.amazonaws.vpce.<region>.vpce-svc-0a1b2c3d`. That id explains nothing, and
+the previous position was that whatever is behind it is a question for a human.
+
+Taken apart, it is three cases. **The customer named it**: a VPC endpoint is
+their own resource and their Terraform usually calls it what it is — a tag that
+was already coming back on a call the collector made and was throwing away,
+reading one field of the response. **The publisher named it**: a service sold
+to other accounts carries a private DNS name its publisher configured, which
+for a model provider is their own API hostname, and one further read returns
+it. **Nobody named it**: the residue, and a question exactly as before.
+
+The residue is now asked about first. Every other candidate is a machine inside
+the account that somebody can walk over and look at; this one is a door into
+another company's network carrying a transcript-shaped stream, which is what a
+model provider selling into AWS looks like from inside a customer's VPC.
+
+It is not exempted from either test. A published endpoint whose workloads reach
+nothing else is declined like any other: better evidence is not evidence, and
+an exception carved out here is how a mechanism that must never classify
+anything starts classifying.
+
+Measured. A corpus workload was added for it and the question metric went from
+**0.50 to 0.67** precision, with both of the corpus's askable model endpoints
+now in the list a customer is shown — a property precision cannot see, since a
+detector that asks one honest question and misses the other scores 1.00.
+`--check` names an endpoint nobody explained before a scan runs, and the report
+and the console badge it.
+
+`ec2:DescribeVpcEndpointServices` is a new grant. **Every existing role needs a
+re-apply of the Terraform module**; without it an account keeps reporting that
+it cannot explain an endpoint, and nothing fails loudly.
+
+### The readability gate could not see a harder interface
+
+`CONTRIBUTING.md` says that when scope readability reaches 100%, that is a
+signal to add harder interfaces rather than a result. Doing it was a no-op
+against the gate, which was a floor on how many interfaces the resolver got
+right: a nameable interface nothing could name left the success count where it
+was, and moved only a percentage printed in a log line no assertion read.
+
+It counts the question now. Every nameable interface must be named, by name, or
+the test fails with the address and the reason it was expected to be readable.
+The estate went from 24 nameable interfaces to 26 in the same arc, which is
+what the old gate would have swallowed.
+
 ### A declaration could invent agents in a region nobody asked about
 
 **SEC-24.** Declaring an endpoint is one of two decisions in this system that
