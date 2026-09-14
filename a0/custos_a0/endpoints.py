@@ -54,9 +54,12 @@ class Endpoint:
     endpoint_service: str = ""
     """The AWS endpoint service this address is an interface endpoint for.
 
-    Set on exactly one endpoint in the corpus, and it is the point of that
-    endpoint: an account reaching Bedrock over PrivateLink has model traffic
-    going to a private address with nothing in the flow record to say so."""
+    Two endpoints in the corpus have one, and they are the two halves of the
+    same blindness. An account reaching Bedrock over PrivateLink has model
+    traffic going to a private address with nothing in the flow record to say
+    so, and AWS will name the service. An account reaching a provider through
+    a service another AWS account published has exactly the same traffic, and
+    AWS will only say that somebody else published it."""
 
 
 # Model providers.
@@ -167,6 +170,27 @@ BEDROCK_PRIVATELINK = Endpoint(
     endpoint_service="com.amazonaws.us-east-1.bedrock-runtime",
 )
 
+# A model provider selling into AWS. The customer's agents reach it over
+# PrivateLink, so the traffic never touches the public internet and the
+# destination is a private address in their own subnet.
+#
+# The difference from BEDROCK_PRIVATELINK is the whole point. That one AWS
+# explains: the service is com.amazonaws.us-east-1.bedrock-runtime and every
+# agent behind it is found with nobody asked. This one AWS names
+# com.amazonaws.vpce.us-east-1.vpce-svc-0a1b2c3d and will say no more — no
+# private DNS name, because this publisher did not configure one, and no tag,
+# because this customer did not write one.
+#
+# So it is the residue: the exact case that is left after everything that can
+# be looked up has been. It stays a question for a human, and the reason it is
+# in the corpus is to check that the question actually gets asked.
+PROVIDER_PRIVATELINK = Endpoint(
+    "api.modelprovider.example", "10.0.15.21", 443,
+    EndpointClass.INTERNAL_API,
+    eni_name="vpce-svc-0a1b2c3d", eni_kind="vpc-endpoint",
+    endpoint_service="com.amazonaws.vpce.us-east-1.vpce-svc-0a1b2c3d",
+)
+
 # The load balancer. Shared by every inbound-facing workload.
 ALB = Endpoint("alb-prod.elb.amazonaws.com", "10.0.1.5", 443, EndpointClass.INGRESS)
 
@@ -178,7 +202,7 @@ ALL: tuple[Endpoint, ...] = (
     BILLING_API, TICKET_API, DEPLOY_API,
     ORDERS_DB, BILLING_DB, VECTOR_DB, ARTIFACTS_S3,
     LOG_COLLECTOR, BACKUP_SVC, METRICS_PUSH, ARTIFACT_REGISTRY, EVENT_PROXY,
-    THUMBNAILER, DOC_EXTRACT, BEDROCK_PRIVATELINK,
+    THUMBNAILER, DOC_EXTRACT, BEDROCK_PRIVATELINK, PROVIDER_PRIVATELINK,
     ALB,
 )
 """Every endpoint the corpus can generate traffic to.
