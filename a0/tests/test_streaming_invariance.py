@@ -34,20 +34,17 @@ def _mixed_regime(corpus) -> set[str]:
 
     `kb-assistant` embeds a query and then answers from what it retrieves. The
     embedding response is one JSON array with nothing to stream; the completion
-    streams. One principal, two regimes, and a flow log cannot separate two
-    conversations with the same peer.
+    streams.
 
-    The decision is made per principal because that is the finest grain the
-    data supports, so a workload like this gets one answer for both halves and
-    it is wrong for one of them. Excluded here by that property rather than by
-    name, so that a corpus which grows another mixed workload is excluded for
-    the same stated reason instead of quietly failing.
+    This used to be an exclusion. It is an assertion now: the two halves go to
+    different endpoints, a flow log is keyed on the 5-tuple, and the regime is
+    decided per destination — so a workload running both is read correctly for
+    both. The set is computed so the test below can state that it covers them
+    rather than skipping them.
     """
     out = set()
     for w in corpus.workloads:
-        kinds = {
-            bool(c.resp_events) for c in w.calls if c.kind is CallKind.MODEL
-        }
+        kinds = {bool(c.resp_events) for c in w.calls if c.kind is CallKind.MODEL}
         if len(kinds) > 1:
             out.add(w.name)
     return out
@@ -57,20 +54,14 @@ def _mixed_regime(corpus) -> set[str]:
 def paired():
     """The same corpus read twice, whole and streamed, by workload."""
     corpus = corpus_mod.build()
-    mixed = _mixed_regime(corpus)
-    whole = {
-        r.workload: r for r in run(SCENARIOS[0], corpus, None).rows
-        if r.workload not in mixed
-    }
+    whole = {r.workload: r for r in run(SCENARIOS[0], corpus, None).rows}
     streamed = {
         r.workload: r
         for r in run(
             next(s for s in SCENARIOS if s.streaming and s.interval_seconds == 60),
             corpus, None,
         ).rows
-        if r.workload not in mixed
     }
-    assert mixed, "the corpus no longer contains a mixed-regime workload"
     return whole, streamed
 
 
@@ -113,3 +104,34 @@ def test_no_agents_asymmetry_inverts(paired):
     assert not inverted, (
         "an agent's own evidence reads as a chatbot's:\n  " + "\n  ".join(inverted)
     )
+
+
+def test_a_workload_running_both_regimes_is_read_correctly_for_both():
+    """The limit that was not one.
+
+    This was written down as something a flow log cannot do: one principal
+    embedding a query whole and streaming the answer is two conversations, and
+    the decision was being made per principal, so it got one answer for both
+    halves.
+
+    They are not the same conversation. The embedding goes to one endpoint and
+    the completion to another, a flow log is keyed on the 5-tuple, and the peer
+    address is the finest grain the data supports. Deciding there costs
+    nothing and removes the limit.
+    """
+    corpus = corpus_mod.build()
+    mixed = _mixed_regime(corpus)
+    assert mixed, "the corpus no longer contains a mixed-regime workload"
+
+    whole = {r.workload: r for r in run(SCENARIOS[0], corpus, None).rows}
+    streamed = {
+        r.workload: r
+        for r in run(
+            next(s for s in SCENARIOS if s.streaming and s.interval_seconds == 60),
+            corpus, None,
+        ).rows
+    }
+    for name in mixed:
+        a = whole[name].verdict.features.egress_ratio
+        b = streamed[name].verdict.features.egress_ratio
+        assert max(a / b, b / a) <= TOLERANCE, f"{name}: {a:.2f} whole, {b:.2f} streamed"

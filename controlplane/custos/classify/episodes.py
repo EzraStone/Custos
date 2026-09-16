@@ -53,33 +53,50 @@ class Seen:
 
 
 @dataclass(slots=True)
+class PeerTraffic:
+    """One window's traffic with one model endpoint.
+
+    Byte counts and packet counts only, and a connection count. Enough to take
+    the protocol out of the bytes, and nothing that describes what was said.
+    """
+
+    egress: int = 0
+    ingress: int = 0
+    egress_packets: int = 0
+    ingress_packets: int = 0
+    connections: int = 0
+
+
+@dataclass(slots=True)
 class Window:
     """One aggregation interval for one principal."""
 
     start: datetime
-    model_egress: int = 0
-    model_ingress: int = 0
-    model_egress_packets: int = 0
-    model_ingress_packets: int = 0
-    """Packet counts for the same traffic as the two above.
-
-    Not a signal. No classifier feature reads these directly, and adding one
-    would need the same justification as any other. They are here because
-    packet counts are the only thing in a flow record that says whether a model
-    response arrived whole or one token at a time — which decides what the
-    bytes above mean, both for the ratio the classifier reads and for the token
-    count behind a dollar figure."""
 
     model_egress_wire: int = 0
     model_ingress_wire: int = 0
     """Model bytes exactly as the flow log counted them.
 
-    `model_egress` and `model_ingress` above are payload: the acknowledgements,
-    the certificate chains and the streaming framing are taken out so the ratio
-    describes the conversation rather than the protocol carrying it. These are
-    the numbers before that, kept because a report quoting bytes must quote
-    what was on the wire — a customer checking a figure against their own
-    dashboards is looking at wire bytes, and so is their bill."""
+    `model_egress` and `model_ingress` below are payload once `sessionize` has
+    taken the protocol out: the acknowledgements, the certificate chains and
+    the streaming framing come off, so the ratio describes the conversation
+    rather than what carried it. These are the numbers before that, kept
+    because a report quoting bytes must quote what was on the wire — a customer
+    checking a figure against their own dashboards is looking at wire bytes,
+    and so is their bill."""
+    model_peers: dict[str, PeerTraffic] = field(default_factory=dict)
+    """The same model traffic, kept per destination address.
+
+    Because the regime is a property of a conversation, not of a workload. An
+    assistant that embeds a query and then answers from what it retrieves sends
+    the embedding to one endpoint and the completion to another: one arrives as
+    a JSON array with nothing to stream, the other arrives a token at a time.
+    Summed together they read as neither.
+
+    A flow log is keyed on the 5-tuple, so the peer address is the finest grain
+    the data actually supports — finer than the principal, which is where this
+    decision was first made and where it was wrong for exactly this shape."""
+
     tool_egress: int = 0
     tool_ingress: int = 0
     model_connections: int = 0
@@ -95,6 +112,36 @@ class Window:
     — AWS says which service it is in `pkt-dst-aws-service`, and dropping that
     here left every Bedrock agent's spend estimated at the rate for a provider
     nobody could name."""
+    @property
+    def model_egress(self) -> int:
+        """Outbound model bytes, summed over this window's peers.
+
+        Derived rather than accumulated, so there is one place the number comes
+        from. It was a field alongside the per-peer breakdown for about an
+        hour, which is long enough for `build_windows` to return windows whose
+        total said zero while the peers underneath it did not."""
+        return sum(p.egress for p in self.model_peers.values())
+
+    @property
+    def model_ingress(self) -> int:
+        return sum(p.ingress for p in self.model_peers.values())
+
+    @property
+    def model_egress_packets(self) -> int:
+        return sum(p.egress_packets for p in self.model_peers.values())
+
+    @property
+    def model_ingress_packets(self) -> int:
+        """Packet counts for the same traffic.
+
+        Not a signal. No classifier feature reads these directly, and adding
+        one would need the same justification as any other. They are here
+        because packet counts are the only thing in a flow record that says
+        whether a model response arrived whole or one token at a time — which
+        decides what the bytes mean, both for the ratio the classifier reads
+        and for the token count behind a dollar figure."""
+        return sum(p.ingress_packets for p in self.model_peers.values())
+
     tool_seen: dict[str, Seen] = field(default_factory=dict)
     """Per-address facts, for naming a destination and for saying what it is.
 
@@ -238,19 +285,21 @@ def build_windows(
             w.model_addresses.add(peer)
             if peer_service:
                 w.model_services[peer] = peer_service
+            side = w.model_peers.setdefault(peer, PeerTraffic())
             if egress:
-                w.model_egress += r.bytes
                 w.model_egress_wire += r.bytes
-                w.model_egress_packets += r.packets
+                side.egress += r.bytes
+                side.egress_packets += r.packets
                 if r.tcp_flags & SYN:
                     marker = (key, r.srcport, peer)
                     if marker not in seen_syn:
                         seen_syn.add(marker)
                         w.model_connections += 1
+                        side.connections += 1
             else:
-                w.model_ingress += r.bytes
                 w.model_ingress_wire += r.bytes
-                w.model_ingress_packets += r.packets
+                side.ingress += r.bytes
+                side.ingress_packets += r.packets
         elif is_tool_destination(cls):
             w.tool_classes.add(cls)
             w.tool_addresses.add(peer)
@@ -317,33 +366,55 @@ def _to_payload(windows: list[Window]) -> bool:
     account ever scanned, and taking them out widens the gap between the
     classes from 1.2x to 2x on the base corpus.
 
-    Decided once from the totals and applied to every window, so an episode's
-    window-by-window shape survives. Returns what it decided, because every
-    surface rendering a figure derived from these bytes has to say which
-    reading produced it.
-    """
-    ingress = sum(w.model_ingress for w in windows)
-    packets = sum(w.model_ingress_packets for w in windows)
-    egress_packets = sum(w.model_egress_packets for w in windows)
-    streamed = framing.responses_streamed(ingress, packets, egress_packets)
+    **Decided per destination, not per principal.** The regime belongs to a
+    conversation: an assistant that embeds a query at one endpoint and
+    generates from another has one of each, and summed together they read as
+    neither. A flow log is keyed on the 5-tuple, so the peer address is the
+    finest grain the data supports — which is finer than where this decision
+    was first made.
 
-    connections = sum(w.model_connections for w in windows)
+    Returns whether any of them streamed, which is what the surfaces quoting
+    these figures have to disclose.
+    """
+    peers = {p for w in windows for p in w.model_peers}
+    streaming: dict[str, bool] = {}
+    for peer in peers:
+        sides = [w.model_peers[peer] for w in windows if peer in w.model_peers]
+        streaming[peer] = framing.responses_streamed(
+            sum(s.ingress for s in sides),
+            sum(s.ingress_packets for s in sides),
+            sum(s.egress_packets for s in sides),
+        )
+
+    # Handshakes are per connection and do not scale with anything said, so
+    # they are spread across a peer's windows in proportion to its bytes there.
+    # A flow record says a connection was opened, not which window's bytes paid
+    # for the certificate chain.
+    totals = {
+        peer: sum(w.model_peers[peer].ingress for w in windows if peer in w.model_peers)
+        for peer in peers
+    }
+    connections = {
+        peer: sum(
+            w.model_peers[peer].connections for w in windows if peer in w.model_peers
+        )
+        for peer in peers
+    }
+
     for w in windows:
-        if w.model_ingress:
-            # The handshake share of this window, so a window that opened no
-            # connection is not charged for one. Proportional rather than
-            # exact: a flow record says a connection was opened, not which
-            # window's bytes paid for the certificate chain.
-            share = w.model_ingress / ingress if ingress else 0.0
-            w.model_ingress = int(framing.payload_in(
-                w.model_ingress, w.model_ingress_packets, w.model_egress_packets,
-                connections * share, streamed,
+        for peer, side in w.model_peers.items():
+            share = side.ingress / totals[peer] if totals[peer] else 0.0
+            # Packet counts stay as the flow log reported them. They are what
+            # the regime was decided from, and rewriting them would leave the
+            # decision unreproducible from the record it was made on.
+            side.ingress = int(framing.payload_in(
+                side.ingress, side.ingress_packets, side.egress_packets,
+                connections[peer] * share, streaming[peer],
             ))
-        if w.model_egress:
-            w.model_egress = int(framing.payload_out(
-                w.model_egress, w.model_egress_packets, w.model_ingress_packets,
+            side.egress = int(framing.payload_out(
+                side.egress, side.egress_packets, side.ingress_packets,
             ))
-    return streamed
+    return any(streaming.values())
 
 
 def sessionize(
