@@ -193,6 +193,22 @@ def test_public_ipv6_destinations_are_disclosed_as_a_blind_spot():
     assert "catalogue is IPv4 only" in page
 
 
+def test_the_ipv6_caveat_says_what_to_do_about_it():
+    """A limitation with no remedy is a shrug in a document somebody forwarded
+    to their security team.
+
+    The collector's preflight names the addresses; the report is rendered from
+    stored telemetry, which keeps the count and not the addresses. Rather than
+    store them twice, the caveat points at the surface that has them and at the
+    command that acts on them.
+    """
+    page = render(
+        result([agent()]), "acme", T0, coverage=Coverage(ipv6_destinations=12)
+    )
+    assert "custos-collector --check</code> names the addresses" in page
+    assert "visible on the next scan" in page
+
+
 def test_an_ipv4_only_account_is_told_none_of_that(page):
     assert "were IPv6" not in page
 

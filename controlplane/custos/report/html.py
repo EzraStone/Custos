@@ -333,7 +333,10 @@ def _format_limits(coverage: Coverage | None) -> list[str]:
             "endpoints are not affected: the flow log names the service rather "
             "than the address family, so Bedrock over IPv6 is recognised the "
             "same way Bedrock over IPv4 is, and those destinations are not in "
-            "the count."
+            "the count. This is fixable from your side: "
+            "<code>custos-collector --check</code> names the addresses, and "
+            "declaring any that are model APIs makes the agents behind them "
+            "visible on the next scan."
         )
     if coverage.direction_undecided:
         items.append(
