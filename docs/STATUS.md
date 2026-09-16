@@ -48,27 +48,35 @@ custos diff                 →  what changed since last week
 | A PrivateLink service another account published | Resolved when the customer tagged the endpoint or the publisher set a private DNS name. Otherwise a question, ranked first |
 | Fleet view across accounts | Works. One line per account, unscanned and destructive first |
 | Scope readability, measured | Works. Reported by `--check`, the report, the console, and `custos history` |
-| Wire bytes to tokens | Measured. `make conversion`: 4.3-11.6 whole, 187-194 streamed, decided per principal from packet size |
+| Payload bytes to tokens | Measured. `make conversion`: 4.13-4.24 both ways round, one constant |
+| Classifier invariant to streaming | Works. The ratio reads the same whether or not an account's clients stream |
 
 ## The one number that matters
 
-**G0 passed: 1.00 recall, 1.00 precision, 0.26 separation margin, identical at
-60s and 600s flow log aggregation.**
+**G0 passed: 1.00 recall, 1.00 precision, 0.42 separation margin, identical at
+60s and 600s flow log aggregation and whether or not the account's model
+clients stream.**
 
 Against a harder corpus added afterwards — agents that pause for human
 approval, agents on batch schedules, chatbots with function calling — every
 verdict is still correct and there are still no false positives, but the margin
-falls to **0.14**. Quote that number, not the first one, wherever it would be
+falls to **0.29**. Quote that number, not the first one, wherever it would be
 doing work.
+
+Those were 0.26 and 0.14 until the classifier stopped reading wire bytes. The
+acknowledgements and TLS handshakes in them scale with how a customer's client
+is configured rather than with what their workload said, and taking them out
+widened the gap between the classes from 1.2x to 2x on the same corpus and the
+same workloads. Finding 12.
 
 Reproduce with `make experiment`. CI fails the build if it stops holding.
 `make gates` prints all five measured numbers in one run:
 
 ```
-G0, base corpus          separation margin 0.260, headroom 0.151
-the classifier, stress   separation margin 0.142, recall 1.00, precision 1.00
+G0, base corpus          separation margin 0.415, headroom 0.168
+the classifier, stress   separation margin 0.291, recall 1.00, precision 1.00
 the gateway detector     3 questions, 2 worth asking, both real ones shown
-wire bytes per token     4.3-11.6 whole, 187-194 streamed, discriminator at 600
+payload bytes per token  4.13-4.24 both ways round, discriminator at 600
 scope readability        26 of 26 nameable interfaces
 ```
 
@@ -80,10 +88,11 @@ might use this. The one that has not moved since A0 is the headline margin.
 
 **The margin is not the only headroom.** G0 also requires the weakest agent to
 clear the reporting threshold by 0.05, because those two numbers can move in
-opposite directions — streaming responses widen the margin to 0.371 and cut
-the headroom to 0.054 in the same run. A change that widened the margin and
-pushed an agent below 0.80 would read as an improvement everywhere and would
-be a missing row in a customer's report.
+opposite directions. That bar exists because of a measurement it then helped
+undo: on wire bytes, streaming widened the margin to 0.371 and cut the headroom
+to 0.054 in the same run, which reads in a sweep as an improvement and is an
+agent being pushed toward not being reported at all. The classifier reads
+payload now and both numbers are the same either way.
 
 The finding underneath it is the interesting part: the signal the specification
 leads with — burst timing and per-call payload growth — is not implementable,
@@ -187,8 +196,28 @@ tokenisation: four bytes per token is right for English JSON and wrong for
 code, and that part needs a tokeniser and a corpus of real prompts rather than
 arithmetic.
 
-**Wire bytes are not four bytes a token, and for half of them they are 175.**
-The dollar figure that gets a report forwarded to somebody with a budget comes
+**The signal that carries the product was measuring the protocol.** The
+egress-to-ingress ratio was computed on wire bytes, which carry one
+acknowledgement per two outbound segments, a TLS certificate chain per
+connection, and — when a response streams — about forty-two bytes of framing
+for every byte the model said. On a streamed capture four of five confirmed
+agents came back below 1:1, the shape of a chatbot, with that sentence printed
+as their evidence.
+
+The verdicts survived because four other signals carry them, which is the
+uncomfortable part rather than the reassuring one. Model byte counts become
+payload when the telemetry is built now, and the classifier reads the same
+numbers whether or not an account streams. Finding 12 and
+`docs/adr/0004-payload-not-wire.md`.
+
+What is unmeasured is how much real agent traffic streams — a question about
+customers rather than protocols, so the corpus is built both ways and neither
+is asserted. And a workload running both at once is read as neither: one
+principal embedding a query whole and streaming the answer is two
+conversations with the same peer, which a flow log cannot separate.
+
+**The conversion was right and its input was wrong.** *(The entry above is what
+this turned into.)* The dollar figure that gets a report forwarded to somebody with a budget comes
 from dividing observed bytes by a constant. That constant was four in both
 directions, which is right for a JSON body and wrong for a streamed one by
 around forty-four times — concentrated in output tokens, which are priced at
