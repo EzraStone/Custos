@@ -4,6 +4,17 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### Six features computed for nobody
+
+Five outlived signals that were measured and rejected — context growth, episode
+persistence, egress per inbound request — and the sixth outlived
+`offhours_activity`. All six were computed for every principal on every scan.
+
+They are gone, and the reason is not the arithmetic. `Features` is the
+interface between what can be observed and what can be concluded, so a field in
+it reads as evidence the classifier weighs. `test_leakage.py` fails on an
+orphan now, the same way it fails on a feature that reads a principal name.
+
 ### The classifier had never been ablated
 
 Five weighted signals, and nothing had ever measured which of them was

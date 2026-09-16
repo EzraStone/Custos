@@ -263,6 +263,16 @@ separating on the wrong question. It was rejected with the reason written into
 weight says "worth a little", and the measurement said "worth less than
 nothing".
 
+**A feature nobody reads goes with the signal that read it.** `Features` is the
+documented interface between what can be observed and what can be concluded, so
+a field in it reads as evidence the classifier weighs — to the next person
+deciding whether a new signal is redundant, and to anyone reading the class to
+learn what this product can see. Six of them were being computed for every
+principal on every scan, five for signals rejected months earlier.
+`test_leakage.py` fails on an orphan now. The knowledge lives in `REJECTED`,
+which is what stops somebody re-adding a signal that was already measured; a
+dead field beside a live one does the opposite.
+
 **Do not move a threshold to make a workload land where you want it.** That is
 fitting to eleven workloads. If a removal leaves a workload a hundredth from a
 threshold, record the clearance — the sweep prints it — and leave the
