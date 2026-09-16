@@ -6,6 +6,7 @@
     custos-a0 fixtures --out DIR    write flow log fixtures in the native format
     custos-a0 conversion            measure payload bytes per token, both ways round
     custos-a0 ablation              which signal is carrying the result
+    custos-a0 candidates            the numbers behind the unshipped signals
 """
 
 from __future__ import annotations
@@ -347,6 +348,48 @@ def cmd_ablation(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_candidates(args: argparse.Namespace) -> int:
+    """The numbers behind the signals that have not earned a weight.
+
+    `CANDIDATES` exists so a measured-and-promising signal is not lost between
+    "shipped" and "rejected". Its entry quoted six figures that nothing in this
+    repository produced — measured once by hand, written into a docstring, and
+    from then on unfalsifiable. A rejected signal's reasons can be prose,
+    because nobody will act on them. A candidate's cannot: the category exists
+    precisely so that somebody picks it up later and decides against these
+    numbers.
+    """
+    from .candidates import measure, separation
+
+    rows = measure()
+    header = f"{'workload':<28}{'truth':<11}{'variance':>10}  in scope"
+    print("Custos candidate signals — work per request, stress corpus\n")
+    print(header)
+    print("-" * len(header))
+    for r in rows:
+        print(
+            f"{r.workload:<28}{str(r.label):<11}{r.variance:>10.3f}"
+            f"  {'yes' if r.interactive else ''}"
+        )
+
+    scoped = [r for r in rows if r.interactive]
+    print()
+    print(f"separation, every workload      {separation(rows):+.3f}")
+    print(
+        f"separation, interactive only    {separation(scoped):+.3f}"
+        f"   ({len(scoped)} workloads)"
+    )
+    print()
+    print(
+        "Unscoped it is worse than useless: an embedding service varies more "
+        "than every agent in the corpus. Scoped to the workloads the "
+        "classifier cannot resolve it is the only thing measured so far that "
+        "separates them — and the magnitude is still a property of how the "
+        "corpus was written."
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="custos-a0", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -372,6 +415,10 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("ablation",
                        help="which signal is carrying the result")
     p.set_defaults(func=cmd_ablation)
+
+    p = sub.add_parser("candidates",
+                       help="the numbers behind the signals with no weight yet")
+    p.set_defaults(func=cmd_candidates)
 
     p = sub.add_parser("conversion",
                        help="measure wire bytes per token, both ways round")

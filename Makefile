@@ -15,7 +15,8 @@ VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 .PHONY: help setup check lint test test-py test-go test-console fmt experiment \
         collector console serve scan image prune onboard preflight smoke \
-        screenshots stress questions conversion ablation mutate gates clean
+        screenshots stress questions conversion ablation mutate candidates \
+        gates clean
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -116,6 +117,9 @@ ablation: ## Which classifier signal is actually carrying the result
 
 mutate: ## Which tests would notice if a classifier signal stopped working
 	$(PY) scripts/mutate.py
+
+candidates: ## The numbers behind the signals that have no weight yet
+	$(PY) -m custos_a0.cli candidates
 
 gates: ## Every measured number this product rests on, in one run
 	@echo "=== G0: the classifier, base corpus ==="
