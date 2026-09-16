@@ -1,27 +1,30 @@
-"""The two constants the dollar figures rest on, held against the corpus.
+"""The constants behind every dollar figure, held against the corpus.
 
-`controlplane/custos/spend.py` carries a number for wire bytes per streamed
-output token and a number for telling a streamed response from a whole one.
-Neither is derivable from anything in the control plane — they came from this
-corpus — and a constant copied out of a measurement is a constant that drifts
-from it silently.
+`controlplane/custos/framing.py` carries four numbers that were measured here
+and cannot be derived from anything in the control plane: how much larger a
+streamed response is on the wire, what a TLS handshake costs inbound, and the
+two bounds that tell one regime from the other. `spend.py` carries a fifth, the
+payload bytes per token.
 
-The same pattern as `test_limits_agree.py` and `test_model_services_agree.py`:
-two places that have to agree, and nothing making them.
+A constant copied out of a measurement drifts from it silently, which is the
+defect class this repository keeps finding. The same pattern as
+`test_limits_agree.py` and `test_model_services_agree.py`: two places that have
+to agree and nothing making them.
 """
 
 from __future__ import annotations
 
 import pytest
-from custos.spend import (
-    FRAMING_OVERHEAD,
-    STREAMED_BYTES_PER_TOKEN,
-    STREAMED_PACKET_BYTES,
-    responses_streamed,
-)
+from custos.framing import STREAMED_PACKET_BYTES, responses_streamed
+from custos.spend import BYTES_PER_TOKEN
 
 from custos_a0 import corpus as corpus_mod
 from custos_a0.conversion import measure
+
+# A workload that streams half its calls and not the other half is read as one
+# or the other and is wrong for that half by construction. Excluded by the
+# property rather than by name.
+MIXED_FLOOR = 1.0
 
 
 @pytest.fixture(scope="module")
@@ -30,64 +33,63 @@ def both():
     return measure(corpus, streaming=True), measure(corpus, streaming=False)
 
 
-def _streamed(rows):
-    return [m for m in rows if m.streams]
+def _pure(rows):
+    return [m for m in rows if m.payload_per_token > MIXED_FLOOR]
 
 
 def test_the_discriminator_reads_every_workload_correctly(both):
     """Both captures, every workload, including the embedding one that does
-    not stream in the streamed capture — which is what makes this a
+    not stream even in the streamed capture — which is what makes this a
     measurement of the protocol rather than of the corpus."""
     for rows in both:
         for m in rows:
             read = responses_streamed(
                 m.ingress_bytes, m.ingress_packets, m.egress_packets
             )
-            assert read is m.streams, (
-                m.workload, m.mean_data_packet, m.bytes_per_output_token
-            )
+            assert read is m.streams, (m.workload, m.mean_data_packet)
 
 
 def test_the_discriminator_sits_in_empty_space(both):
-    """A threshold between two adjacent points is a lucky landing rather than
-    a finding — the same rule the classifier's thresholds follow."""
+    """A threshold between two adjacent points is a lucky landing rather than a
+    finding — the rule the classifier's own thresholds follow."""
     streamed, whole = both
-    highest_streamed = max(m.mean_data_packet for m in _streamed(streamed))
-    lowest_whole = min(
-        m.mean_data_packet for m in whole + [m for m in streamed if not m.streams]
+    highest = max(m.mean_data_packet for m in streamed if m.streams)
+    lowest = min(
+        m.mean_data_packet
+        for m in whole + [m for m in streamed if not m.streams]
+    )
+    assert highest < STREAMED_PACKET_BYTES < lowest
+    assert lowest / highest > 4, (highest, lowest)
+
+
+def test_one_constant_covers_both_regimes(both):
+    """The result the arc turned on.
+
+    Four bytes a token was never wrong; it was being applied to wire bytes,
+    where it is off by anything from 10% to forty-four times depending on how
+    the customer's client is configured. On payload it is one number.
+    """
+    streamed, whole = both
+    rates = [m.payload_per_token for m in _pure(streamed) + _pure(whole)]
+    assert max(rates) / min(rates) < 1.05, (min(rates), max(rates))
+
+
+def test_spend_divides_by_what_was_measured(both):
+    """The constant in spend.py against the corpus it came from."""
+    streamed, whole = both
+    rates = [m.payload_per_token for m in _pure(streamed) + _pure(whole)]
+    measured = sum(rates) / len(rates)
+    assert abs(BYTES_PER_TOKEN - measured) / measured < 0.02, (
+        BYTES_PER_TOKEN, measured
     )
 
-    assert highest_streamed < STREAMED_PACKET_BYTES < lowest_whole
-    assert lowest_whole / highest_streamed > 4, (highest_streamed, lowest_whole)
 
+def test_the_mixed_workload_is_still_in_the_corpus(both):
+    """The limit this measurement cannot speak for, kept where it can be seen.
 
-def test_the_streamed_constant_matches_what_the_corpus_produces(both):
-    """`estimate_tokens` takes a framing haircut off the wire bytes before
-    dividing, so the constant in spend.py is not the measured figure — it is
-    the measured figure times what survives that haircut. The two drifting
-    apart is exactly the kind of thing nothing else would catch."""
+    One principal embedding a query whole and streaming the answer gets one
+    answer for both halves. If it ever disappears from the corpus the exclusion
+    above starts silently covering nothing.
+    """
     streamed, _ = both
-    # kb-assistant mixes streamed completions with whole embedding responses
-    # and fits neither constant. Excluded by its ground truth rather than by
-    # name: a workload whose responses are all streamed is what this measures.
-    pure = [m for m in _streamed(streamed) if m.bytes_per_output_token > 100]
-    measured = sum(m.bytes_per_output_token for m in pure) / len(pure)
-    effective = STREAMED_BYTES_PER_TOKEN / (1 - FRAMING_OVERHEAD)
-
-    assert abs(effective - measured) / measured < 0.05, (effective, measured)
-
-
-def test_dividing_a_streamed_response_by_four_is_wrong_by_more_than_forty(both):
-    """The size of the error, as the number the commit messages quote."""
-    streamed, _ = both
-    pure = [m for m in _streamed(streamed) if m.bytes_per_output_token > 100]
-    assert min(m.bytes_per_output_token for m in pure) / 4 > 40
-
-
-def test_a_whole_response_is_still_about_four_bytes_a_token(both):
-    """The original constant was not wrong, it was answering a different
-    question. Worth pinning: a change that fixed streaming by breaking the
-    ordinary case would look like progress in every number above."""
-    _, whole = both
-    for m in whole:
-        assert 4 <= m.bytes_per_output_token <= 12, (m.workload, m.bytes_per_output_token)
+    assert [m.workload for m in streamed if m.payload_per_token <= MIXED_FLOOR]

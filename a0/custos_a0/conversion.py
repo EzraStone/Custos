@@ -32,10 +32,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from custos.framing import HANDSHAKE_IN, SSE_INFLATION
+
 from .endpoints import ANTHROPIC, BEDROCK, OPENAI
 from .trace import CallKind, Corpus
 from .wire import AggregationConfig, aggregate
-from .wire.record import Direction
+from .wire.record import SYN, Direction
 
 MODEL_ADDRESSES = frozenset({ANTHROPIC.ip, OPENAI.ip, BEDROCK.ip})
 
@@ -58,6 +60,11 @@ class Measured:
     streams: bool
     """Ground truth again: whether this workload's responses were streamed."""
 
+    connections: int = 0
+    """TLS connections opened to model endpoints. The certificate chain comes
+    back inbound on each one and does not scale with the conversation, so on a
+    workload that opens a connection per call it is most of the byte count."""
+
     @property
     def ack_packets(self) -> int:
         return self.egress_packets // 2
@@ -76,9 +83,24 @@ class Measured:
         return self.data_bytes / self.data_packets
 
     @property
-    def bytes_per_output_token(self) -> float:
-        """What the conversion constant would have to be for this workload."""
-        return self.ingress_bytes / max(self.output_tokens, 1)
+    def payload_per_token(self) -> float:
+        """What the conversion constant would have to be for this workload,
+        once the protocol is out of the way.
+
+        The measurement the whole arc turned on. Before the acknowledgements
+        and the certificate chains were removed this read between 4.2 and 9.2
+        for a whole response, which looked like a constant that varied by
+        workload and was a handshake that does not scale with anything the
+        conversation says.
+        """
+        data = self.data_bytes - self.handshake_bytes
+        if self.streams:
+            data /= SSE_INFLATION
+        return max(data, 0.0) / max(self.output_tokens, 1)
+
+    @property
+    def handshake_bytes(self) -> float:
+        return self.connections * HANDSHAKE_IN
 
 
 def measure(corpus: Corpus, streaming: bool) -> list[Measured]:
@@ -101,21 +123,24 @@ def measure(corpus: Corpus, streaming: bool) -> list[Measured]:
     totals: dict[str, list[int]] = {}
     for r in aggregate(corpus, AggregationConfig(streaming=streaming)).records:
         if r.direction is Direction.INGRESS and r.srcaddr in MODEL_ADDRESSES:
-            row = totals.setdefault(r.dstaddr, [0, 0, 0])
+            row = totals.setdefault(r.dstaddr, [0, 0, 0, 0])
             row[0] += r.bytes
             row[1] += r.packets
         elif r.direction is Direction.EGRESS and r.dstaddr in MODEL_ADDRESSES:
-            totals.setdefault(r.srcaddr, [0, 0, 0])[2] += r.packets
+            row = totals.setdefault(r.srcaddr, [0, 0, 0, 0])
+            row[2] += r.packets
+            if r.tcp_flags & SYN:
+                row[3] += 1
 
     out = []
-    for address, (ingress_bytes, ingress_packets, egress_packets) in totals.items():
+    for address, (ingress_bytes, ingress_packets, egress_packets, conns) in totals.items():
         name, tokens, streams = truth[address]
         if tokens < 100:
             continue
         out.append(Measured(
             workload=name, output_tokens=tokens,
             ingress_bytes=ingress_bytes, ingress_packets=ingress_packets,
-            egress_packets=egress_packets,
+            egress_packets=egress_packets, connections=conns,
             streams=streams and streaming,
         ))
     out.sort(key=lambda m: -m.output_tokens)

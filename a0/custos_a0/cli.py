@@ -214,21 +214,25 @@ def cmd_questions(args: argparse.Namespace) -> int:
 
 
 def cmd_conversion(args: argparse.Namespace) -> int:
-    """Measure the wire-bytes-to-tokens conversion the dollar figures rest on.
+    """Measure the payload-bytes-to-tokens conversion the dollar figures rest on.
 
     Separate from every other command here because it scores no classifier. It
-    measures an assumption: that a model call's response is four bytes per
-    output token, which `docs/STATUS.md` has called a guess wrong in a
-    direction nobody had measured.
+    measures an assumption — that a model call is four bytes per token — which
+    `docs/STATUS.md` called a guess wrong in a direction nobody had measured.
+
+    The answer turned out to be that the constant was right and the input was
+    wrong. Applied to wire bytes it is off by between 10% and forty-four times
+    depending on how the customer's client is configured; applied to payload it
+    is 4.13 to 4.24 across every workload in the corpus, both ways round.
     """
-    from custos.spend import STREAMED_PACKET_BYTES, responses_streamed
+    from custos.framing import STREAMED_PACKET_BYTES, responses_streamed
 
     from . import corpus as corpus_mod
     from .conversion import measure
 
     corpus = corpus_mod.build()
     header = (
-        f"{'workload':<26}{'streams':>9}{'mean pkt':>10}{'bytes/token':>13}"
+        f"{'workload':<26}{'streams':>9}{'mean pkt':>10}{'payload b/tok':>15}"
         f"{'read as':>10}"
     )
     for streaming in (False, True):
@@ -243,7 +247,7 @@ def cmd_conversion(args: argparse.Namespace) -> int:
             wrong = "  <-- WRONG" if read != m.streams else ""
             print(
                 f"{m.workload:<26}{str(m.streams):>9}{m.mean_data_packet:>10.0f}"
-                f"{m.bytes_per_output_token:>13.1f}"
+                f"{m.payload_per_token:>15.2f}"
                 f"{('streamed' if read else 'whole'):>10}{wrong}"
             )
         print()
@@ -256,12 +260,15 @@ def cmd_conversion(args: argparse.Namespace) -> int:
         f"{max(m.mean_data_packet for m in streamed):.0f} and "
         f"{min(m.mean_data_packet for m in whole):.0f}"
     )
+    # The mixed-regime workload is excluded from the band and named, because a
+    # range that quietly contained it would be describing a workload the
+    # measurement cannot speak for rather than the spread of the constant.
+    pure = [m for m in everything if m.payload_per_token > 1.0]
+    mixed = [m.workload for m in everything if m.payload_per_token <= 1.0]
     print(
-        "bytes per output token: "
-        f"{min(m.bytes_per_output_token for m in whole):.1f}"
-        f"-{max(m.bytes_per_output_token for m in whole):.1f} whole, "
-        f"{min(m.bytes_per_output_token for m in streamed):.1f}"
-        f"-{max(m.bytes_per_output_token for m in streamed):.1f} streamed"
+        f"payload bytes per token: {min(m.payload_per_token for m in pure):.2f}"
+        f"-{max(m.payload_per_token for m in pure):.2f}, both ways round"
+        + (f" (excluding {', '.join(sorted(set(mixed)))}, which runs both)" if mixed else "")
     )
     return 0
 
