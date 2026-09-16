@@ -17,6 +17,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
+from .. import framing
 from ..catalog import DestinationClass, is_tool_destination
 from ..declared import Declared, classify_with
 from ..telemetry import SYN, Direction, FlowRecord, InboundRequest
@@ -62,11 +63,23 @@ class Window:
     model_ingress_packets: int = 0
     """Packet counts for the same traffic as the two above.
 
-    Not a signal. No classifier feature reads these, and adding one would need
-    the same justification as any other — they are here because packet counts
-    are the only thing in a flow record that says whether a model response
-    arrived whole or one token at a time, and those two readings of the same
-    bytes differ by forty-four times in what they imply about cost."""
+    Not a signal. No classifier feature reads these directly, and adding one
+    would need the same justification as any other. They are here because
+    packet counts are the only thing in a flow record that says whether a model
+    response arrived whole or one token at a time — which decides what the
+    bytes above mean, both for the ratio the classifier reads and for the token
+    count behind a dollar figure."""
+
+    model_egress_wire: int = 0
+    model_ingress_wire: int = 0
+    """Model bytes exactly as the flow log counted them.
+
+    `model_egress` and `model_ingress` above are payload: the acknowledgements,
+    the certificate chains and the streaming framing are taken out so the ratio
+    describes the conversation rather than the protocol carrying it. These are
+    the numbers before that, kept because a report quoting bytes must quote
+    what was on the wire — a customer checking a figure against their own
+    dashboards is looking at wire bytes, and so is their bill."""
     tool_egress: int = 0
     tool_ingress: int = 0
     model_connections: int = 0
@@ -168,6 +181,16 @@ class PrincipalTelemetry:
     logs tells us nothing. Conflating the two treats every chatbot as decoupled
     and destroys precision."""
 
+    responses_streamed: bool = False
+    """Whether this principal's model responses arrived one token at a time.
+
+    Decided once, from the principal's totals, and then applied to every
+    window. Per principal rather than per window because a single window can
+    hold a handful of packets and the discriminator needs enough of them to
+    mean anything; per principal rather than per account because an account
+    whose agents stream and whose chatbot backends do not is two regimes in one
+    number."""
+
     @property
     def model_windows(self) -> list[Window]:
         return [w for w in self.windows if w.has_model]
@@ -217,6 +240,7 @@ def build_windows(
                 w.model_services[peer] = peer_service
             if egress:
                 w.model_egress += r.bytes
+                w.model_egress_wire += r.bytes
                 w.model_egress_packets += r.packets
                 if r.tcp_flags & SYN:
                     marker = (key, r.srcport, peer)
@@ -225,6 +249,7 @@ def build_windows(
                         w.model_connections += 1
             else:
                 w.model_ingress += r.bytes
+                w.model_ingress_wire += r.bytes
                 w.model_ingress_packets += r.packets
         elif is_tool_destination(cls):
             w.tool_classes.add(cls)
@@ -270,6 +295,57 @@ def build_episodes(
     return episodes
 
 
+def _to_payload(windows: list[Window]) -> bool:
+    """Turn a principal's model byte counts from wire bytes into payload bytes.
+
+    The signal that carries this product is that an agent sends far more than
+    it receives, because it resends its accumulated transcript at every step.
+    Measured on wire bytes that sentence is only true of clients configured a
+    particular way: a streaming response arrives one token per frame, which
+    multiplies the inbound side by forty-two and inverts it. On the A0 corpus
+    four of five agents came back below 1:1, reading as chatbots.
+
+    Whether a client streams is a line in the customer's code. It is not
+    something onboarding can ask them to change and not something the workload
+    means, so the feature has to be invariant to it — the same property
+    Finding 3 established for the aggregation interval, and for the same
+    reason: a number that moves with the customer's configuration is measuring
+    the configuration.
+
+    Removing the protocol also removed noise that was there all along. The
+    acknowledgements and the certificate chains were in the ratio of every
+    account ever scanned, and taking them out widens the gap between the
+    classes from 1.2x to 2x on the base corpus.
+
+    Decided once from the totals and applied to every window, so an episode's
+    window-by-window shape survives. Returns what it decided, because every
+    surface rendering a figure derived from these bytes has to say which
+    reading produced it.
+    """
+    ingress = sum(w.model_ingress for w in windows)
+    packets = sum(w.model_ingress_packets for w in windows)
+    egress_packets = sum(w.model_egress_packets for w in windows)
+    streamed = framing.responses_streamed(ingress, packets, egress_packets)
+
+    connections = sum(w.model_connections for w in windows)
+    for w in windows:
+        if w.model_ingress:
+            # The handshake share of this window, so a window that opened no
+            # connection is not charged for one. Proportional rather than
+            # exact: a flow record says a connection was opened, not which
+            # window's bytes paid for the certificate chain.
+            share = w.model_ingress / ingress if ingress else 0.0
+            w.model_ingress = int(framing.payload_in(
+                w.model_ingress, w.model_ingress_packets, w.model_egress_packets,
+                connections * share, streamed,
+            ))
+        if w.model_egress:
+            w.model_egress = int(framing.payload_out(
+                w.model_egress, w.model_egress_packets, w.model_ingress_packets,
+            ))
+    return streamed
+
+
 def sessionize(
     records: list[FlowRecord],
     principal_by_eni: dict[str, str],
@@ -306,6 +382,7 @@ def sessionize(
         inbound: list[InboundRequest] = []
         for addr in addresses:
             inbound.extend(requests.get(addr, []))
+        streamed = _to_payload(windows)
         out.append(
             PrincipalTelemetry(
                 principal=principal,
@@ -316,6 +393,7 @@ def sessionize(
                 inbound=sorted(inbound, key=lambda r: r.at),
                 interval=interval,
                 inbound_logs_available=inbound_logs_available,
+                responses_streamed=streamed,
             )
         )
 

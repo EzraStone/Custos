@@ -20,7 +20,7 @@ import pytest
 
 from custos_a0 import corpus as corpus_mod
 from custos_a0.evaluate import SCENARIOS, run
-from custos_a0.trace import Label
+from custos_a0.trace import CallKind, Label
 
 # The tolerance is wide on purpose. This is not asking the feature to be
 # identical, it is asking it to describe the same conversation: a factor of two
@@ -29,18 +29,48 @@ from custos_a0.trace import Label
 TOLERANCE = 2.0
 
 
+def _mixed_regime(corpus) -> set[str]:
+    """Workloads whose model calls are not all of one kind.
+
+    `kb-assistant` embeds a query and then answers from what it retrieves. The
+    embedding response is one JSON array with nothing to stream; the completion
+    streams. One principal, two regimes, and a flow log cannot separate two
+    conversations with the same peer.
+
+    The decision is made per principal because that is the finest grain the
+    data supports, so a workload like this gets one answer for both halves and
+    it is wrong for one of them. Excluded here by that property rather than by
+    name, so that a corpus which grows another mixed workload is excluded for
+    the same stated reason instead of quietly failing.
+    """
+    out = set()
+    for w in corpus.workloads:
+        kinds = {
+            bool(c.resp_events) for c in w.calls if c.kind is CallKind.MODEL
+        }
+        if len(kinds) > 1:
+            out.add(w.name)
+    return out
+
+
 @pytest.fixture(scope="module")
 def paired():
     """The same corpus read twice, whole and streamed, by workload."""
     corpus = corpus_mod.build()
-    whole = {r.workload: r for r in run(SCENARIOS[0], corpus, None).rows}
+    mixed = _mixed_regime(corpus)
+    whole = {
+        r.workload: r for r in run(SCENARIOS[0], corpus, None).rows
+        if r.workload not in mixed
+    }
     streamed = {
         r.workload: r
         for r in run(
             next(s for s in SCENARIOS if s.streaming and s.interval_seconds == 60),
             corpus, None,
         ).rows
+        if r.workload not in mixed
     }
+    assert mixed, "the corpus no longer contains a mixed-regime workload"
     return whole, streamed
 
 
