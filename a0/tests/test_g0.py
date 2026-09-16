@@ -133,16 +133,25 @@ def test_the_gate_fails_when_an_agent_sits_on_the_threshold(results):
     ), gate.headline
 
 
-def test_streaming_widens_the_margin_and_narrows_the_headroom(results):
-    """Both halves of the same measurement, pinned together.
+def test_streaming_moves_nothing(results):
+    """The property this product needs and did not have.
 
-    Recorded because they move in opposite directions: a gate watching only
-    the first would have called this an improvement, and the number it moved
-    is how far the weakest agent is from not being reported at all.
+    Whether a customer's model client streams is a line in their code. It is
+    not a logging choice onboarding can ask them to change, so the classifier
+    has to read the same either way — the same requirement Finding 3 settled
+    for the aggregation interval.
+
+    It used to move the margin from 0.260 to 0.371 and the headroom from 0.151
+    to 0.054, which looked in the sweep like an improvement and was an agent
+    being pushed toward the threshold at which it stops being reported.
     """
-    plain = next(r for r in results if r.scenario.name.startswith("flow logs at 60s, with"))
-    stream = next(r for r in results if r.scenario.streaming and r.scenario.interval_seconds == 60)
+    plain = next(
+        r for r in results if r.scenario.name.startswith("flow logs at 60s, with")
+    )
+    stream = next(
+        r for r in results if r.scenario.streaming and r.scenario.interval_seconds == 60
+    )
 
-    assert stream.separation_margin > plain.separation_margin
-    assert stream.agent_headroom < plain.agent_headroom
+    assert abs(stream.separation_margin - plain.separation_margin) < 0.02
+    assert abs(stream.agent_headroom - plain.agent_headroom) < 0.02
     assert stream.recall == 1.0 and stream.precision == 1.0

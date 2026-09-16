@@ -72,12 +72,26 @@ def saw_model_traffic(f: Features) -> bool:
     return f.model_windows > 0
 
 
-EGRESS_RATIO_MIDPOINT = 7.0
-"""Measured: every agent in the A0 corpus sits above 7.9, every non-agent below
-6.5. The midpoint is set between them, and the narrowness of that gap is why
-this signal is weighted alongside others rather than used as a threshold."""
+EGRESS_RATIO_MIDPOINT = 11.5
+"""Measured: every agent in the A0 corpus sits above 15.3, every non-agent
+below 8.7. The midpoint is set between them.
+
+It was 7.0, against 7.9 and 6.5, for as long as this feature was computed on
+wire bytes. Those two figures were not describing the conversation — they
+carried one acknowledgement per two outbound segments and a certificate chain
+per connection, both of which scale with how a workload's client is configured
+rather than with what it said. Taking the protocol out widened the gap between
+the classes from 1.2x to 2x, and it is the same corpus and the same workloads.
+
+That gap being narrow was the stated reason this signal is weighted alongside
+others rather than used as a threshold. It is wider now and the reason still
+holds: a corpus of eleven workloads does not justify a threshold, whatever the
+gap looks like."""
 
 EGRESS_RATIO_SCALE = 3.0
+"""Unchanged. The logistic's width is about how much confidence a workload near
+the midpoint should get, which is a judgement about evidence rather than a
+measurement, and nothing this arc found bears on it."""
 
 
 def _fmt(n: float) -> str:
