@@ -517,6 +517,95 @@ The tokenisation itself is still four bytes a token, still right for English
 JSON, still wrong for code, and still unmeasured. That part needs a tokeniser
 and a corpus of real prompts, which is a different afternoon.
 
+**Superseded in part by Finding 12.** Everything above is what was measured and
+it still holds, but the conclusion drawn from it was too small. The correction
+was applied to the spend estimate, on the reasoning that the dollar figure was
+what depended on the conversion. The next thing anybody asked was whether the
+*classifier* depended on it, and it did — far more.
+
+---
+
+## Finding 12 — the signal that carries the product was measuring the protocol
+
+Finding 3 established that the classifier is invariant to the flow log
+aggregation interval, and that is the property that made A0 a result rather
+than a demo: a customer on 600-second aggregation gets the same verdicts as one
+on 60. Streaming is the same kind of question about a customer's configuration,
+and nobody had asked it.
+
+**Four of five agents invert.** On a streamed capture of the same corpus, the
+egress-to-ingress ratio of a confirmed agent falls from 15.8:1 to 0.76:1. Below
+one, which is the shape of a chatbot answering questions — and that sentence is
+printed as the evidence beside the finding, in the one section of the report a
+workload's owner is invited to argue with.
+
+| workload | whole | streamed |
+|---|---|---|
+| autofix-coding-agent | 34.5:1 | 2.19:1 |
+| nightly-ops-agent | 15.8:1 | 0.76:1 |
+| support-triage-agent | 13.5:1 | 0.67:1 |
+| inventory-reconciler | 8.9:1 | 0.48:1 |
+
+The verdicts survived, because four other signals carry them. That is the
+uncomfortable part rather than the reassuring one: the signal the specification
+was rewritten around, the one that replaced the burst timing that does not
+exist, was doing almost nothing on a capture from an account that streams — and
+every number recorded in this document would have looked fine.
+
+**What was in the byte count.** Four things occupy the inbound side of a model
+conversation: the payload, one acknowledgement per two outbound segments at 52
+bytes each, a TLS server hello and certificate chain per connection, and — when
+the response streams — an SSE frame, a TLS record header and a packet header
+per token. Remove the first three and the inbound payload rate is 4.1 to 4.2
+bytes per token; the fourth multiplies it by 41.9.
+
+The outbound side needed correcting too, which is easy to miss. Streaming
+multiplies the inbound packet count by forty-two and every two of those packets
+are answered by an acknowledgement travelling *outbound*, so the numerator of
+the ratio grows as well — by 6% on a workload that sends a great deal and 57%
+on one that does not. That error points the same way as the thing being
+measured, which is what makes it the kind that survives review.
+
+**The fix is where the wire is decoded, not where it is used.** Model byte
+counts become payload when the telemetry is built. The classifier reads a fact
+about the conversation; the spend estimate reads the same numbers and its
+per-regime constant, its framing haircut and its discriminator all deleted
+themselves — four bytes a token was never wrong, it was being applied to wire
+bytes.
+
+**It was not only about streaming.** The acknowledgements and the certificate
+chains were in the ratio of every account ever scanned, and they scale with how
+a client is configured rather than with what a workload said. Taking them out
+moved the numbers G0 rests on:
+
+| | before | after |
+|---|---|---|
+| base corpus margin | 0.260 | **0.415** |
+| stress corpus margin | 0.142 | **0.291** |
+| headroom above the reporting threshold | 0.151 | 0.168 |
+| streamed capture margin | 0.371 | 0.418 |
+| streamed capture headroom | 0.054 | 0.168 |
+
+Recall and precision are 1.00 throughout and no workload changed side. The
+midpoint of the ratio signal moves from 7.0 to 11.5 because the feature is on a
+different scale — agents above 15.3 and negatives below 8.7, where it was 7.9
+and 6.5. The gap between the classes goes from 1.2x to 2x.
+
+That gap being narrow was the stated reason this signal is weighted alongside
+others rather than used as a threshold. The reason still holds for a different
+cause: eleven workloads do not justify a threshold however wide the gap looks.
+
+**What is still unmeasured.** How much real agent traffic streams — a question
+about customers, not protocols, so the corpus is built both ways and neither is
+asserted.
+
+And a workload running both regimes at once is read as neither. `kb-assistant`
+embeds a query whole and streams the answer: one principal, two conversations
+with the same peer, and a flow log cannot separate them below the level of a
+principal. It gets one answer for both halves and it is wrong for one of them.
+The invariance test excludes it by that property rather than by name, and fails
+if it ever leaves the corpus.
+
 ---
 
 ## Why this result should be believed, and where it should not
