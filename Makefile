@@ -103,8 +103,10 @@ preflight: collector ## Check a collector configuration before scanning
 stress: ## Score the classifier against the partially-coupled corpus
 	$(PY) -m custos_a0.cli stress
 
-questions: ## Score the gateway detector against the noise corpus
+questions: ## Score the gateway detector against the noise corpus, both ways round
 	$(PY) -m custos_a0.cli questions
+	@echo
+	$(PY) -m custos_a0.cli questions --streaming
 
 conversion: ## Measure payload bytes per token, responses whole and streamed
 	$(PY) -m custos_a0.cli conversion
@@ -120,7 +122,8 @@ gates: ## Every measured number this product rests on, in one run
 	@$(PY) -m custos_a0.cli stress | grep -E "^(recall|missed:)"
 	@echo
 	@echo "=== the gateway detector, noise corpus ==="
-	@$(PY) -m custos_a0.cli questions | tail -2
+	@$(PY) -m custos_a0.cli questions | tail -1
+	@$(PY) -m custos_a0.cli questions --streaming | tail -1 | sed "s/$$/   (streamed)/"
 	@echo
 	@echo "=== which signal is carrying the result ==="
 	@$(PY) -m custos_a0.cli ablation | sed -n '/stress corpus/,$$p' | grep -E "^[a-z_]+ +[0-9]"

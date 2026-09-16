@@ -179,11 +179,12 @@ def cmd_questions(args: argparse.Namespace) -> int:
     """
     from .questions import run
 
-    result = run(limit=args.limit)
+    result = run(limit=args.limit, streaming=args.streaming)
 
     print(
         "Custos gateway questions — one self-hosted gateway, one endpoint AWS "
-        "names for us, one it will not, seven ordinary services\n"
+        "names for us, one it will not, seven ordinary services"
+        + (", responses streamed" if args.streaming else "") + "\n"
     )
     header = f"{'':4}  {'address':16}{'egress':>12}{'ingress':>11}{'ratio':>9}   answer"
     print(header)
@@ -330,6 +331,9 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("questions", help="score the gateway detector's questions")
     p.add_argument("--limit", type=int, default=5,
                    help="how many questions a customer is shown")
+    p.add_argument("--streaming", action="store_true",
+                   help="model responses arrive one token at a time, which is "
+                        "what a gateway proxying an SSE API produces")
     p.set_defaults(func=cmd_questions)
 
     p = sub.add_parser("ablation",
