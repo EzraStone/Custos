@@ -848,6 +848,11 @@ def create_app(
             # scan, and the assumption was made per principal.
             streamed_principals=sum(s.streamed_principals for s in per_region),
             priced_principals=sum(s.priced_principals for s in per_region),
+            # Summed like the other per-scan counts: a principal belongs to one
+            # region's scan and the shape was judged per principal.
+            interactive_unresolved=sum(
+                s.interactive_unresolved for s in per_region
+            ),
             # Summed, because each region's traffic reached its own. The
             # catalogue is IPv4 only and this is the count it could not speak
             # to — the served report was silent about it entirely, so the one

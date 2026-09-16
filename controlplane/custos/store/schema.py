@@ -22,7 +22,7 @@ agent's apparent spend and reach.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 24
+SCHEMA_VERSION = 25
 
 # Columns added after a table was first written, applied by ALTER on databases
 # that already exist. The schema below is applied with CREATE TABLE IF NOT
@@ -84,6 +84,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("scans", "streamed_principals", "INTEGER NOT NULL DEFAULT 0"),
     ("scans", "priced_principals", "INTEGER NOT NULL DEFAULT 0"),
     ("agents", "responses_streamed", "INTEGER NOT NULL DEFAULT 0"),
+    ("scans", "interactive_unresolved", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 BATCHES_TABLE = """CREATE TABLE IF NOT EXISTS batches (
@@ -152,6 +153,7 @@ CREATE TABLE IF NOT EXISTS scans (
     resolved_endpoints  TEXT    NOT NULL DEFAULT '[]',
     streamed_principals INTEGER NOT NULL DEFAULT 0,
     priced_principals   INTEGER NOT NULL DEFAULT 0,
+    interactive_unresolved INTEGER NOT NULL DEFAULT 0,
     agents_found        INTEGER NOT NULL DEFAULT 0,
     review_candidates   INTEGER NOT NULL DEFAULT 0,
     coverage            REAL    NOT NULL DEFAULT 0.0,

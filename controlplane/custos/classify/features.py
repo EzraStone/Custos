@@ -118,4 +118,39 @@ def extract(t: PrincipalTelemetry) -> Features:
     )
 
 
-__all__ = ["Features", "extract"]
+INTERACTIVE_COUPLING = 0.9
+"""Above this, a workload's model calls are answering inbound requests almost
+every time."""
+
+INTERACTIVE_INTERLEAVE = 0.5
+"""And above this it is calling tools between them."""
+
+
+def looks_interactive(f: Features) -> bool:
+    """Whether this workload has the shape Custos cannot resolve.
+
+    Coupled to inbound requests, and interleaving tool calls with model calls.
+    An agent behind a chat box and a retrieval-augmented chatbot both look like
+    this, and on the A0 corpus every feature except the MCP fingerprint either
+    overlaps between the two or points the wrong way.
+
+    Not a verdict and not a signal — nothing scores on it. It exists so a scan
+    can count the workloads its silence is least trustworthy about, the same
+    way it counts the internal destinations it declined to ask about.
+    """
+    return (
+        f.have_inbound_logs
+        and f.model_windows > 0
+        and f.inbound_coupling >= INTERACTIVE_COUPLING
+        and f.tool_interleave >= INTERACTIVE_INTERLEAVE
+        and f.mcp_windows == 0
+    )
+
+
+__all__ = [
+    "INTERACTIVE_COUPLING",
+    "INTERACTIVE_INTERLEAVE",
+    "Features",
+    "extract",
+    "looks_interactive",
+]

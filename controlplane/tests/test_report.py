@@ -831,3 +831,39 @@ def test_a_format_with_no_packet_counts_says_what_that_costs():
     )
     assert "Packet counts were not recorded" in html
     assert "forty-two bytes of framing" in html
+
+
+def test_an_account_with_interactive_workloads_is_told_they_are_not_in_the_register():
+    """The biggest blind spot the product has, and the one most likely to be
+    read as a clean result: a workload that answers requests and calls tools
+    between model calls is either an assistant running a tool loop or a
+    retrieval-augmented chatbot, and nothing observable separates them."""
+    from custos.report import Coverage
+
+    html = render(
+        result([agent()]), "acme-nonprod", T0,
+        coverage=Coverage(interactive_unresolved=3),
+    )
+    assert "3 workloads in this account answer" in html
+    assert "none of them is in the register" in html
+    assert "tool loop" in html
+
+
+def test_one_of_them_reads_as_one():
+    html = render(
+        result([agent()]), "acme-nonprod", T0,
+        coverage=Coverage(interactive_unresolved=1),
+    )
+    assert "One workload in this account answers" in html
+
+
+def test_an_account_with_none_is_told_nothing():
+    """A limitation that appears on every report is one nobody reads, and an
+    account with no interactive workloads has nothing being hidden from it."""
+    from custos.report import Coverage
+
+    html = render(
+        result([agent()]), "acme-nonprod", T0,
+        coverage=Coverage(interactive_unresolved=0),
+    )
+    assert "chat box" not in html

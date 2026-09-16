@@ -477,6 +477,21 @@ def _limitations(
             "than supplied, and if it is wrong for one, that workload's "
             "figures are wrong by about the same factor."
         )
+    if coverage and coverage.interactive_unresolved:
+        n = coverage.interactive_unresolved
+        subject = (
+            "One workload in this account answers"
+            if n == 1
+            else f"{n} workloads in this account answer"
+        )
+        items.append(
+            f"{subject} inbound requests and call internal services between "
+            "model calls — the shape of an assistant behind a chat box or an "
+            "editor. An agent of that kind and a retrieval-augmented chatbot "
+            "are identical in everything this scan can observe, so none of "
+            "them is in the register. If any runs a tool loop on its own "
+            "judgement it is an agent, and it is not listed above."
+        )
     items.extend(_format_limits(coverage))
     if degraded:
         items.append(
@@ -652,6 +667,15 @@ class Coverage:
     """How many agents had model traffic to price, which the count above is
     out of. Zero means nothing was converted and the sentence is not worth
     printing."""
+
+    interactive_unresolved: int = 0
+    """Workloads this scan could not tell apart from an interactive agent.
+
+    Coupled to inbound requests, interleaving tool calls, no MCP traffic. An
+    agent behind a chat box and a retrieval-augmented chatbot are identical in
+    every feature available for them, so none of these is reported — including
+    any that is an agent. The count is here for the reason the declined gateway
+    candidates are: a silence the scan is not entitled to has to be stated."""
 
     ipv6_destinations: int = 0
     """Public IPv6 addresses this scan's traffic reached and could not classify.

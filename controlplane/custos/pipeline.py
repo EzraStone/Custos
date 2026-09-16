@@ -19,6 +19,7 @@ from .baseline import Drift, detect_from_history
 from .batch import Batch
 from .catalog import is_ipv6, is_model_endpoint, is_model_endpoint_service
 from .classify import Disposition
+from .classify.features import looks_interactive
 from .declared import Declaration, Declared
 from .declared import build as build_declared
 from .diff import ScanDiff, compare
@@ -212,6 +213,26 @@ def _resolved_endpoints(batch: Batch) -> tuple[str, ...]:
     }))
 
 
+def _interactive_unresolved(result: ScanResult) -> int:
+    """Workloads this scan cannot tell apart from an interactive agent.
+
+    Coupled to inbound requests, interleaving tool calls, no MCP traffic. An
+    agent behind a chat box and a retrieval-augmented chatbot are identical in
+    every feature the classifier has for them, and the ones that are not agents
+    are the overwhelming majority — so they are not reported, and the one that
+    is an agent is not reported either.
+
+    Counted for the same reason the declined gateway candidates are: a scan
+    whose silence about a class of workload is untrustworthy has to say so, or
+    the silence reads as a finding.
+    """
+    return sum(
+        1 for v in result.verdicts
+        if looks_interactive(v.features)
+        and v.disposition is not Disposition.AGENT
+    )
+
+
 def _streamed_principals(result: ScanResult) -> int:
     """Agents whose model responses were read as arriving one token at a time."""
     return sum(1 for a in result.register.agents.values() if a.model.streamed)
@@ -294,6 +315,7 @@ def _coverage(
     declined: int = 0,
     streamed: int = 0,
     priced: int = 0,
+    interactive: int = 0,
 ) -> Coverage:
     """Build the report's coverage summary from what the collector reported.
 
@@ -311,6 +333,7 @@ def _coverage(
             scope_named=scope[0], scope_total=scope[1], ipv6_destinations=ipv6,
             regions=_regions(batch), bulk_senders=declined,
             streamed_principals=streamed, priced_principals=priced,
+            interactive_unresolved=interactive,
         )
     return Coverage(
         parsed_fraction=stats.parsed_fraction,
@@ -326,6 +349,7 @@ def _coverage(
         bulk_senders=declined,
         streamed_principals=streamed,
         priced_principals=priced,
+        interactive_unresolved=interactive,
     )
 
 
@@ -437,6 +461,8 @@ def ingest(
             # served a week later, not only the one printed today.
             streamed_principals=_streamed_principals(result),
             priced_principals=_priced_principals(result),
+            # Workloads whose silence this scan is least entitled to.
+            interactive_unresolved=_interactive_unresolved(result),
         )
 
         # Questions to put to the customer, from this scan's traffic. Recorded
@@ -541,6 +567,7 @@ def ingest(
             declined=len(gateways.declined),
             streamed=_streamed_principals(result),
             priced=_priced_principals(result),
+            interactive=_interactive_unresolved(result),
         ),
         resolved_endpoints=_resolved_endpoints(batch),
         diff=diff, drift=drift,

@@ -95,6 +95,15 @@ class ScanRecord:
     """How many had model traffic to price at all, which is what the number
     above is out of."""
 
+    interactive_unresolved: int = 0
+    """Workloads this scan could not tell apart from an interactive agent.
+
+    Coupled to inbound requests, interleaving tool calls, no MCP traffic. On
+    the A0 corpus every feature the classifier has for that shape either
+    overlaps between an agent and a retrieval-augmented chatbot or points the
+    wrong way, so none of them is reported — including the one that is an
+    agent."""
+
     @property
     def scope_readable(self) -> float:
         """How much of the approval scope was a name rather than an address.
@@ -131,6 +140,7 @@ def _scan(row: sqlite3.Row) -> ScanRecord:
         bulk_senders=row["bulk_senders"],
         streamed_principals=row["streamed_principals"],
         priced_principals=row["priced_principals"],
+        interactive_unresolved=row["interactive_unresolved"],
         ipv6_destinations=row["ipv6_destinations"],
         skipped_records=row["skipped_records"],
         resolved_endpoints=tuple(loads(row["resolved_endpoints"])),
@@ -218,6 +228,7 @@ class ScanStore:
         resolved_endpoints: tuple[str, ...] = (),
         streamed_principals: int = 0,
         priced_principals: int = 0,
+        interactive_unresolved: int = 0,
     ) -> int:
         cursor = self.conn.execute(
             "INSERT INTO scans (batch_id, account_id, started_at, principals_seen, "
@@ -225,15 +236,15 @@ class ScanStore:
             "scope_named, scope_total, missing_fields, direction_undecided, "
             "read_errors, regions, bulk_senders, ipv6_destinations, "
             "skipped_records, resolved_endpoints, streamed_principals, "
-            "priced_principals) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "priced_principals, interactive_unresolved) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (batch_id, account_id, iso(started_at), principals_seen, agents_found,
              review_candidates, coverage, int(truncated), catalogue_revision,
              scope_named, scope_total, dumps(list(missing_fields)),
              direction_undecided, read_errors, dumps(list(regions)),
              bulk_senders, ipv6_destinations, skipped_records,
              dumps(list(resolved_endpoints)), streamed_principals,
-             priced_principals),
+             priced_principals, interactive_unresolved),
         )
         return cursor.lastrowid
 
