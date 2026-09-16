@@ -59,10 +59,18 @@ custos diff                 →  what changed since last week
 clients stream.**
 
 Against a harder corpus added afterwards — agents that pause for human
-approval, agents on batch schedules, chatbots with function calling — every
-verdict is still correct and there are still no false positives, but the margin
-falls to **0.18**, and one agent in it is not confirmed at all. Quote that
-number, not the first one, wherever it would be doing work.
+approval, agents on batch schedules, chatbots with function calling, an IDE
+assistant, an agent behind a support console — there are still no false
+positives, but **the margin is negative: -0.202**, recall is 0.83, and the
+classes do not separate at all. Quote that number, not the first one,
+wherever it would be doing work.
+
+One workload is responsible. Leaving `support-copilot-backend` out, the same
+corpus separates by +0.180 — so this is one shape the classifier cannot
+handle rather than a failure across the board, and neither number should be
+quoted alone. Of the two agents it misses, one is in the review queue and one
+is dismissed outright; surfaced recall, 0.92, is the number that tells them
+apart.
 
 Those were 0.26 and 0.14 until the classifier stopped reading wire bytes. The
 acknowledgements and TLS handshakes in them scale with how a customer's client
@@ -71,25 +79,28 @@ widened the gap between the classes from 1.2x to 2x on the same corpus and the
 same workloads. Finding 12.
 
 Reproduce with `make experiment`. CI fails the build if it stops holding.
-`make gates` prints all five measured numbers in one run:
+`make gates` prints every measured number this product rests on in one run:
 
 ```
 G0, base corpus          separation margin 0.485, headroom 0.162, review gap 0.010
-the classifier, stress   separation margin 0.180, recall 0.91, one agent in review
+the classifier, stress   separation margin -0.202, recall 0.83, surfaced 0.92;
+                         +0.180 without the one workload it cannot separate
 the gateway detector     3 questions, 2 worth asking, both real ones shown,
                          identical whether or not the account streams
-which signal carries it  tool_interleave 0.448, mcp_fingerprint 0.378 (stress)
+which signal carries it  tool_interleave 0.226 of separation, mcp_fingerprint
+                         0.000 of it and one agent's place in the queue (stress)
 payload bytes per token  4.12-4.29 across 24 conversations, discriminator at 600
 scope readability        26 of 26 nameable interfaces
 ```
 
 Every one of those is reproducible from a clean checkout in under two minutes,
 and the numbers in this document are the ones those commands print. That is the
-set anyone asking what is real will want together, and four of the
-five started at a number worth being embarrassed by: the stress margin at half
-the headline, the detector at 0.00, readability at 46%, and the conversion at a
-single constant that is wrong by forty-four times for half the accounts that
-might use this. The one that has not moved since A0 is the headline margin.
+set anyone asking what is real will want together, and most of them started
+at a number worth being embarrassed by: the stress margin at half the
+headline and now below zero, the detector at 0.00, readability at 46%, and
+the conversion at a single constant that is wrong by forty-four times for
+half the accounts that might use this. The one that has not moved since A0 is
+the headline margin.
 
 **The margin is not the only headroom.** G0 also requires the weakest agent to
 clear the reporting threshold by 0.05, because those two numbers can move in
@@ -108,29 +119,36 @@ property of summed bytes and survives aggregation intact.
 Full result and its limitations: `docs/A0-FINDINGS.md`.
 
 **The classifier had never been ablated.** Removing each signal and
-re-measuring says which of the five is producing the result, and the answer
-depends on the corpus: on the base corpus four of the five are redundant and
-the signal the specification was rewritten around costs 0.043 of separation.
-On the stress corpus removing `tool_interleave` or `mcp_fingerprint` makes the
-classes overlap outright.
+re-measuring says which of the four is producing the result, and the answer
+depends on the corpus: on the base corpus three of the four are near-redundant
+and the signal the specification was rewritten around costs 0.043 of
+separation. On the stress corpus `tool_interleave` carries 0.226 of it and
+removing either of the other two *widens* the margin.
 
 Two came out looking unjustified. `offhours_activity` was negative rather than
 inert — removing it widened the margin by 0.07 on both corpora, because a
 nightly agent and a nightly batch job both run at 3am — and it is rejected.
-`mcp_fingerprint` read 0.000 because every MCP user in the corpus already
-scored 0.995 on everything else; with the case it was carried for added, an
-IDE assistant that is inbound-coupled and short-trajectoried, removing it
-collapses the classes.
+`mcp_fingerprint` read 0.000 of separation on both corpora and still does.
 
-That workload is a miss and stays one: 0.657, in the review band. Stress
-recall is 0.91 as a result. A corpus containing only cases the classifier
-passes is not measuring anything. Finding 13 and `make ablation`.
+That one is the more interesting result, because the ablation was wrong about
+it rather than the signal being useless. Margin, recall and precision are all
+measured at the register boundary, so a signal whose only job is to hold an
+ambiguous workload in the *review queue* moves none of them and reads as free.
+Removing `mcp_fingerprint` drops `ide-assistant-backend` out of the queue
+entirely — from a workload an operator is asked to look at to one nobody
+hears about. The table now has a `surfaced` column and says so.
+
+That workload is a miss and stays one: 0.657, in the review band. A corpus
+containing only cases the classifier passes is not measuring anything.
+Findings 13 and 15, and `make ablation`.
 
 ## What is still unproven
 
-**Headroom is thinner than the headline number.** 0.14 on the stress corpus
-against a 0.15 durability bar. Every verdict is correct; there is simply less
-room before one is not.
+**The stress corpus does not separate.** The margin is -0.202, against a
+0.15 durability bar on the base corpus. One workload causes it and the rest
+of that corpus separates by +0.180, but "the classes overlap" is the honest
+headline and the workload responsible — an agent behind a support console,
+driving ordinary HTTP APIs — is a shape we have no signal for.
 
 **A model endpoint we do not recognise is an agent we cannot see** — but the
 account can now be asked, and told. An agent behind a self-hosted gateway has

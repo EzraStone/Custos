@@ -38,9 +38,16 @@ did not until the classifier stopped measuring wire bytes.
 
 Against a harder corpus added afterwards — agents that pause for human
 approval, agents on batch schedules, chatbots with function calling, an IDE
-assistant nothing but the MCP fingerprint can see — the margin falls to
-**0.18** and one of those agents is not confirmed at all. That is the number
-to quote wherever the first one would be doing work.
+assistant nothing but the MCP fingerprint can see, an agent behind a support
+console nothing catches at all — **the margin is negative, -0.202**, and two
+of those agents are not confirmed. That is the number to quote wherever the
+first one would be doing work.
+
+Leaving out the one workload responsible, the same corpus separates by +0.180.
+Neither number means much alone: one says the classifier fails, the other says
+it fails on one shape. Of the two missed agents, one is in the review queue and
+one is dismissed outright — surfaced recall, 0.92, is the number that keeps
+those apart.
 
 That corpus also contains an agent whose model calls go through a self-hosted
 gateway. It is missed, and it is meant to be: a model endpoint we do not
@@ -88,7 +95,7 @@ make check       # lint and test everything
 make experiment  # run A0, print the G0 verdict, write a sample scan report
 make questions   # score the gateway detector against the noise corpus
 make conversion  # measure payload bytes per token, responses whole and streamed
-make gates       # all five measured numbers, in one run
+make gates       # every measured number this rests on, in one run
 ```
 
 ## The loop, end to end
