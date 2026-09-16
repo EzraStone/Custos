@@ -225,11 +225,13 @@ _FIELD_COSTS = {
     "log-status": "AWS's own NODATA and SKIPDATA markers were not recorded, so "
                   "the coverage figure above cannot account for records AWS "
                   "dropped before we read them. It is an upper bound.",
-    "packets": "Packet counts were not recorded, which is how a streamed "
-               "model response is told from a whole one. Every spend figure "
-               "above therefore uses the reading that produces the larger "
-               "number, and for a workload whose responses do stream that is "
-               "about forty times too high.",
+    "packets": "Packet counts were not recorded, which is how the protocol is "
+               "separated from the conversation inside it. Every byte figure "
+               "above is therefore what was on the wire, including "
+               "acknowledgements, TLS handshakes and — for a workload whose "
+               "responses stream — about forty-two bytes of framing for every "
+               "byte the model said. Both the spend figures and the "
+               "egress-to-ingress ratios are affected.",
 }
 
 
@@ -466,13 +468,14 @@ def _limitations(
         else:
             read = "Model responses were read as arriving whole"
         items.append(
-            f"{read}, from the size of the packets carrying them. That is the "
-            "largest single assumption behind the figures above — a streamed "
-            "response is about 175 wire bytes per output token against four "
-            "for a whole one, and output tokens are priced highest — and it "
-            "is something we inferred rather than something you told us. If "
-            "it is wrong for a workload, its figure is wrong by about forty "
-            "times."
+            f"{read}, from the size of the packets carrying them. Byte counts "
+            "and ratios above are the message payload, with the "
+            "acknowledgements, the TLS handshakes and the streaming framing "
+            "taken out, because a streamed token costs about forty-two times "
+            "its own size on the wire and none of that is anything the "
+            "workload said. Which regime a workload is in was inferred rather "
+            "than supplied, and if it is wrong for one, that workload's "
+            "figures are wrong by about the same factor."
         )
     items.extend(_format_limits(coverage))
     if degraded:
@@ -639,11 +642,11 @@ class Coverage:
     streamed_principals: int = 0
     """Agents whose model responses were read as arriving one token at a time.
 
-    The largest single lever on the dollar figures and the one nobody supplied:
-    a streamed response is around 175 wire bytes per output token against four
-    for a whole one, output tokens are priced at five times input, and a flow
-    record does not say which happened. It is inferred from the size of the
-    packets carrying the responses, which is a reading and can be wrong."""
+    The largest single lever on every byte figure this report prints, and the
+    one nobody supplied: a streamed token costs about forty-two times its own
+    payload on the wire, and a flow record does not say whether a response
+    streamed. It is inferred from the size of the packets carrying it, which
+    is a reading and can be wrong."""
 
     priced_principals: int = 0
     """How many agents had model traffic to price, which the count above is

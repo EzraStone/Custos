@@ -86,11 +86,10 @@ class ScanRecord:
     streamed_principals: int = 0
     """Agents whose model responses were read as arriving one token at a time.
 
-    The single assumption the dollar figures are most sensitive to, inferred
-    from packet sizes rather than told to us, and forty-four times between the
-    two answers on the side that is priced highest. Stored because the report
-    served a week later has to be able to say the same thing the one printed
-    today did."""
+    The single assumption every byte figure is most sensitive to, inferred
+    from packet sizes rather than told to us: a streamed token costs about
+    forty-two times its own payload on the wire. Stored because the report
+    served a week later has to say the same thing the one printed today did."""
 
     priced_principals: int = 0
     """How many had model traffic to price at all, which is what the number

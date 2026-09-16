@@ -791,7 +791,7 @@ def _priced(streamed: int, priced: int):
 def test_a_streaming_account_is_told_which_reading_produced_its_figures():
     html = render(result([agent()]), "acme-nonprod", T0, coverage=_priced(3, 3))
     assert "one token at a time" in html
-    assert "forty times" in html
+    assert "forty-two times" in html
 
 
 def test_a_mixed_account_is_told_both():
@@ -832,4 +832,4 @@ def test_a_format_with_no_packet_counts_says_what_that_costs():
         coverage=Coverage(missing_fields=("packets",), regions=("us-east-1",)),
     )
     assert "Packet counts were not recorded" in html
-    assert "forty times too high" in html
+    assert "forty-two bytes of framing" in html

@@ -111,18 +111,20 @@ figure is at their prices and this one is not, so a client showing spend should
 show this beside it. An empty list is not the same claim — it is an agent
 discovered before the field existed.
 
-`responses_streamed` is which conversion produced the spend figure. A model
-response that arrives one token at a time costs about 175 wire bytes per output
-token; one that arrives whole costs about four. Output tokens are priced at
-five times input, so the two readings of the same bytes are roughly forty-four
-times apart in what they imply about cost.
+`responses_streamed` says how this agent's byte figures were read. A model
+response that arrives one token at a time carries about forty-two bytes of
+Server-Sent Events framing, TLS record header and packet header for every byte
+the model said. Custos reports the payload rather than the wire, so this is the
+difference between two readings of the same flow record that are forty-two
+times apart — in the spend estimate and in the egress-to-ingress ratio behind
+the finding alike.
 
-A flow record does not say which happened, so this was inferred — from the
-mean size of the inbound packets once the acknowledgements the outbound
-segments imply are subtracted. It is decided per principal, because an account
-whose agents stream and whose chatbot backends do not is two regimes in one
-number. A client showing spend should show this beside it for the same reason
-it should show `providers`: the figure rests on it, and nobody told us.
+A flow record does not say which happened, so this was inferred — from the mean
+size of the inbound packets once the acknowledgements the outbound segments
+imply are subtracted. It is decided per principal, because an account whose
+agents stream and whose chatbot backends do not is two regimes in one number. A
+client showing spend should show this beside it for the same reason it should
+show `providers`: the figure rests on it, and nobody told us.
 
 `regions` is every region this agent has been seen in. It accumulates across
 scans, because one scan covers one region and a role running in three is
