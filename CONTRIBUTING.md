@@ -92,6 +92,42 @@ find controlplane -name __pycache__ -exec rm -rf {} +
 Go does not have this problem — its build cache keys on content rather than
 timestamps.
 
+## A test can pass for years and stop measuring anything
+
+The section above is about a test that never worked. This one is about a test
+that worked, and then the thing underneath it moved.
+
+`test_the_mcp_fingerprint_is_load_bearing` asserted two things about removing
+that signal: the separation margin goes negative, and `load_bearing` is true.
+Both were real evidence when written — the stress corpus separated by +0.356
+with full recall, so only a signal doing real work could produce them.
+
+Then the corpus gained a workload that drives the baseline margin to -0.202 and
+recall to 0.83 on its own. After that both assertions held for *any* signal in
+the table, including one whose removal changes nothing whatsoever. The test
+kept passing and had stopped saying anything, which is worse than failing: a
+red test gets looked at.
+
+Nothing in the usual discipline catches this. It was written against a fixture
+that could fail it, it was never touched, and the commit that broke it was a
+commit that added a workload to a corpus — the most ordinary thing anybody does
+here.
+
+**Assert the effect, not a threshold the baseline might drift across.** "The
+margin goes negative" is a claim about an absolute position. "Removing it drops
+`ide-assistant-backend` out of the review queue" is a claim about a difference,
+and a difference does not move when the baseline does.
+
+**Where you must assert a threshold, assert that something fails it.** If you
+are claiming a signal is load-bearing, also assert that some other signal in
+the same table is not. That check would have gone red the week the corpus
+changed, because by then nothing failed the bar.
+
+**A fixture change is a test change.** Adding a workload to a corpus, widening
+a scenario sweep, or making a synthetic capture more realistic re-points every
+test that reads it. Run the suite, then read the tests that touch what you
+changed and ask whether each could still fail.
+
 ## Read the arc back before you call it done
 
 Three defects in one week came from re-reading code written a day earlier, and
@@ -274,17 +310,30 @@ customer's account, and each hid a real defect until someone went looking.
 `a0/custos_a0/ablation.py` measures what each one is worth: remove it,
 re-measure the margin. Run it before arguing about a weight.
 
-**Ask both corpora.** The base corpus is easy enough that four of five signals
-are redundant, so a signal can read 0.000 there and be the difference between
-separated classes and overlapping ones on the stress corpus. `make gates`
-prints the stress table for that reason.
+**Ask both corpora.** The base corpus is easy enough that three of the four
+signals are near-redundant, so a signal can read 0.000 there and be carrying a
+verdict on the stress corpus. `make gates` prints the stress table for that
+reason.
 
-**A signal reading zero is a question, not an answer.** It means either the
-signal does nothing or the corpus never contains the case it was carried for,
-and those need opposite responses. The way to tell them apart is to add the
-case and measure again — `mcp_fingerprint` read 0.000 on both corpora until a
-workload existed that needed it, and then removing it made the classes
-overlap.
+**A signal reading zero is a question, not an answer.** There are three
+answers to it, not two, and the third is the one that cost the most time here.
+
+Either the signal does nothing, or the corpus never contains the case it was
+carried for, or *the measurement cannot see what the signal does*. The way to
+separate the first two is to add the case and measure again. The third does
+not respond to a better corpus at all.
+
+`mcp_fingerprint` was the third. It read 0.000 of separation on both corpora
+and still does, and it costs no recall either — because margin, recall and
+precision are all measured at the register boundary, and the only thing that
+signal does is keep an ambiguous workload in the *review queue*. A table with
+three outcome columns, all at the same boundary, called it free twice. It has
+a `surfaced` column now.
+
+So before concluding a signal is dead, ask what outcome it could be moving
+that nothing in the table measures. A workload's place in the review queue is
+a verdict; so is an operator being asked a question. Neither shows up in a
+margin.
 
 **A signal reading negative is different.** `offhours_activity` was costing
 0.07 of margin on both corpora, and no corpus addition fixes a signal that is
@@ -307,6 +356,11 @@ dead field beside a live one does the opposite.
 fitting to eleven workloads. If a removal leaves a workload a hundredth from a
 threshold, record the clearance — the sweep prints it — and leave the
 threshold alone.
+
+**Re-read the test that justified the signal you are keeping.** The evidence
+for keeping one was "removing it makes the classes overlap", which stopped
+being evidence the moment a later workload made them overlap anyway. See the
+next section.
 
 ## Changing the G0 result
 
