@@ -105,8 +105,7 @@ class Window:
     self-hosted gateway proxies Server-Sent Events, so its responses arrive a
     token at a time — and the detector that exists to find it looks for a
     destination receiving far more than it returns."""
-    model_connections: int = 0
-    """Distinct 5-tuples to model endpoints carrying a SYN in this window."""
+
     tool_classes: set[DestinationClass] = field(default_factory=set)
     tool_addresses: set[str] = field(default_factory=set)
     model_addresses: set[str] = field(default_factory=set)
@@ -118,6 +117,15 @@ class Window:
     — AWS says which service it is in `pkt-dst-aws-service`, and dropping that
     here left every Bedrock agent's spend estimated at the rate for a provider
     nobody could name."""
+    @property
+    def model_connections(self) -> int:
+        """Distinct 5-tuples to model endpoints carrying a SYN in this window.
+
+        Derived, like the byte totals. It was a field beside the per-peer
+        counts that already summed to it, which is the arrangement that let
+        build_windows return a window whose total disagreed with its parts."""
+        return sum(p.connections for p in self.model_peers.values())
+
     @property
     def tool_egress(self) -> int:
         return sum(p.egress for p in self.tool_peers.values())
@@ -192,6 +200,15 @@ class Episode:
     @property
     def length(self) -> int:
         return len(self.windows)
+
+    @property
+    def model_connections(self) -> int:
+        """Distinct 5-tuples to model endpoints carrying a SYN in this window.
+
+        Derived, like the byte totals. It was a field beside the per-peer
+        counts that already summed to it, which is the arrangement that let
+        build_windows return a window whose total disagreed with its parts."""
+        return sum(p.connections for p in self.model_peers.values())
 
     @property
     def tool_egress(self) -> int:
@@ -313,10 +330,9 @@ def build_windows(
                 side.egress += r.bytes
                 side.egress_packets += r.packets
                 if r.tcp_flags & SYN:
-                    marker = (key, r.srcport, peer)
+                    marker = ("model", key, r.srcport, peer)
                     if marker not in seen_syn:
                         seen_syn.add(marker)
-                        w.model_connections += 1
                         side.connections += 1
             else:
                 w.model_ingress_wire += r.bytes
