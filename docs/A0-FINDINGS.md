@@ -731,6 +731,55 @@ entirely wrong numbers, which is the worse of the two.
 
 ---
 
+## Finding 14 — three defects the correction introduced, found by re-reading it
+
+Findings 12 and 13 both came from asking a question nobody had asked. This one
+came from reading the code those findings produced, adversarially, a day later.
+All three defects point the same way — at false positives — which is the
+direction this product can least afford and, on reflection, the direction a
+correction that *removes* bytes from a denominator was always going to err in.
+
+**A ratio against a payload that clamped to zero.** Taking the protocol out of
+a byte count can leave nothing behind: a principal that sent a great deal to a
+model endpoint and received only acknowledgements — every response failed, or
+the inbound half of the window was lost — clamps to zero inbound payload, and
+the ratio hits its cap at a million to one. The heaviest signal in the system
+firing at full strength on a conversation nobody could read, with an evidence
+sentence beside it reading "received 0.0B back, a ratio of 1000000.0:1".
+
+Exactly the empty-set defect this document already records, one layer down.
+`egress_asymmetry` is unavailable rather than zero when the response could not
+be read, for the same reason: "we could not read it" and "it was empty" are
+different claims.
+
+**The discriminator had no minimum sample.** Six inbound packets carrying 2,400
+bytes average 480 each, which is under the threshold, reads as streamed, and
+records a conversation that carried 2,350 bytes of payload as 56. A 42x error
+decided by six packets. Fifty packets now, below which the answer is "whole" —
+one packet is one token, fifty tokens is a sentence, and a workload whose whole
+window of model traffic is one sentence is not one this reading changes
+anything for.
+
+**Bytes summed over the wrong set of windows.** `has_model` asks whether the
+workload *called* a model in an interval and answers on outbound payload, which
+an acknowledgement-only window has none of. That is the right denominator for
+the coupling and interleave fractions and the wrong set to sum bytes over: the
+tail of a response spilling into the next interval is not a call and is still
+600KB of inbound payload. Dropping it from the ratio's denominator inflates the
+ratio.
+
+This one was only reachable because bytes became payload. Before that the
+acknowledgements themselves counted as outbound model traffic, so the window
+was never excluded and the set was right for the wrong reason.
+
+**None of the three moved a gate**, which is the part worth sitting with. No
+workload in either corpus has an unreadable response, a six-packet model
+conversation, or an acknowledgement-only window, so every number in this
+document was identical before and after the fixes. They were found by reading,
+and the only thing that would have found them otherwise is an account.
+
+---
+
 ## Why this result should be believed, and where it should not
 
 **The corpus is adversarial by construction.** Four negatives exist
