@@ -67,11 +67,13 @@ prints it on every build. The fix is in
 [docs/A0-FINDINGS.md](docs/A0-FINDINGS.md) under Finding 8, with the three
 limitations that are still true.
 
-The same thing happened to the dollar figure. Every spend estimate divides wire
-bytes by four to get tokens, which is right for a JSON response and wrong for a
-streamed one by around forty-four times — a streaming API sends every token in
-its own frame, its own TLS record and its own packet. `make conversion` measures
-both, and the packet sizes turn out to say which happened. Finding 11.
+The same thing happened to the signal the whole product rests on. The
+egress-to-ingress ratio was computed on wire bytes, which carry
+acknowledgements, TLS certificate chains and — when a response streams — about
+forty-two bytes of framing for every byte the model said. On a streamed capture
+four of five confirmed agents read below 1:1, which is the shape of a chatbot,
+with that sentence printed as their evidence. The verdicts survived because
+other signals carried them, which is worse than it sounds. Findings 11 and 12.
 
 The result and its limitations are in [docs/A0-FINDINGS.md](docs/A0-FINDINGS.md).
 Two signals the original specification expected to carry the classifier were
@@ -83,7 +85,7 @@ make setup       # virtualenv, both Python packages
 make check       # lint and test everything
 make experiment  # run A0, print the G0 verdict, write a sample scan report
 make questions   # score the gateway detector against the noise corpus
-make conversion  # measure wire bytes per token, responses whole and streamed
+make conversion  # measure payload bytes per token, responses whole and streamed
 make gates       # all five measured numbers, in one run
 ```
 

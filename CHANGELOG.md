@@ -4,6 +4,57 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### The signal that carries the product was measuring the protocol
+
+`egress_asymmetry` is the finding this whole product rests on: an agent resends
+its accumulated transcript at every step, so it sends far more than it
+receives. It was computed on wire bytes.
+
+Wire bytes carry one acknowledgement per two outbound segments, a TLS
+certificate chain per connection, and — when a response streams — about
+forty-two bytes of framing for every byte the model said. On a streamed capture
+of the same corpus, four of five confirmed agents came back with a ratio below
+1:1. Below one is the shape of a chatbot answering questions, and that sentence
+is printed as the evidence beside the finding.
+
+The verdicts survived, because four other signals carry them. That is the
+uncomfortable part rather than the reassuring one: the signal the specification
+was rewritten around was contributing almost nothing on a capture from an
+account that streams, and no recorded number would have shown it.
+
+Model byte counts become payload at the point the telemetry is built.
+Acknowledgements, handshakes and streaming framing come out; the wire figures
+are kept for anything that quotes bytes back to a customer. The classifier now
+reads the same whether or not an account streams — the property Finding 3
+settled for the aggregation interval, for the same reason.
+
+**G0 moves, and this is a change to a business decision.** Base corpus
+separation margin 0.260 to **0.415**, stress corpus 0.142 to **0.291**, recall
+and precision unchanged at 1.00, no workload changing side. The ratio midpoint
+moves from 7.0 to 11.5 because the feature is on a different scale: agents
+above 15.3 and negatives below 8.7, where it was 7.9 and 6.5.
+
+It was never only about streaming. The acknowledgements and certificate chains
+were in the ratio of every account ever scanned, and taking them out widened
+the gap between the classes from 1.2x to 2x.
+
+Spend figures fall for every existing customer by roughly the protocol overhead
+on their traffic. They were too high before, and every report says which
+reading produced them.
+
+### Four bytes a token was right all along, on the right input
+
+The per-regime constant, the framing haircut and the streaming discriminator
+are all gone from the spend estimate. With the protocol removed, every workload
+in the corpus lands between 4.13 and 4.24 payload bytes per token at both ends
+of the conversation, in both captures — so `estimate_tokens` divides both
+directions by one number and takes payload rather than wire bytes.
+
+The correction was in the wrong place rather than wrong. Compensating for a
+wire-level effect where the bill is computed left every other consumer of the
+same numbers reading the uncorrected version, and the classifier was one of
+them.
+
 ### Four bytes a token, when a streamed response is 187
 
 Every dollar figure on a Custos report comes from one conversion: observed wire
