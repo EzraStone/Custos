@@ -138,6 +138,11 @@ class Row:
     def in_review(self) -> bool:
         return self.verdict.disposition is Disposition.REVIEW
 
+    @property
+    def dismissed(self) -> bool:
+        """Below both thresholds: no register row, no review queue entry."""
+        return self.verdict.disposition is Disposition.NOT_AGENT
+
 
 @dataclass(slots=True)
 class Result:
@@ -177,6 +182,36 @@ class Result:
     @property
     def recall(self) -> float:
         return self.true_positives / len(self.agents) if self.agents else 1.0
+
+    @property
+    def surfaced(self) -> int:
+        """True agents an operator is shown at all — reported or queued."""
+        return sum(1 for r in self.agents if not r.dismissed)
+
+    @property
+    def surfaced_recall(self) -> float:
+        """The fraction of true agents that reach a human by either door.
+
+        Recall counts the register. This counts the register plus the review
+        queue, and the gap between them is the difference between an agent an
+        operator has to go looking for and one they never hear about.
+
+        It exists because `decide` already rests on the distinction — a pass
+        reports degraded recall as survivable on the grounds that the missed
+        agents "land in the review band rather than being dropped" — and that
+        sentence was prose. A claim the gate leans on should be a number the
+        gate can print, or the next capture that breaks it breaks it silently.
+
+        The two failure modes are not equivalent and this is the metric that
+        keeps them apart: recall falling while this holds is the classifier
+        being unsure, and this falling is the classifier being wrong.
+        """
+        return self.surfaced / len(self.agents) if self.agents else 1.0
+
+    @property
+    def dismissed_agents(self) -> list[Row]:
+        """True agents nothing will show anyone. The ones that cost money."""
+        return [r for r in self.agents if r.dismissed]
 
     @property
     def separation_margin(self) -> float:

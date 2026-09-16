@@ -232,3 +232,40 @@ def _doc(module, name: str) -> str:
             and any(getattr(t, "id", None) == name for t in node.targets)
         )
     raise AssertionError(f"{name} has no docstring")
+
+
+def test_recall_and_surfaced_recall_agree_when_nothing_is_missed(results):
+    """On the base corpus the two metrics are the same number.
+
+    Which is why the distinction was invisible for as long as it was: a
+    metric only earns its place on the corpus that can tell it apart from
+    the one it refines.
+    """
+    for r in results:
+        if r.recall == 1.0:
+            assert r.surfaced_recall == 1.0
+            assert r.dismissed_agents == []
+
+
+def test_degraded_recall_costs_the_register_and_not_the_queue(results):
+    """The claim `decide` rests on, as a number rather than a sentence.
+
+    Without load balancer logs recall falls, and the gate reports that as
+    survivable because the agents it drops still reach a human. That is
+    exactly `surfaced_recall == 1.0`, so assert the number the prose means.
+    """
+    degraded = [r for r in results if not r.scenario.have_alb_logs]
+    assert degraded
+    assert all(r.recall < 1.0 for r in degraded)
+    assert all(r.surfaced_recall == 1.0 for r in degraded)
+
+
+def test_surfaced_recall_is_never_below_recall(results):
+    """A definitional property, asserted because it is easy to break.
+
+    `surfaced` counts a superset of what `recall` counts. If a refactor ever
+    makes this fail, one of the two is counting the wrong dispositions and
+    the more useful of them is the one that would be believed.
+    """
+    for r in results:
+        assert r.surfaced_recall >= r.recall
