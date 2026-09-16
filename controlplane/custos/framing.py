@@ -76,6 +76,25 @@ Measured empty space: 1,444 to 2,740 bytes when responses arrive whole, 232 to
 rather than of the corpus — a sender filling segments produces packets near the
 MSS, one flushing per token produces packets the size of one SSE frame."""
 
+MIN_STREAMED_PACKETS = 50
+"""Inbound data packets needed before the mean is allowed to decide.
+
+Six packets carrying 2,400 bytes average 480 each, which is under the
+threshold and reads as streamed — and then a conversation that actually
+carried 2,350 bytes of payload is recorded as 56. A 42x error from a sample
+that cannot support the question.
+
+Fifty is not a statistical bound and does not pretend to be. It is the point
+below which a streamed response is too short to be worth distinguishing:
+fifty tokens is a sentence, and a workload whose entire window of model
+traffic is one sentence is not the one this reading changes anything for.
+
+Below it the answer is "whole", which is the conservative direction. Reading
+whole traffic as streamed shrinks the payload, which inflates the
+egress-to-ingress ratio, which makes a workload look more like an agent —
+errors that point at false positives are the ones this product can least
+afford."""
+
 MIN_STREAMED_PACKET_BYTES = 100.0
 """And below this it is not a streamed response either.
 
@@ -128,15 +147,16 @@ def responses_streamed(
     dragged to 84 bytes and every agent reads as streaming whatever its
     responses actually did.
 
-    Conservative when it cannot tell. No packet counts, or nothing left after
-    the acknowledgements, returns False — which is the reading this product
-    used before any of this existed.
+    Conservative when it cannot tell. No packet counts, nothing left after the
+    acknowledgements, or too few packets to average over, all return False —
+    the reading this product used before any of this existed, and the one whose
+    errors point away from false positives.
     """
     if ingress_packets <= 0 or ingress_bytes <= 0:
         return False
     acks = ack_packets(egress_packets, ingress_packets)
     packets = ingress_packets - acks
-    if packets <= 0:
+    if packets < MIN_STREAMED_PACKETS:
         return False
     mean = max(0.0, ingress_bytes - acks * ACK_BYTES) / packets
     return MIN_STREAMED_PACKET_BYTES <= mean < STREAMED_PACKET_BYTES
@@ -183,6 +203,7 @@ __all__ = [
     "ACKS_PER_SEGMENT",
     "ACK_BYTES",
     "HANDSHAKE_IN",
+    "MIN_STREAMED_PACKETS",
     "MIN_STREAMED_PACKET_BYTES",
     "SSE_INFLATION",
     "STREAMED_PACKET_BYTES",

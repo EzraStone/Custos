@@ -120,3 +120,22 @@ def test_a_packet_too_small_to_be_an_sse_frame_is_not_one():
     and 40 bytes of IP and TCP — so 30 bytes a packet is not a token arriving
     one at a time."""
     assert not responses_streamed(2_000 * 30, 2_000, egress_packets=0)
+
+
+def test_too_few_packets_to_average_over_is_not_a_verdict():
+    """Six packets carrying 2,400 bytes average 480 each, which is under the
+    threshold and would read as streamed — recording a conversation that
+    carried 2,350 bytes of payload as 56.
+
+    A 42x error from a sample that cannot support the question. The floor is
+    not a statistical bound; it is the point below which a streamed response
+    is too short for the distinction to change anything."""
+    assert not responses_streamed(2_400, 6, egress_packets=2)
+    assert abs(payload_in(2_400, 6, 2, 0, streamed=False) - 2_348) < 5
+
+
+def test_the_floor_does_not_reject_a_real_stream():
+    """A stream of any length worth reading about clears it easily: one packet
+    per token, and fifty tokens is a sentence."""
+    tokens = 400
+    assert responses_streamed(tokens * 190, tokens, egress_packets=40)
