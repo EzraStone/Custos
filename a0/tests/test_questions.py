@@ -154,3 +154,24 @@ def test_the_noise_produces_no_agents_either():
     for name, verdict in scored.items():
         assert str(verdict.disposition) == "not_agent", f"{name} is {verdict.disposition}"
         assert verdict.confidence < 0.1, f"{name} scored {verdict.confidence:.3f}"
+
+
+def test_the_detector_still_asks_when_the_account_streams():
+    """The blind spot inside the mechanism that exists to cover a blind spot.
+
+    A self-hosted model gateway proxies a model API, which means it proxies
+    Server-Sent Events: its responses arrive one token at a time like the ones
+    behind it. The detector looks for a destination that receives far more than
+    it returns, and it was reading tool traffic as wire bytes — where forty-two
+    bytes of framing per token inflate the inbound side until the ratio falls
+    under the threshold.
+
+    The result is not a worse ranking. It is silence: zero questions asked, on
+    an account whose clients stream. And a report with no findings and no
+    questions is precisely the artefact a hidden gateway produces, which is the
+    thing this whole mechanism exists to prevent.
+    """
+    from custos_a0.scenarios.hard import GATEWAY
+
+    asked = {a.address for a in run(streaming=True).asked}
+    assert GATEWAY.ip in asked, sorted(asked)

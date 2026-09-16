@@ -102,7 +102,9 @@ class QuestionResult:
         return sum(1 for a in self.shown if not a.real)
 
 
-def run(spec: CorpusSpec | None = None, limit: int = 5) -> QuestionResult:
+def run(
+    spec: CorpusSpec | None = None, limit: int = 5, streaming: bool = False
+) -> QuestionResult:
     """Ask the detector about a corpus and score what it asked.
 
     Defaults to the corpus this measurement exists for: the hard workloads,
@@ -112,7 +114,7 @@ def run(spec: CorpusSpec | None = None, limit: int = 5) -> QuestionResult:
     if spec is None:
         spec = CorpusSpec(hard=True, noise=True)
 
-    batch = build_batch(corpus_mod.build(spec))
+    batch = build_batch(corpus_mod.build(spec), streaming=streaming)
     inp = to_scan_input(batch)
     # With whatever the pipeline already resolved. An interface VPC endpoint
     # AWS named is not a question any more, and a metric that still counted it

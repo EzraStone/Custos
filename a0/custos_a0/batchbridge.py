@@ -32,12 +32,13 @@ def build_batch(
     have_alb_logs: bool = True,
     with_attribution: bool = True,
     region: str = "us-east-1",
+    streaming: bool = False,
 ) -> Batch:
     """Produce a batch in exactly the shape the collector ships."""
     c = corpus if corpus is not None else corpus_mod.build()
     capture = aggregate(
         c, AggregationConfig(interval=timedelta(seconds=interval_seconds),
-                             have_alb_logs=have_alb_logs)
+                             have_alb_logs=have_alb_logs, streaming=streaming)
     )
 
     flows = [
