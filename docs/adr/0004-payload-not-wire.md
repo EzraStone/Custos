@@ -101,7 +101,8 @@ Spend figures fall for every existing customer, by roughly the protocol
 overhead on their traffic. The figures were too high before; the reports say
 which reading produced them.
 
-A workload running both regimes is read as neither. `kb-assistant` embeds a
-query whole and streams the answer, and a flow log cannot separate two
-conversations with the same peer below the level of a principal. Stated limit,
-held by a test that fails if that workload leaves the corpus.
+The regime is decided per destination address. It was per principal for one
+commit, with a workload running both regimes written down as a limit of the
+data — which it was not. The two halves go to different endpoints and a flow
+log is keyed on the 5-tuple, so the peer address is the finest grain available
+and it is finer than the principal.

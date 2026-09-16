@@ -599,12 +599,22 @@ cause: eleven workloads do not justify a threshold however wide the gap looks.
 about customers, not protocols, so the corpus is built both ways and neither is
 asserted.
 
-And a workload running both regimes at once is read as neither. `kb-assistant`
-embeds a query whole and streams the answer: one principal, two conversations
-with the same peer, and a flow log cannot separate them below the level of a
-principal. It gets one answer for both halves and it is wrong for one of them.
-The invariance test excludes it by that property rather than by name, and fails
-if it ever leaves the corpus.
+**And the limit that was not one.** This finding first recorded that a workload
+running both regimes is read as neither: `kb-assistant` embeds a query whole
+and streams the answer, and the decision was being made per principal, so it
+got one answer for both halves.
+
+They are not the same conversation. The embedding goes to one endpoint and the
+completion to another, a flow log is keyed on the 5-tuple, and the peer address
+is the finest grain the data supports — finer than the principal. Deciding
+there costs nothing and removes the limit: `kb-assistant` reads Bedrock whole
+at 1,739 bytes per data packet and Anthropic streamed at 241, and the
+conversion measurement is one row per conversation with nothing excluded from
+its range.
+
+Worth recording that the limit was stated confidently and was wrong. "A flow
+log cannot separate two conversations with the same peer" is true and was not
+the situation.
 
 ---
 

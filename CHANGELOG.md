@@ -42,6 +42,19 @@ Spend figures fall for every existing customer by roughly the protocol overhead
 on their traffic. They were too high before, and every report says which
 reading produced them.
 
+### The regime is a property of a conversation, not of a workload
+
+Whether responses stream was decided per principal, and a workload that embeds
+a query at one endpoint and generates from another has one of each. Summed
+together they read as neither, which was written down as a limit of flow logs.
+
+It is not one. Those are two conversations with two different peers, a flow log
+is keyed on the 5-tuple, and the peer address is the finest grain the data
+supports. Deciding there costs nothing: the assistant that used to fit neither
+constant now reads Bedrock whole at 1,739 bytes per data packet and Anthropic
+streamed at 241, and `make conversion` reports one row per conversation —
+twenty-four of them, 4.12 to 4.29 payload bytes per token, nothing excluded.
+
 ### Four bytes a token was right all along, on the right input
 
 The per-regime constant, the framing haircut and the streaming discriminator

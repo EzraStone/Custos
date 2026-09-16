@@ -210,11 +210,13 @@ payload when the telemetry is built now, and the classifier reads the same
 numbers whether or not an account streams. Finding 12 and
 `docs/adr/0004-payload-not-wire.md`.
 
+The regime is decided per destination address, which is the grain a flow log
+is keyed at. A workload that embeds a query at one endpoint and generates from
+another has one conversation of each kind and both are read correctly.
+
 What is unmeasured is how much real agent traffic streams — a question about
 customers rather than protocols, so the corpus is built both ways and neither
-is asserted. And a workload running both at once is read as neither: one
-principal embedding a query whole and streaming the answer is two
-conversations with the same peer, which a flow log cannot separate.
+is asserted.
 
 **The conversion was right and its input was wrong.** *(The entry above is what
 this turned into.)* The dollar figure that gets a report forwarded to somebody with a budget comes
