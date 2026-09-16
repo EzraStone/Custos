@@ -27,9 +27,7 @@ T0 = datetime(2026, 8, 18, 12, 0, tzinfo=UTC)
 FEATURES = Features(
     have_inbound_logs=True, model_windows=10, total_model_egress=10**6,
     total_model_ingress=10**5, egress_ratio=10.0, inbound_coupling=0.0,
-    egress_per_inbound_request=0.0, tool_interleave=1.0, distinct_tool_addresses=2,
-    mcp_windows=3, median_episode_windows=5.0, p90_episode_windows=9.0,
-    ratio_growth=1.4, offhours_egress_fraction=0.2, episodes=4,
+    tool_interleave=1.0, distinct_tool_addresses=2, mcp_windows=3,
 )
 
 

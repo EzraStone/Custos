@@ -20,10 +20,8 @@ from custos.classify.features import Features
 BASE = Features(
     have_inbound_logs=True, model_windows=100,
     total_model_egress=1_000_000, total_model_ingress=1_000_000,
-    egress_ratio=1.0, inbound_coupling=1.0, egress_per_inbound_request=1000.0,
+    egress_ratio=1.0, inbound_coupling=1.0,
     tool_interleave=0.0, distinct_tool_addresses=0, mcp_windows=0,
-    median_episode_windows=2.0, p90_episode_windows=3.0, ratio_growth=1.0,
-    offhours_egress_fraction=0.0, episodes=10,
 )
 
 
