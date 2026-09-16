@@ -33,11 +33,25 @@ class Disposition(StrEnum):
 
 
 AGENT_THRESHOLD = 0.80
+"""Above this a workload is reported as an agent.
+
+Measured against the A0 corpus: every agent scores at or above 0.96 and the
+highest negative sits at 0.48. The threshold is in that gap and there is a lot
+of it — `a0/tests/test_g0.py` holds these figures against the corpus so the
+sentence cannot go stale the way its predecessor did."""
+
 REVIEW_THRESHOLD = 0.40
-"""Measured against the A0 corpus: every agent scores above 0.95 and every
-clear negative below 0.31, with the two deliberately ambiguous workloads
-landing at 0.52 and 0.69. The thresholds sit in the empty space between those
-groups rather than at round numbers chosen in advance."""
+"""Above this a workload is offered to a human rather than dismissed.
+
+This one is not in empty space and saying so is the point. The nearest
+workload sits 0.010 away — a CI pipeline making bursts of model calls, which
+is genuinely undecidable and would be undecidable a hundredth either side.
+
+It was 0.030 before `offhours_activity` was removed, which is not empty space
+either. The sweep prints the clearance (`make experiment`, "review gap") so
+the number is visible rather than implied by a comment, and nothing moves the
+threshold to improve it: placing a threshold to put a particular workload on a
+particular side is fitting to eleven workloads."""
 
 
 @dataclass(slots=True)

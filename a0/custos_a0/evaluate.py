@@ -192,6 +192,31 @@ class Result:
         )
 
     @property
+    def review_clearance(self) -> float:
+        """How far the nearest workload sits from the review threshold.
+
+        The third number, and it exists for the same reason the second one
+        does: the ones above it can improve while this gets worse.
+
+        `AGENT_THRESHOLD` decides whether a workload is reported. This one
+        decides whether a human is asked to look at it, and a workload sitting
+        a hundredth away from it flips between "worth a glance" and "nothing to
+        see" on a slightly different capture.
+
+        Printed rather than gated, deliberately. It is 0.010 today and a bar
+        above that would fail the gate on a corpus whose verdicts are all
+        correct — which would be a bar asserting something this corpus cannot
+        support. The comment on the thresholds says they sit in measured empty
+        space; this is the number that says how empty, and it has never been
+        very.
+        """
+        from custos.classify import REVIEW_THRESHOLD
+
+        if not self.rows:
+            return 0.0
+        return min(abs(r.verdict.confidence - REVIEW_THRESHOLD) for r in self.rows)
+
+    @property
     def agent_headroom(self) -> float:
         """Lowest agent confidence minus the threshold it has to clear.
 

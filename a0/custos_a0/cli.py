@@ -27,14 +27,14 @@ from .wire import AggregationConfig, aggregate
 def _sweep_table(results: list[Result]) -> str:
     header = (
         f"{'configuration':<42}{'recall':>8}{'precision':>11}"
-        f"{'margin':>9}{'headroom':>10}{'records':>10}"
+        f"{'margin':>9}{'headroom':>10}{'review gap':>12}{'records':>10}"
     )
     lines = [header, "-" * len(header)]
     for r in results:
         lines.append(
             f"{r.scenario.name:<42}{r.recall:>8.2f}{r.precision:>11.2f}"
             f"{r.separation_margin:>+9.3f}{r.agent_headroom:>+10.3f}"
-            f"{r.flow_records:>10,}"
+            f"{r.review_clearance:>12.3f}{r.flow_records:>10,}"
         )
     return "\n".join(lines)
 

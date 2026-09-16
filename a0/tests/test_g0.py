@@ -6,6 +6,7 @@ the finding and needs to be noticed rather than absorbed.
 """
 
 import pytest
+from custos.classify import AGENT_THRESHOLD
 
 from custos_a0.evaluate import MIN_MARGIN, SCENARIOS, decide, run, run_all
 from custos_a0.trace import Label
@@ -162,3 +163,72 @@ def test_streaming_moves_nothing(results):
     assert abs(stream.separation_margin - plain.separation_margin) < 0.02
     assert abs(stream.agent_headroom - plain.agent_headroom) < 0.02
     assert stream.recall == 1.0 and stream.precision == 1.0
+
+
+def test_the_review_threshold_clearance_is_recorded_not_asserted(results):
+    """The third number, pinned where it is so a change to it is deliberate.
+
+    It is 0.010 on every supported configuration: one workload sits a
+    hundredth from the line at which a human is asked to look. That is not
+    good, and the honest treatment is to print it rather than to move the
+    threshold until it looks better — moving a threshold to put a workload
+    where you would like it is fitting to the corpus, and the workload in
+    question is genuinely undecidable either side of it.
+
+    Bounded above as well as below. A clearance that grew would mean the
+    negatives had moved away from the band, which is worth noticing for the
+    same reason a margin that grew is.
+    """
+    supported = [r for r in results if r.scenario.have_alb_logs]
+    for r in supported:
+        assert 0.005 < r.review_clearance < 0.05, (
+            r.scenario.name, r.review_clearance
+        )
+
+
+def test_the_threshold_comments_match_the_corpus(results):
+    """Two places that have to agree: the figures written beside the thresholds
+    and what the corpus actually produces.
+
+    The predecessor of this comment said "every agent above 0.95, every clear
+    negative below 0.31, the two ambiguous workloads at 0.52 and 0.69". Three
+    of those four numbers were stale and nothing noticed, because a comment is
+    not checked by anything.
+    """
+    import re
+
+    from custos.classify import engine
+
+    primary = next(
+        r for r in results if r.scenario.have_alb_logs and r.scenario.interval_seconds == 60
+    )
+    agents = [row.verdict.confidence for row in primary.agents]
+    negatives = [row.verdict.confidence for row in primary.negatives]
+
+    doc = _doc(engine, "AGENT_THRESHOLD")
+    claimed_floor = float(re.search(r"at or above ([0-9]+\.[0-9]+)", doc).group(1))
+    claimed_ceiling = float(re.search(r"highest negative sits at ([0-9]+\.[0-9]+)", doc).group(1))
+
+    assert min(agents) >= claimed_floor, (min(agents), claimed_floor)
+    assert abs(max(negatives) - claimed_ceiling) < 0.01, (max(negatives), claimed_ceiling)
+    assert claimed_ceiling < AGENT_THRESHOLD < claimed_floor
+
+
+def _doc(module, name: str) -> str:
+    """The docstring attached to a module-level constant.
+
+    Constants do not carry `__doc__`, so it has to be read out of the source.
+    """
+    import ast
+    import inspect
+
+    tree = ast.parse(inspect.getsource(module))
+    found = False
+    for node in tree.body:
+        if found and isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
+            return node.value.value
+        found = (
+            isinstance(node, ast.Assign)
+            and any(getattr(t, "id", None) == name for t in node.targets)
+        )
+    raise AssertionError(f"{name} has no docstring")
