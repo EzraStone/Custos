@@ -52,6 +52,7 @@ custos diff                 →  what changed since last week
 | Classifier invariant to streaming | Works. The ratio reads the same whether or not an account's clients stream |
 | Which signal carries the result | Measured. `make ablation`, per corpus and per outcome, including the review queue |
 | Whether a signal has a test at all | Measured. `make mutate` removes each one and counts what goes red; zero fails |
+| Signals measured but not shipped | Measured. `make candidates`, held to the entry that describes them by a test |
 
 ## The one number that matters
 

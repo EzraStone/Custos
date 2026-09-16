@@ -4,6 +4,28 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### The candidate signal's numbers were prose, and one was wrong
+
+`CANDIDATES` was added so a measured-and-promising signal is not lost between
+"shipped" and "rejected". Its entry quoted six figures that nothing in the
+repository produced — measured once by hand, typed into a docstring,
+unfalsifiable from then on. A rejected signal's reasons can be prose; nobody
+acts on them. A candidate's cannot, because the category exists so somebody
+picks it up later and decides against those numbers.
+
+`make candidates` computes them, and eleven tests hold the entry to them. Five
+of the six were right. The IDE assistant reads 0.310, not the 0.30 quoted, and
+it is outside the scope the entry implied at all: the predicate excludes
+anything reaching an MCP server, so the "four coupled tool-calling workloads"
+are three.
+
+Better stated as a result, too. Scoped, the signal separates the workloads the
+classifier cannot resolve by +0.154. Unscoped it separates by -0.840, because
+an embedding service varies more than every agent in the corpus. Both belong in
+the entry: one says the idea works, the other says what fencing it off costs —
+and the +0.154 rests on a single positive, which is asserted rather than left
+for the next reader to notice.
+
 ### `make mutate` — whether a signal has a test at all
 
 The ablation says what a signal is worth on the corpus. It says nothing about

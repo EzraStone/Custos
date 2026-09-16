@@ -97,6 +97,7 @@ make questions   # score the gateway detector against the noise corpus
 make conversion  # measure payload bytes per token, responses whole and streamed
 make gates       # every measured number this rests on, in one run
 make mutate      # remove each classifier signal, see what goes red
+make candidates  # the numbers behind the signals that have no weight yet
 ```
 
 ## The loop, end to end
