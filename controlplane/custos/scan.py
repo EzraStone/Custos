@@ -134,24 +134,18 @@ def _model_use(t: PrincipalTelemetry, inp: ScanInput) -> ModelUse:
         spend.provider_for(a, annotated.get(a, ""), inp.destination_services.get(a, ""))
         for a in endpoints
     }
+    # Payload, not wire. The protocol was taken out when the telemetry was
+    # built, so this is the conversation rather than the framing that carried
+    # it — and the token conversion is one constant again as a result.
     egress = sum(w.model_egress for w in t.windows)
     ingress = sum(w.model_ingress for w in t.windows)
     provider = next(iter(providers - {"unknown"}), "unknown")
-    # Decided per principal rather than per account. An account whose agents
-    # stream and whose chatbot backends do not is two regimes in one number,
-    # and a principal is the finest grain a flow log supports.
-    streamed = spend.responses_streamed(
-        ingress,
-        sum(w.model_ingress_packets for w in t.windows),
-        sum(w.model_egress_packets for w in t.windows),
-    )
     return ModelUse(
         providers=providers,
         endpoints=endpoints,
-        streamed=streamed,
+        streamed=t.responses_streamed,
         est_monthly_spend_usd=spend.estimate_monthly_usd(
             egress, ingress, inp.observed_days, provider, inp.rates,
-            streamed=streamed,
         ),
     )
 

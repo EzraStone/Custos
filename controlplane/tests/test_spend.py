@@ -141,86 +141,39 @@ def test_a_customers_bedrock_rate_reaches_a_bedrock_agent():
     assert cheap < fallback / 5
 
 
-# --- whether the response streamed -----------------------------------------
+# --- the conversion, now that it takes payload -------------------------------
 #
-# Forty-four times separates the two answers, and a flow record does not say
-# which. These pin the discriminator that decides it, including the cases
-# where it must decline to.
+# The discriminator and the decomposition moved to test_framing.py, where the
+# arithmetic they belong to lives. What is left here is what spend is now
+# responsible for: one constant, applied to a number that has already had the
+# protocol taken out of it.
 
 
-def test_a_whole_response_is_not_read_as_streamed():
-    from custos.spend import responses_streamed
-
-    # 2,000 inbound packets near the MSS, and a request small enough that its
-    # acknowledgements are a rounding error.
-    assert not responses_streamed(
-        ingress_bytes=2_000 * 1_400, ingress_packets=2_000, egress_packets=100
-    )
-
-
-def test_a_streamed_response_is():
-    from custos.spend import responses_streamed
-
-    # Every token its own frame: 2,000 packets of about 190 bytes.
-    assert responses_streamed(
-        ingress_bytes=2_000 * 190, ingress_packets=2_000, egress_packets=100
-    )
-
-
-def test_an_agents_own_acknowledgements_do_not_make_it_look_streamed():
-    """The case the ACK subtraction exists for, and the one that would have
-    been wrong silently.
-
-    An agent resends its accumulated transcript, so it sends far more segments
-    than it receives responses. One ACK per two outbound segments travels
-    inbound, and those ACKs are 52 bytes: enough of them drag the inbound mean
-    below the threshold on their own, and the principal reads as streaming
-    whatever its responses actually did.
-    """
-    from custos.spend import responses_streamed
-
-    data_packets, data_bytes = 400, 400 * 1_400
-    ack_packets = 20_000
-
-    assert not responses_streamed(
-        ingress_bytes=data_bytes + ack_packets * 52,
-        ingress_packets=data_packets + ack_packets,
-        egress_packets=ack_packets * 2,
-    )
-    # Without the correction the same numbers say the opposite, which is the
-    # whole point of asserting it here.
-    naive = (data_bytes + ack_packets * 52) / (data_packets + ack_packets)
-    assert naive < 600
-
-
-def test_a_record_with_no_packet_counts_is_not_read_as_streamed():
-    """An older collector, or a flow log format without the field. The answer
-    that overstates a cost is the safe one: it is what this product has always
-    said, and a figure that is too high gets questioned while one that is too
-    low gets believed."""
-    from custos.spend import responses_streamed
-
-    assert not responses_streamed(ingress_bytes=5_000_000, ingress_packets=0,
-                                  egress_packets=0)
-
-
-def test_the_streamed_estimate_is_far_smaller_and_the_input_side_is_untouched():
+def test_both_directions_divide_by_the_same_constant():
+    """They did not for one arc, and the compensation was in the wrong place.
+    A streamed response costs forty-two times its own payload on the wire, and
+    the fix for that belongs where the wire is decoded rather than where the
+    bill is computed."""
     from custos.spend import estimate_tokens
 
-    whole_in, whole_out = estimate_tokens(1_000_000, 1_000_000, streamed=False)
-    stream_in, stream_out = estimate_tokens(1_000_000, 1_000_000, streamed=True)
-
-    assert whole_in == stream_in, "a request is one body either way"
-    assert whole_out / stream_out > 40
+    tokens_in, tokens_out = estimate_tokens(1_000_000, 1_000_000)
+    assert tokens_in == tokens_out
 
 
-def test_the_cheaper_reading_is_the_streamed_one():
-    """Stated as money rather than tokens, because that is the number a budget
-    owner acts on and the direction of the error matters more than its size."""
+def test_a_conversation_is_priced_from_its_payload():
+    """4.15 bytes a token, measured on the corpus with the protocol removed.
+    A megabyte each way at Anthropic's placeholder rates."""
     from custos.spend import estimate_monthly_usd
 
-    whole = estimate_monthly_usd(10_000_000, 10_000_000, 3.0, "anthropic")
-    streamed = estimate_monthly_usd(10_000_000, 10_000_000, 3.0, "anthropic",
-                                    streamed=True)
-    assert streamed < whole
-    assert whole - streamed > 100
+    monthly = estimate_monthly_usd(1_000_000, 1_000_000, observed_days=30.0,
+                                   provider="anthropic")
+    tokens = 1_000_000 / 4.15 / 1_000_000
+    assert abs(monthly - (tokens * 3.00 + tokens * 15.00)) < 0.01
+
+
+def test_negative_payload_cannot_reach_the_arithmetic():
+    """`framing` clamps at zero, but it is not the only caller and a negative
+    byte count priced per million tokens is a credit on somebody's report."""
+    from custos.spend import estimate_tokens
+
+    assert estimate_tokens(-500, -500) == (0.0, 0.0)

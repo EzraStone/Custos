@@ -46,95 +46,39 @@ PRICES: dict[str, Price] = {
     "unknown": Price(input_per_mtok=3.00, output_per_mtok=15.00),
 }
 
-BYTES_PER_TOKEN = 4.0
-"""Rough for English JSON payloads. Wrong for code, wrong for other languages,
-and right enough for ranking."""
+BYTES_PER_TOKEN = 4.15
+"""Payload bytes per token, measured.
 
-FRAMING_OVERHEAD = 0.06
-"""TLS records, TCP/IP headers, and handshakes inflate wire bytes above payload
-bytes. Subtracted before converting to tokens so the estimate does not drift
-upward with connection churn."""
+Four was the rule of thumb for English serialised into a messages array, and
+this is the same number measured: with the acknowledgements, the certificate
+chains and the streaming framing removed, every workload in the A0 corpus lands
+between 4.1 and 4.2 bytes per token at both ends of the conversation.
 
-STREAMED_BYTES_PER_TOKEN = 175.0
-"""Wire bytes per output token when the response is streamed.
+It applies to payload and to nothing else. Applied to wire bytes it was wrong
+by between 10% and forty-four times depending on how the customer's client was
+configured, which is the arc recorded in Findings 11 and 12 — and the
+resolution was not a better constant but a better input.
 
-Not a fitted number. A streaming model API flushes after every token — that is
-the whole reason to stream — so each token becomes its own Server-Sent Events
-frame, its own TLS record and its own TCP segment. Four bytes of text, 114 of
-SSE envelope, 29 of record header, 40 of packet headers, less what the
-constant-rate ACK accounting on the same records already covers.
-
-The size of the error it fixes is the reason it exists. Dividing a streamed
-response by four overstates output tokens by around forty-four times on the A0
-corpus, and output tokens are priced at five times input — so a report could
-be telling a budget owner that an agent costs ten thousand dollars a month
-when it costs a few hundred, with nothing anywhere saying which.
-
-`a0/tests/test_conversion.py` measures it and `test_limits_agree.py` holds this
-constant against the corpus's own arithmetic."""
-
-ACK_BYTES = 52.0
-"""A pure acknowledgement: IP and TCP headers plus timestamps."""
-
-STREAMED_PACKET_BYTES = 600.0
-"""Mean size of an inbound data packet above which responses were not streamed.
-
-The discriminator, and the reason the conversion above can be applied at all —
-a flow record does not say whether a response streamed, and every other part of
-this module would otherwise be guessing which of two answers forty-four times
-apart to give.
-
-It sits in measured empty space. On the A0 corpus the mean inbound data packet
-is 1,444 to 2,740 bytes when responses arrive whole and 232 to 288 when they
-are streamed, with nothing between. That gap is a consequence of the protocol
-rather than of the corpus: a sender filling segments produces packets near the
-MSS, and a sender flushing per token produces packets the size of one SSE
-frame.
-
-What the corpus cannot establish is the mixture. An account whose agents
-stream and whose chatbots do not is two regimes in one number, and this
-decides per principal, which is the finest grain a flow log supports."""
-
-
-def responses_streamed(
-    ingress_bytes: int, ingress_packets: int, egress_packets: int
-) -> bool:
-    """Whether this principal's model responses arrived streamed.
-
-    Inbound packets are not all response data: roughly one in two outbound
-    segments is answered by a pure ACK travelling inbound, and for an agent
-    sending an accumulating transcript those dominate. Subtracting them is what
-    makes the mean packet size mean anything — without it an agent's inbound
-    average is dragged to 84 bytes by its own acknowledgements and reads as
-    streaming whether it is or not.
-
-    Conservative when it cannot tell. No packet counts, or nothing left after
-    the ACKs, returns False — the assumption that produces the larger figure,
-    which is the one this product has always given and the one that overstates
-    rather than hides a cost.
-    """
-    if ingress_packets <= 0 or ingress_bytes <= 0:
-        return False
-    acks = max(0, egress_packets // 2)
-    data_packets = ingress_packets - acks
-    if data_packets <= 0:
-        return False
-    data_bytes = max(0.0, ingress_bytes - acks * ACK_BYTES)
-    return data_bytes / data_packets < STREAMED_PACKET_BYTES
+What is still a guess is the tokenisation. 4.15 is right for English JSON and
+wrong for code, and that part needs a tokeniser and a corpus of real prompts
+rather than arithmetic."""
 
 
 def estimate_tokens(
-    egress_bytes: int, ingress_bytes: int, streamed: bool = False
+    payload_egress: int, payload_ingress: int
 ) -> tuple[float, float]:
-    """Return (input_tokens, output_tokens) implied by observed wire bytes.
+    """Return (input_tokens, output_tokens) implied by observed payload bytes.
 
-    The request is one body whichever way the reply comes back, so only the
-    output side depends on `streamed`.
+    Both directions divide by the same constant, which they did not for one
+    arc. `framing.py` takes the protocol out before this sees the numbers, so
+    the thing that made the two directions differ — a streamed response costing
+    forty-two times its own payload on the wire — is gone by the time it gets
+    here rather than being compensated for afterwards.
     """
-    payload_out = max(0.0, egress_bytes * (1 - FRAMING_OVERHEAD))
-    payload_in = max(0.0, ingress_bytes * (1 - FRAMING_OVERHEAD))
-    per_output = STREAMED_BYTES_PER_TOKEN if streamed else BYTES_PER_TOKEN
-    return payload_out / BYTES_PER_TOKEN, payload_in / per_output
+    return (
+        max(0.0, payload_egress) / BYTES_PER_TOKEN,
+        max(0.0, payload_ingress) / BYTES_PER_TOKEN,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,12 +109,11 @@ DEFAULT_RATES = Rates()
 
 
 def estimate_monthly_usd(
-    egress_bytes: int,
-    ingress_bytes: int,
+    payload_egress: int,
+    payload_ingress: int,
     observed_days: float,
     provider: str = "unknown",
     rates: Rates | None = None,
-    streamed: bool = False,
 ) -> float:
     """Extrapolate a monthly figure from an observation window.
 
@@ -181,7 +124,7 @@ def estimate_monthly_usd(
     if observed_days <= 0:
         return 0.0
     price = (rates or DEFAULT_RATES).for_provider(provider)
-    tokens_in, tokens_out = estimate_tokens(egress_bytes, ingress_bytes, streamed)
+    tokens_in, tokens_out = estimate_tokens(payload_egress, payload_ingress)
     window_cost = (
         tokens_in / 1_000_000 * price.input_per_mtok
         + tokens_out / 1_000_000 * price.output_per_mtok
