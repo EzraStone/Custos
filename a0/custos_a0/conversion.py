@@ -111,7 +111,9 @@ class Measured:
         return self.connections * HANDSHAKE_IN
 
 
-def measure(corpus: Corpus, streaming: bool) -> list[Measured]:
+def measure(
+    corpus: Corpus, streaming: bool, config: AggregationConfig | None = None
+) -> list[Measured]:
     """One capture, read the way the control plane reads it.
 
     One row per conversation — per (workload, model endpoint) — rather than per
@@ -135,7 +137,7 @@ def measure(corpus: Corpus, streaming: bool) -> list[Measured]:
             )
 
     totals: dict[tuple[str, str], list[int]] = {}
-    for r in aggregate(corpus, AggregationConfig(streaming=streaming)).records:
+    for r in aggregate(corpus, config or AggregationConfig(streaming=streaming)).records:
         if r.direction is Direction.INGRESS and r.srcaddr in MODEL_ADDRESSES:
             row = totals.setdefault((r.dstaddr, r.srcaddr), [0, 0, 0, 0])
             row[0] += r.bytes

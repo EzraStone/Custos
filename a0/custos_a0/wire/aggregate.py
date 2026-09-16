@@ -44,6 +44,17 @@ class AggregationConfig:
     """Whether the customer gave us load balancer access logs. A0 measures how
     much the classifier loses without them, because some customers will not."""
 
+    tokens_per_frame: int = 1
+    """How many output tokens ride in one Server-Sent Events frame.
+
+    One is what Anthropic and OpenAI do and what the control plane's correction
+    is calibrated against. Some providers batch, and a provider that puts five
+    tokens in a frame pays the 114-byte envelope once for all five — so its
+    stream is a quarter of the size and a correction assuming one token a frame
+    removes four times too much.
+
+    Here so the error can be a number. Ignored unless `streaming` is set."""
+
     streaming: bool = False
     """Whether model responses arrive streamed.
 
@@ -148,6 +159,9 @@ def aggregate(corpus: Corpus, config: AggregationConfig | None = None) -> Captur
             # The response side is where streaming lives. A request is one
             # body whichever way the reply comes back.
             events = call.resp_events if cfg.streaming else 0
+            if events and cfg.tokens_per_frame > 1:
+                # Same tokens, fewer frames: the envelope is paid per frame.
+                events = max(1, events // cfg.tokens_per_frame)
             in_bytes, in_pkts = (
                 streamed(in_payload, events) if events else framed(in_payload)
             )

@@ -94,3 +94,61 @@ def test_a_workload_running_both_regimes_is_measured_as_both(both):
     for m in streamed:
         if m.workload in mixed:
             assert 3.9 < m.payload_per_token < 4.4, (m.workload, m.endpoint)
+
+
+# --- what the correction assumes about the provider -------------------------
+
+
+@pytest.mark.parametrize("per_frame,floor", [(1, 4.10), (2, 2.10), (5, 0.85), (10, 0.45)])
+def test_a_provider_that_batches_tokens_is_over_corrected(per_frame, floor):
+    """The calibration's own assumption, measured rather than asserted away.
+
+    The inflation constant is 41.9 because one token rides in one Server-Sent
+    Events frame, pays one 114-byte envelope, one TLS record header and one
+    packet header. Anthropic and OpenAI do that. A provider batching five
+    tokens into a frame pays the envelope once for all five, so its stream is
+    roughly a quarter of the size — and a correction assuming one token a frame
+    removes about four times too much.
+
+    The direction is the part that matters. Over-correcting the inbound side
+    makes the payload look smaller, which makes the egress-to-ingress ratio
+    look *larger*, which makes a workload look more like an agent. The error
+    points at false positives, and a false positive is the failure this product
+    can least afford.
+
+    Nothing corrects for it. The mean packet size does move with batching — 232
+    bytes at one token a frame, 341 at twenty — but not in a way that recovers
+    the factor: the implied inflation reads 4.7 where the truth is 41.9,
+    because TCP coalescing means packets are not frames. Deriving a correction
+    from that would be inventing a number, so this measures the error instead.
+    """
+    from custos_a0.wire import AggregationConfig
+
+    corpus = corpus_mod.build()
+    rows = measure(
+        corpus, streaming=True,
+        config=AggregationConfig(streaming=True, tokens_per_frame=per_frame),
+    )
+    streamed = [m.payload_per_token for m in rows if m.streams]
+    assert streamed, per_frame
+    assert abs(min(streamed) - floor) < 0.15, (per_frame, min(streamed))
+
+
+def test_batching_never_changes_which_regime_a_conversation_reads_as():
+    """The discriminator survives what the constant does not.
+
+    A batched stream is still a stream — packets the size of a frame rather
+    than of a segment — so it is still read as streamed and still corrected,
+    just by the wrong factor. That is the better failure of the two: being
+    read as whole would leave the framing in entirely.
+    """
+    from custos_a0.wire import AggregationConfig
+
+    corpus = corpus_mod.build()
+    for per_frame in (1, 2, 5, 10, 20):
+        rows = measure(
+            corpus, streaming=True,
+            config=AggregationConfig(streaming=True, tokens_per_frame=per_frame),
+        )
+        streamed = sum(1 for m in rows if m.streams)
+        assert streamed == 10, (per_frame, streamed)

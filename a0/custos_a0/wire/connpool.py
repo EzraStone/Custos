@@ -84,6 +84,12 @@ the one that understates it.
 
 What it is not is an assumption. Every model provider's streaming API is SSE
 over HTTP, the envelope is documented, and this is arithmetic on it.
+
+What *is* an assumption is how many tokens ride in one frame. One is the
+common case and the one the correction is calibrated for. A provider batching
+several tokens per frame pays this envelope once for all of them, which makes
+its stream cheaper on the wire and makes the correction too large — see
+`tokens_per_frame` on the capture config.
 """
 
 
