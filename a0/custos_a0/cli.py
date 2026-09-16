@@ -145,7 +145,7 @@ def cmd_stress(args: argparse.Namespace) -> int:
 
     print()
     print(
-        "The base corpus separates by 0.415. Quote this number instead wherever "
+        "The base corpus separates by 0.485. Quote this number instead wherever "
         "that one would be doing work."
     )
     return 0

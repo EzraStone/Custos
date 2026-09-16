@@ -57,9 +57,13 @@ def test_attribution_resolves_through_multiple_methods(result):
     assert {"support-platform", "developer-experience", "finance", "platform"} <= teams
 
 
-def test_review_band_holds_the_ambiguous_workloads_and_nothing_else(result):
+def test_review_band_holds_the_ambiguous_workload_and_nothing_else(result):
+    """One workload, not two, since `offhours_activity` was removed: the CI
+    runner moved from 0.430 to 0.390 and crossed the review threshold. That is
+    the cost of the removal rather than a better verdict — the workload is no
+    more decidable than it was."""
     reviewed = {v.principal.rsplit("/", 1)[-1] for v in result.review_candidates}
-    assert reviewed == {"doc-batch", "ci-runner"}
+    assert reviewed == {"doc-batch"}
 
 
 def test_unsanctioned_set_is_ordered_by_blast_radius_first(result):

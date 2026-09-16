@@ -103,8 +103,8 @@ def test_no_false_positives_on_the_stress_corpus(built_in, extended):
 def test_the_stress_margin_is_recorded_and_narrower(extended):
     """The honest number.
 
-    The base corpus separates by 0.42. This corpus separates by roughly two
-    thirds of that. Accuracy holds and every verdict is correct, but the
+    The base corpus separates by 0.49. This corpus separates by roughly three
+    quarters of that. Accuracy holds and every verdict is correct, but the
     headroom is materially smaller — which is what the first real capture will
     eat into.
 
@@ -112,7 +112,7 @@ def test_the_stress_margin_is_recorded_and_narrower(extended):
     """
     margin = extended.separation_margin
     assert margin > 0, "the classes must still separate"
-    assert 0.25 < margin < 0.35, f"stress margin moved to {margin:.3f}"
+    assert 0.32 < margin < 0.40, f"stress margin moved to {margin:.3f}"
 
 
 # --- the CLI ------------------------------------------------------------------
@@ -125,7 +125,7 @@ def test_stress_command_prints_both_margins(capsys):
     assert main(["stress"]) == 0
     out = capsys.readouterr().out
     assert "separation margin" in out
-    assert "0.415" in out, "the base corpus number must appear for comparison"
+    assert "0.485" in out, "the base corpus number must appear for comparison"
     assert "Quote this number instead" in out
 
 

@@ -147,16 +147,6 @@ SIGNALS: tuple[Signal, ...] = (
             else "No MCP traffic observed."
         ),
     ),
-    Signal(
-        id="offhours_activity",
-        weight=0.3,
-        available=saw_model_traffic,
-        activate=lambda f: f.offhours_egress_fraction,
-        describe=lambda f: (
-            f"{f.offhours_egress_fraction * 100:.0f}% of model traffic fell outside "
-            "working hours."
-        ),
-    ),
 )
 
 BIAS = -3.2
@@ -183,6 +173,25 @@ REJECTED: dict[str, str] = {
         "explicitly not evidence. Dropped rather than weighted low, because a signal "
         "that inverts under a configuration the customer chooses is worse than no "
         "signal."
+    ),
+    "offhours_activity": (
+        "The fraction of model traffic outside working hours. Carried at weight 0.3 "
+        "until an ablation measured it, and it was not merely inert: removing it "
+        "widens the separation margin from 0.415 to 0.485 on the base corpus and "
+        "from 0.291 to 0.356 on the stress corpus, with no verdict changing on "
+        "either and recall and precision 1.00 throughout. It was making the "
+        "classifier worse on every corpus there is.\n\n"
+        "Rejected rather than reweighted because the reason is structural. A "
+        "nightly reconciliation agent runs at 3am and so does a nightly batch "
+        "summariser; running unattended is what both are for. Off-hours activity "
+        "separates scheduled work from interactive work, which is not the question "
+        "being asked — and the corpus has scheduled workloads on both sides "
+        "precisely because that distinction is not the one that matters.\n\n"
+        "It cost something to remove, and the cost is recorded rather than "
+        "absorbed: every threshold clearance narrows, and the review threshold's "
+        "drops from 0.030 to 0.010. That threshold was never in the empty space "
+        "the comment above claims — 0.030 is not empty space either — and the "
+        "sweep prints clearance now so it stops being invisible."
     ),
     "call_burst_timing": (
         "The specification's headline signal: sub-second gaps between sequential "
