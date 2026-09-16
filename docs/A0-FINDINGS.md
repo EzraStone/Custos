@@ -691,6 +691,10 @@ accumulates, driving an MCP server. With that workload present, removing
 `mcp_fingerprint` makes the classes overlap — margin **-0.199**, no threshold
 separates them at all.
 
+> This conclusion did not survive the corpus it was measured on. The numbers
+> in this finding were correct when written and are left as they were; what
+> replaced the reasoning is Finding 15.
+
 **The new workload is a miss, and it stays one.** It lands at 0.657, in the
 review band. Stress recall falls from 1.00 to 0.91 and the stress margin from
 0.356 to 0.180. Confirming an agent on that evidence would be guessing and
@@ -800,6 +804,74 @@ and the only thing that would have found them otherwise is an account.
 
 ---
 
+## Finding 15 — a measurement built to find signals that do nothing said a signal did nothing
+
+Finding 13 justified keeping `mcp_fingerprint` on one sentence: with the IDE
+assistant present, removing it makes the classes overlap, margin **-0.199**.
+That was true when it was written and is no longer available as evidence. The
+stress corpus has since gained `support-copilot-backend`, which drives the
+baseline margin to -0.202 on its own. "Removing it makes the classes overlap"
+is now true of every signal in the table, including one whose removal changes
+nothing at all.
+
+The test asserting it went with it. It checked `margin < 0` and
+`load_bearing`, and both now hold for any signal whatsoever on that corpus. It
+kept passing and stopped measuring, which is the worse of the two ways for a
+measurement to decay — a failing test gets looked at.
+
+**So what does the signal do?** The ablation table had three outcome columns —
+margin, recall, precision — and all three are measured at the register
+boundary. A signal whose only job is to hold an ambiguous workload in the
+*review queue* moves none of them.
+
+That is exactly what this one does:
+
+| signal removed | weight | margin | cost | recall | surfaced | |
+|---|---|---|---|---|---|---|
+| tool_interleave | 2.0 | -0.428 | +0.226 | 0.50 | 0.83 | drops ide-assistant-backend |
+| mcp_fingerprint | 1.6 | -0.202 | +0.000 | 0.83 | 0.83 | drops ide-assistant-backend |
+| egress_asymmetry | 2.4 | -0.121 | -0.081 | 0.50 | 0.92 | |
+| inbound_decoupling | 2.6 | -0.047 | -0.155 | 0.33 | 0.92 | |
+
+Zero separation, no recall cost, and removing it takes `ide-assistant-backend`
+from a workload an operator is asked to look at to one nobody hears about. Its
+entire measured contribution sat in a column that did not exist, in the
+measurement whose stated purpose is finding signals that are carrying nothing.
+
+On the base corpus it still reads as free, and the table still says so. That
+corpus contains no workload that needs it, and a measurement that found a
+contribution there would be measuring the measurement.
+
+**The metric underneath is worth more than the finding.** `surfaced_recall` is
+the fraction of true agents an operator is shown by either door — register or
+queue. On the base corpus it equals recall everywhere, which is why the
+distinction stayed invisible: a metric only earns its place on the corpus that
+can tell it apart from the one it refines. On the stress corpus recall is 0.83
+and surfaced recall is 0.92, and the gap is one workload.
+
+The two failures are not the same product. Recall falling while this holds is
+the classifier being unsure, and an operator with a queue to work through.
+This falling is the classifier being wrong, and an operator who hears nothing.
+
+**G0 was already resting on that distinction in prose.** The pass narrative
+said recall without load balancer logs falls to 60% "with the missed agents
+landing in the review band rather than being dropped" — true, unchecked, and
+the entire reason the gate treats that degradation as survivable. A change
+that started dismissing those agents outright would have passed the gate and
+printed the same reassuring sentence. It is a criterion now, met the moment it
+was written, and the narrative quotes the number instead of asserting the fact.
+
+**The same drift had reached the documents.** `docs/STATUS.md` said the stress
+corpus separates by 0.18 with one agent in review; it separates by -0.202 with
+two agents missed, one of them dismissed. The page written to say where the
+classifier fails was reporting that it works. The numbers were copied out of a
+terminal by hand and nothing connected them to the code, so a test recomputes
+each one now — and, in the direction that kind of test usually misses, refuses
+any decimal in the block that no measurement produces.
+
+
+---
+
 ## Why this result should be believed, and where it should not
 
 **The corpus is adversarial by construction.** Four negatives exist
@@ -821,9 +893,12 @@ and which features carry it. It does not establish that these specific weights
 generalise. The first real capture will move them, and the thresholds sit in
 measured empty space rather than at round numbers so there is room for that.
 
-**The margin is thinner than the headline suggests.** 0.26 on the base corpus,
-0.14 once workloads with partial coupling are included. Quote the second number
-in any conversation where the first would be doing work.
+**The margin is thinner than the headline suggests, and on the harder corpus
+there is no margin.** 0.485 on the base corpus; -0.202 once workloads with
+partial coupling and an agent behind a support console are included. Quote the
+second number in any conversation where the first would be doing work, and the
++0.180 beside it — that is the same corpus without the one workload causing
+the overlap, and neither figure says enough alone.
 
 **Synthetic traffic embeds assumptions.** The byte model assumes ~4 bytes per
 token, standard MTU, and typical SDK pooling. Those are defensible and they are
