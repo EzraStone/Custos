@@ -69,10 +69,9 @@ and TCP. A mean inbound data packet under 100 bytes is therefore not a token
 arriving one at a time — it is a byte count that has already had the framing
 taken out of it, or a window whose halves do not belong together.
 
-The first of those is the one that matters. `as_if_whole` deflates the bytes
-and cannot deflate the packet count, so without a floor here it would look at
-its own output and deflate it again — silently, by another factor of
-forty-two, on any pipeline that grew a second caller."""
+The first of those is the one that matters. Deflating bytes cannot deflate the
+packet count, so without a floor here a second pass over an already corrected
+figure would read it as streamed and divide by forty-two again."""
 
 
 def ack_packets(other_direction_packets: int, own_packets: int) -> int:
@@ -88,7 +87,7 @@ def ack_packets(other_direction_packets: int, own_packets: int) -> int:
 
 
 def data_bytes(
-    wire_bytes: int, own_packets: int, other_packets: int, connections: int = 0
+    wire_bytes: int, own_packets: int, other_packets: int, connections: float = 0
 ) -> float:
     """Bytes in this direction that are neither acknowledgement nor handshake.
 
@@ -98,7 +97,7 @@ def data_bytes(
     than to a negative byte count that then divides into a ratio.
     """
     acks = ack_packets(other_packets, own_packets)
-    overhead = acks * ACK_BYTES + max(0, connections) * HANDSHAKE_IN
+    overhead = acks * ACK_BYTES + max(0.0, connections) * HANDSHAKE_IN
     return max(0.0, wire_bytes - overhead)
 
 
@@ -127,24 +126,41 @@ def responses_streamed(
     return MIN_STREAMED_PACKET_BYTES <= mean < STREAMED_PACKET_BYTES
 
 
-def as_if_whole(
-    ingress_bytes: int, ingress_packets: int, egress_packets: int, connections: int = 0
-) -> int:
-    """This conversation's inbound bytes as they would read without streaming.
+def payload_in(
+    ingress_bytes: int, ingress_packets: int, egress_packets: int,
+    connections: float = 0, streamed: bool = False,
+) -> float:
+    """The inbound message payload: what the model actually said.
 
-    Deliberately not "the payload". Every threshold and weight in the
-    classifier was fitted against non-streaming wire bytes, so the useful
-    normalisation is onto that scale rather than onto the truth: it makes the
-    feature describe the conversation instead of the client's framing, and it
-    moves nothing for the accounts the numbers were fitted on.
+    Everything the protocol added is removed — acknowledgements, the
+    certificate chain, and the per-token framing when the response streamed.
+    What is left is comparable between two accounts that configured their
+    clients differently, which the wire byte count is not.
 
-    Only the SSE framing is removed. Acknowledgements and handshakes are
-    present in both regimes and stay exactly where they are.
+    The caller decides whether this conversation streamed and this function
+    does not re-ask. That is not a shortcut: applied window by window it would
+    re-decide on a handful of packets at a time and leave alone every window
+    that happened not to look streamed on its own, which under-corrected an
+    agent by a factor of three when it was first written that way.
     """
-    if not responses_streamed(ingress_bytes, ingress_packets, egress_packets):
-        return ingress_bytes
-    inflated = data_bytes(ingress_bytes, ingress_packets, egress_packets, connections)
-    return int(ingress_bytes - inflated * (1 - 1 / SSE_INFLATION))
+    data = data_bytes(ingress_bytes, ingress_packets, egress_packets, connections)
+    return data / SSE_INFLATION if streamed else data
+
+
+def payload_out(egress_bytes: int, egress_packets: int, ingress_packets: int) -> float:
+    """The outbound message payload: the transcript the workload resent.
+
+    The outbound side needs correcting too, which is easy to miss. Streaming
+    multiplies the inbound packet count by forty-two, and every two of those
+    packets are answered by an acknowledgement travelling *outbound* — so the
+    direction that is supposed to be the numerator grows as well, by 6% on a
+    workload that sends a great deal and 57% on one that does not.
+
+    That error is smaller than the inbound one and points the same way as the
+    thing being measured, which makes it exactly the kind that survives review:
+    the ratio still moves in the right direction, just not by the right amount.
+    """
+    return data_bytes(egress_bytes, egress_packets, ingress_packets)
 
 
 __all__ = [
@@ -155,7 +171,8 @@ __all__ = [
     "SSE_INFLATION",
     "STREAMED_PACKET_BYTES",
     "ack_packets",
-    "as_if_whole",
     "data_bytes",
+    "payload_in",
+    "payload_out",
     "responses_streamed",
 ]

@@ -6,8 +6,9 @@ from custos.framing import (
     ACK_BYTES,
     HANDSHAKE_IN,
     SSE_INFLATION,
-    as_if_whole,
     data_bytes,
+    payload_in,
+    payload_out,
     responses_streamed,
 )
 
@@ -71,35 +72,46 @@ def test_no_packet_counts_is_not_read_as_streamed():
     assert not responses_streamed(5_000_000, 0, 0)
 
 
-# --- normalising onto the scale the thresholds were fitted on ---------------
+# --- wire bytes to payload --------------------------------------------------
 
 
-def test_a_whole_conversation_is_left_exactly_alone():
-    """Every threshold and weight in the classifier was fitted against
-    non-streaming wire bytes. The normalisation must move nothing for the
-    accounts those numbers came from."""
-    assert as_if_whole(2_000 * 1_400, 2_000, 100) == 2_000 * 1_400
-
-
-def test_a_streamed_conversation_comes_back_to_about_what_it_would_have_been():
-    """Payload inflated by the SSE framing, with the acknowledgements and the
-    handshake left where they are because they are present either way."""
+def test_a_whole_conversation_loses_only_its_overhead():
     payload, acks, handshakes = 40_000, 500, 2
-    overhead = acks * ACK_BYTES + handshakes * HANDSHAKE_IN
-    streamed_wire = int(payload * SSE_INFLATION + overhead)
-    packets = int(payload * SSE_INFLATION / 190) + acks
-
-    got = as_if_whole(streamed_wire, packets, acks * 2, handshakes)
-    want = payload + overhead
-    assert abs(got - want) / want < 0.02, (got, want)
+    wire = int(payload + acks * ACK_BYTES + handshakes * HANDSHAKE_IN)
+    got = payload_in(wire, 600, acks * 2, handshakes, streamed=False)
+    assert abs(got - payload) < 1
 
 
-def test_normalising_is_idempotent():
-    """Once normalised the conversation reads as whole, so a second pass is a
-    no-op. Nothing calls it twice today; a feature pipeline that grew a second
-    caller would silently divide by forty-two again."""
-    once = as_if_whole(2_000 * 190, 2_000, 100)
-    assert as_if_whole(once, 2_000, 100) == once
+def test_a_streamed_conversation_comes_back_to_its_payload():
+    """The framing removed on top of the overhead. Forty-two times, which is
+    the whole reason this module exists."""
+    payload, acks, handshakes = 40_000, 500, 2
+    inflated = payload * SSE_INFLATION
+    wire = int(inflated + acks * ACK_BYTES + handshakes * HANDSHAKE_IN)
+    packets = int(inflated / 190) + acks
+
+    got = payload_in(wire, packets, acks * 2, handshakes, streamed=True)
+    assert abs(got - payload) / payload < 0.02, (got, payload)
+
+
+def test_the_outbound_side_loses_the_acknowledgements_it_grew():
+    """Easy to miss, and it points the same way as the thing being measured.
+    Streaming multiplies the inbound packet count by forty-two and every two of
+    those are answered outbound, so the numerator of the ratio grows too."""
+    payload, inbound_packets = 5_000_000, 40_000
+    acks = inbound_packets // 2
+    wire = payload + acks * int(ACK_BYTES)
+    got = payload_out(wire, egress_packets=acks + 4_000,
+                      ingress_packets=inbound_packets)
+    assert abs(got - payload) < 1
+
+
+def test_an_already_corrected_figure_is_not_read_as_streamed_again():
+    """Deflating bytes cannot deflate packets, so a second pass would read its
+    own output as a streamed conversation and divide by forty-two again. The
+    floor is what stops it."""
+    once = payload_in(2_000 * 190, 2_000, 100, streamed=True)
+    assert not responses_streamed(int(once), 2_000, 100)
 
 
 def test_a_packet_too_small_to_be_an_sse_frame_is_not_one():
