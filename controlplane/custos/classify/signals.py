@@ -46,6 +46,26 @@ class Firing:
         return self.activation * self.weight
 
 
+def read_the_response(f: Features) -> bool:
+    """Whether there is an inbound payload to compare the outbound one against.
+
+    Taking the protocol out of a byte count can leave nothing behind. A
+    principal that sent a great deal to a model endpoint and got back only
+    acknowledgements — every response failed, or the inbound half of the window
+    was lost — clamps to zero inbound payload, and a ratio against zero hits
+    its cap at a million to one. That is the heaviest signal in the system
+    firing at full strength on a conversation nobody could read, and the
+    evidence sentence beside it would say "received 0.0B back, a ratio of
+    1000000.0:1".
+
+    The same defect as the empty-set one below, one layer down, and it arrived
+    with the correction that produces the payload figures. Unavailable rather
+    than zero for the same reason: "we could not read the response" and "the
+    response was empty" are different claims.
+    """
+    return saw_model_traffic(f) and f.total_model_ingress > 0
+
+
 def saw_model_traffic(f: Features) -> bool:
     """Whether there was any recognised model traffic to measure.
 
@@ -106,7 +126,7 @@ SIGNALS: tuple[Signal, ...] = (
     Signal(
         id="egress_asymmetry",
         weight=2.4,
-        available=saw_model_traffic,
+        available=read_the_response,
         activate=lambda f: logistic(f.egress_ratio, EGRESS_RATIO_MIDPOINT, EGRESS_RATIO_SCALE),
         describe=lambda f: (
             f"Sent {_fmt(f.total_model_egress)} of message payload to model "

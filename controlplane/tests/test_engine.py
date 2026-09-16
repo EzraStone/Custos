@@ -190,3 +190,43 @@ def test_the_asymmetry_evidence_says_the_figures_are_payload():
     asymmetry = next(s for s in SIGNALS if s.id == "egress_asymmetry")
     sentence = asymmetry.describe(BASE)
     assert "message payload" in sentence, sentence
+
+
+def test_asymmetry_is_unavailable_when_the_inbound_payload_cannot_be_read():
+    """A ratio computed against a payload that clamped to zero is not evidence.
+
+    Taking the protocol out of a byte count can leave nothing behind. A
+    principal that sent a great deal to a model endpoint and received only
+    acknowledgements — every response failed, or the inbound half of the window
+    was lost — has its inbound payload clamp to zero, and the ratio then hits
+    its cap: one million to one, the strongest possible activation of the
+    heaviest signal, on a conversation nobody could read.
+
+    The same defect as the empty-set one this codebase already carries, one
+    layer down. It was found by reading the new code rather than by a
+    screenshot this time, which is the only improvement.
+
+    Unavailable is the right answer and not zero, for the reason the module
+    header gives: "we could not read the response" and "the response was empty"
+    are different claims.
+    """
+    from custos.classify.engine import score
+    from custos.classify.features import Features
+
+    unreadable = dataclasses.replace(
+        BASE, total_model_egress=50_000_000, total_model_ingress=0,
+        egress_ratio=1e6,
+    )
+    assert isinstance(unreadable, Features)
+    _, firings, unavailable = score(unreadable)
+
+    assert "egress_asymmetry" in unavailable
+    assert not any(f.id == "egress_asymmetry" for f in firings)
+
+
+def test_asymmetry_is_available_whenever_there_is_something_to_read():
+    from custos.classify.engine import score
+
+    _, firings, unavailable = score(BASE)
+    assert "egress_asymmetry" not in unavailable
+    assert any(f.id == "egress_asymmetry" for f in firings)
