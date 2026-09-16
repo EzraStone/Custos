@@ -111,8 +111,9 @@ def cmd_stress(args: argparse.Namespace) -> int:
 
     Separate from `experiment` because G0 was defined against the base corpus
     and is measured there. This is the number to quote in diligence: the base
-    corpus separates by 0.26, and a corpus containing agents that pause for
-    human approval separates by roughly half that.
+    corpus separates by 0.485, and a corpus containing agents that pause for
+    human approval does not separate at all — the margin is negative, and
+    the workload responsible is named rather than averaged away.
     """
     from .evaluate import run_hard
 
@@ -126,7 +127,11 @@ def cmd_stress(args: argparse.Namespace) -> int:
         if result.margin_is_meaningful
         else "separation margin  n/a"
     )
-    print(f"recall {result.recall:.2f}   precision {result.precision:.2f}   {margin}")
+    print(
+        f"recall {result.recall:.2f}   "
+        f"surfaced {result.surfaced_recall:.2f}   "
+        f"precision {result.precision:.2f}   {margin}"
+    )
     if not result.margin_is_meaningful:
         names = ", ".join(r.workload for r in result.unscorable)
         print()
@@ -154,7 +159,8 @@ def cmd_stress(args: argparse.Namespace) -> int:
     if result.missed_agents:
         print()
         for row in result.missed_agents:
-            print(f"missed: {row.workload}")
+            door = "dismissed, nobody sees it" if row.dismissed else "in the review queue"
+            print(f"missed: {row.workload} ({door})")
             print(f"        {row.note}")
 
     print()

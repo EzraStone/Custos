@@ -144,6 +144,23 @@ def test_stress_command_prints_both_margins(capsys):
     assert "Quote this number instead" in out
 
 
+def test_the_stress_output_says_which_door_each_missed_agent_went_out_of(capsys):
+    """Two misses, two different product outcomes, one word apart in the output.
+
+    `missed` on its own reads as one failure repeated. One of these two is a
+    workload an operator is asked to look at and did not get a register row;
+    the other is a workload nobody hears about. Quoting the recall figure
+    without that distinction overstates the first and understates the second.
+    """
+    from custos_a0.cli import main
+
+    assert main(["stress"]) == 0
+    out = capsys.readouterr().out
+    assert "missed: ide-assistant-backend (in the review queue)" in out
+    assert "missed: support-copilot-backend (dismissed, nobody sees it)" in out
+    assert "surfaced 0.92" in out
+
+
 def test_no_margin_is_quoted_when_a_workload_cannot_be_scored(built_in):
     """A margin measured across a workload nothing could score describes the
     absence of evidence, not the separation of classes. -0.523 reads as "the
