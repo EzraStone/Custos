@@ -407,12 +407,24 @@ def decide(results: list[Result]) -> Gate:
     A pass requires no false positives anywhere and a durable margin in the
     supported configuration; degradation in the unsupported one is reported,
     not fatal.
+
+    "Not fatal" rests on something, and it used to rest on a sentence: the
+    pass narrative said the agents lost without load balancer logs "land in
+    the review band rather than being dropped", which was true and was never
+    checked. A degradation that starts dismissing agents outright is a
+    different product — an operator who hears nothing rather than one with a
+    queue — and it would have kept printing that sentence.
+
+    So it is a criterion. It costs nothing today, which is the point: a bar
+    that is met the moment it is written and can fail later is worth more
+    than the same claim in prose.
     """
     supported = [r for r in results if r.scenario.have_alb_logs]
     degraded = [r for r in results if not r.scenario.have_alb_logs]
 
     any_false_positive = any(r.false_positives for r in results)
     full_recall = all(r.recall == 1.0 for r in supported)
+    degraded_surfaced = min((r.surfaced_recall for r in degraded), default=1.0)
     margin = min((r.separation_margin for r in supported), default=0.0)
     headroom = min((r.agent_headroom for r in supported), default=0.0)
 
@@ -421,6 +433,7 @@ def decide(results: list[Result]) -> Gate:
         and full_recall
         and margin >= MIN_MARGIN
         and headroom >= MIN_HEADROOM
+        and degraded_surfaced == 1.0
     )
 
     if passed:
@@ -433,10 +446,11 @@ def decide(results: list[Result]) -> Gate:
             ),
             detail=(
                 "No false positives in any configuration. Recall without load "
-                f"balancer logs falls to {worst_degraded:.0%}, with the missed "
-                "agents landing in the review band rather than being dropped. "
-                f"The weakest agent clears the reporting threshold by "
-                f"{headroom:.2f}, on the configuration where that is tightest."
+                f"balancer logs falls to {worst_degraded:.0%}, and every agent "
+                "it drops still reaches an operator through the review queue "
+                f"({degraded_surfaced:.0%} surfaced). The weakest agent clears "
+                f"the reporting threshold by {headroom:.2f}, on the "
+                "configuration where that is tightest."
             ),
         )
 
@@ -451,6 +465,11 @@ def decide(results: list[Result]) -> Gate:
         reasons.append(
             f"the weakest agent clears the reporting threshold by only "
             f"{headroom:.2f}, against {MIN_HEADROOM}"
+        )
+    if degraded_surfaced < 1.0:
+        reasons.append(
+            f"only {degraded_surfaced:.0%} of agents reach an operator at all "
+            "without load balancer logs — the rest are dismissed, not queued"
         )
     return Gate(
         passed=False,

@@ -269,3 +269,61 @@ def test_surfaced_recall_is_never_below_recall(results):
     """
     for r in results:
         assert r.surfaced_recall >= r.recall
+
+
+def test_the_gate_fails_when_a_degraded_configuration_drops_an_agent(results):
+    """The failure the surfaced bar exists for, constructed rather than waited
+    for.
+
+    The supported configurations are left exactly as they are: full recall, a
+    margin of 0.485, the weakest agent well clear of the threshold. Every
+    number the gate printed before this criterion existed is unchanged and
+    every one of them is good.
+
+    What changes is the configuration nobody is asked to pass. Without load
+    balancer logs the agents that fall out of the register are pushed below
+    the review threshold as well, so an operator on that account is told
+    nothing about them at all. The old gate passed this and printed a sentence
+    saying those agents land in the review band, which would now be false.
+    """
+    from dataclasses import replace
+
+    from custos.classify import Disposition
+
+    from custos_a0.evaluate import decide
+
+    def drop(row):
+        if row.label is not Label.AGENT or row.verdict.disposition is Disposition.AGENT:
+            return row
+        return replace(
+            row,
+            verdict=replace(
+                row.verdict, confidence=0.10, disposition=Disposition.NOT_AGENT
+            ),
+        )
+
+    weakened = [
+        r if r.scenario.have_alb_logs
+        else replace(r, rows=[drop(row) for row in r.rows])
+        for r in results
+    ]
+
+    gate = decide(weakened)
+    assert not gate.passed
+    assert "are dismissed, not queued" in gate.headline, gate.headline
+
+
+def test_the_pass_narrative_quotes_the_number_it_rests_on(results):
+    """The sentence and the criterion cannot drift apart.
+
+    The claim that degraded recall is survivable is the reason the gate
+    tolerates it. If that ever becomes decoration again — a sentence with no
+    number behind it — this fails.
+    """
+    from custos_a0.evaluate import decide
+
+    gate = decide(results)
+    assert gate.passed
+    degraded = [r for r in results if not r.scenario.have_alb_logs]
+    surfaced = min(r.surfaced_recall for r in degraded)
+    assert f"({surfaced:.0%} surfaced)" in gate.detail, gate.detail
