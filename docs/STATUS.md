@@ -53,15 +53,15 @@ custos diff                 →  what changed since last week
 
 ## The one number that matters
 
-**G0 passed: 1.00 recall, 1.00 precision, 0.42 separation margin, identical at
+**G0 passed: 1.00 recall, 1.00 precision, 0.49 separation margin, identical at
 60s and 600s flow log aggregation and whether or not the account's model
 clients stream.**
 
 Against a harder corpus added afterwards — agents that pause for human
 approval, agents on batch schedules, chatbots with function calling — every
 verdict is still correct and there are still no false positives, but the margin
-falls to **0.29**. Quote that number, not the first one, wherever it would be
-doing work.
+falls to **0.18**, and one agent in it is not confirmed at all. Quote that
+number, not the first one, wherever it would be doing work.
 
 Those were 0.26 and 0.14 until the classifier stopped reading wire bytes. The
 acknowledgements and TLS handshakes in them scale with how a customer's client
@@ -73,10 +73,11 @@ Reproduce with `make experiment`. CI fails the build if it stops holding.
 `make gates` prints all five measured numbers in one run:
 
 ```
-G0, base corpus          separation margin 0.415, headroom 0.168
-the classifier, stress   separation margin 0.291, recall 1.00, precision 1.00
+G0, base corpus          separation margin 0.485, headroom 0.162, review gap 0.010
+the classifier, stress   separation margin 0.180, recall 0.91, one agent in review
 the gateway detector     3 questions, 2 worth asking, both real ones shown
-payload bytes per token  4.13-4.24 both ways round, discriminator at 600
+which signal carries it  tool_interleave 0.448, mcp_fingerprint 0.378 (stress)
+payload bytes per token  4.12-4.29 both ways round, discriminator at 600
 scope readability        26 of 26 nameable interfaces
 ```
 
@@ -101,6 +102,25 @@ model call. What replaced it, cumulative egress-to-ingress asymmetry, is a
 property of summed bytes and survives aggregation intact.
 
 Full result and its limitations: `docs/A0-FINDINGS.md`.
+
+**The classifier had never been ablated.** Removing each signal and
+re-measuring says which of the five is producing the result, and the answer
+depends on the corpus: on the base corpus four of the five are redundant and
+the signal the specification was rewritten around costs 0.043 of separation.
+On the stress corpus removing `tool_interleave` or `mcp_fingerprint` makes the
+classes overlap outright.
+
+Two came out looking unjustified. `offhours_activity` was negative rather than
+inert — removing it widened the margin by 0.07 on both corpora, because a
+nightly agent and a nightly batch job both run at 3am — and it is rejected.
+`mcp_fingerprint` read 0.000 because every MCP user in the corpus already
+scored 0.995 on everything else; with the case it was carried for added, an
+IDE assistant that is inbound-coupled and short-trajectoried, removing it
+collapses the classes.
+
+That workload is a miss and stays one: 0.657, in the review band. Stress
+recall is 0.91 as a result. A corpus containing only cases the classifier
+passes is not measuring anything. Finding 13 and `make ablation`.
 
 ## What is still unproven
 
