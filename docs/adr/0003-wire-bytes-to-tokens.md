@@ -1,7 +1,14 @@
 # ADR 0003 — What a wire byte is worth in tokens
 
-Status: accepted
+Status: superseded by ADR 0004
 Date: 2026-09-14
+
+> **Superseded.** The decision below — infer the regime from packet sizes, per
+> principal, and say that we did — still stands and is still how this works.
+> What changed is where it is applied. ADR 0004 moves the correction from the
+> spend estimate to the telemetry, because the classifier turned out to depend
+> on the same conversion far more heavily than the dollar figure did. The
+> alternatives weighed here were weighed against the wrong problem.
 
 ## Context
 
