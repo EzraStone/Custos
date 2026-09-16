@@ -283,22 +283,62 @@ def test_the_mcp_only_agent_is_offered_rather_than_missed(extended):
     assert 0.55 < row.verdict.confidence < 0.75, row.verdict.confidence
 
 
-def test_the_mcp_fingerprint_is_load_bearing_once_the_corpus_needs_it():
-    """The measurement that justifies the signal's weight.
-
-    It contributed 0.000 of separation on both corpora until this workload
-    existed. Removing it now makes the classes overlap — a negative margin,
-    which means no threshold separates them at all.
-    """
+@pytest.fixture(scope="module")
+def stress_ablation():
     from custos_a0 import corpus as corpus_mod
     from custos_a0.ablation import run_ablation
     from custos_a0.evaluate import SCENARIOS, stress_declarations
 
-    rows = run_ablation(
+    return run_ablation(
         corpus_mod.build(corpus_mod.CorpusSpec(hard=True)),
         SCENARIOS[0],
         stress_declarations(),
     )
-    mcp = next(a for a in rows if a.removed == "mcp_fingerprint")
-    assert mcp.margin < 0, mcp.margin
-    assert mcp.load_bearing
+
+
+def test_the_mcp_fingerprint_is_load_bearing_once_the_corpus_needs_it(stress_ablation):
+    """The measurement that justifies the signal's weight.
+
+    Named for what it costs rather than for `load_bearing`, which is what
+    this test used to assert and what made it stop measuring anything. The
+    two assertions were `margin < 0` and `load_bearing`, and once the stress
+    corpus gained a workload that pushed the baseline margin negative on its
+    own, both held for every signal in the table — including one removed
+    with no effect whatsoever. A test that passes for a signal that does
+    nothing is not evidence about a signal that does something.
+
+    What the signal actually does is keep ide-assistant-backend in the
+    review queue. It buys no separation and no register row; it is the
+    difference between an operator being asked to look at that workload and
+    never hearing about it.
+    """
+    mcp = next(a for a in stress_ablation if a.removed == "mcp_fingerprint")
+    assert mcp.dropped == ("ide-assistant-backend",), mcp.dropped
+    assert mcp.surfaced_cost > 0.01, mcp.surfaced_cost
+
+
+def test_the_mcp_fingerprint_buys_no_separation_and_the_table_says_so(
+    stress_ablation,
+):
+    """The other half of the same measurement, asserted so it stays honest.
+
+    The signal's contribution is entirely in the review queue. If a future
+    change gives it a margin cost as well, that is a different signal doing
+    a different job and the finding written about it no longer describes it.
+    """
+    mcp = next(a for a in stress_ablation if a.removed == "mcp_fingerprint")
+    assert abs(mcp.margin_cost) < 0.001, mcp.margin_cost
+    assert mcp.recall == 5 / 6, mcp.recall
+    assert mcp.precision == 1.0, mcp.precision
+
+
+def test_the_surfaced_column_discriminates(stress_ablation):
+    """Guards against the failure the previous test died of.
+
+    An assertion is only evidence if something could fail it. Two of the
+    four signals cost nothing in surfaced recall on this corpus, so
+    asserting that one of them does is a claim about that signal rather
+    than a property of the table.
+    """
+    free = [a.removed for a in stress_ablation if a.surfaced_cost <= 0.01]
+    assert free, "every signal holds the queue up; the assertion proves nothing"
