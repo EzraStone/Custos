@@ -362,6 +362,14 @@ for keeping one was "removing it makes the classes overlap", which stopped
 being evidence the moment a later workload made them overlap anyway. See the
 next section.
 
+**`make mutate` asks the other question.** The ablation says what a signal is
+worth on the corpus; this says whether anything in the suite would go red if it
+stopped working. The two answers are unrelated — `mcp_fingerprint` costs 0.000
+of separation and is noticed by ten tests — and a signal nothing notices can be
+broken by an unrelated refactor and ship. Zero fails the run. It is not in
+`make check`: removing a signal fails a large fraction of the suite, once per
+signal, which is minutes.
+
 ## Changing the G0 result
 
 `a0/tests/test_g0.py` pins the numbers that were the basis for proceeding past

@@ -4,6 +4,23 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### `make mutate` — whether a signal has a test at all
+
+The ablation says what a signal is worth on the corpus. It says nothing about
+whether the suite would notice if one stopped working, and those are unrelated
+questions: `mcp_fingerprint` costs 0.000 of separation and is noticed by ten
+tests, while a signal could cost a great deal and be pinned by one assertion in
+one file with nothing to say so.
+
+Remove each signal, run both suites, count what goes red. Zero fails the run —
+a signal no test notices can be broken by an unrelated refactor and ship. The
+signal list is read from the shipping table rather than written down here,
+because a list in the tool is a second place that has to agree.
+
+Not part of `make check`. Removing a signal fails a large fraction of the suite
+once per signal, which is minutes rather than seconds — the same reason
+`make smoke` is a thing you run rather than a gate.
+
 ### The ablation could not see what one signal was for
 
 `mcp_fingerprint` read 0.000 of separation on both corpora and cost no recall,

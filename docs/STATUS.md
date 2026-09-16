@@ -50,7 +50,8 @@ custos diff                 →  what changed since last week
 | Scope readability, measured | Works. Reported by `--check`, the report, the console, and `custos history` |
 | Payload bytes to tokens | Measured. `make conversion`: 4.13-4.24 both ways round, one constant |
 | Classifier invariant to streaming | Works. The ratio reads the same whether or not an account's clients stream |
-| Which signal carries the result | Measured. `make ablation`, per corpus. One signal removed as negative, one kept once the corpus needed it |
+| Which signal carries the result | Measured. `make ablation`, per corpus and per outcome, including the review queue |
+| Whether a signal has a test at all | Measured. `make mutate` removes each one and counts what goes red; zero fails |
 
 ## The one number that matters
 
