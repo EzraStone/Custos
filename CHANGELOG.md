@@ -4,6 +4,53 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### The ablation could not see what one signal was for
+
+`mcp_fingerprint` read 0.000 of separation on both corpora and cost no recall,
+and the measurement whose stated purpose is finding signals that carry nothing
+reported it as carrying nothing — twice. Margin, recall and precision are all
+measured at the register boundary, and the only thing that signal does is hold
+`ide-assistant-backend` in the *review queue*. Removing it takes that workload
+from one an operator is asked to look at to one nobody hears about.
+
+The table has a `surfaced` column now, `load_bearing` counts it, and a row that
+drops an agent names the agent. The test that justified keeping the signal had
+also gone vacuous — it asserted the margin goes negative, which a later corpus
+addition made true regardless — and now asserts the difference instead.
+
+### Recall counts the register; a second number counts the queue
+
+`surfaced_recall` is the fraction of true agents an operator is shown by either
+door. Recall falling while it holds is the classifier being unsure; it falling
+is the classifier being wrong, and those are different products.
+
+G0 was already resting on the distinction in prose: the pass narrative said the
+agents lost without load balancer logs "land in the review band rather than
+being dropped", which was true, load-bearing and unchecked. It is a criterion
+now. The stress command prints surfaced recall beside recall and says which
+door each missed agent went out of.
+
+### A scan that cannot decide about a workload says so
+
+An agent behind a chat box or an editor answers inbound requests and calls
+internal services between model calls. So does a retrieval-augmented chatbot,
+and in everything a flow log observes they are the same workload. The
+classifier is right to dismiss them — a register listing every RAG chatbot as
+an agent is worth nothing — but a report silent about a whole class reads as
+"we looked and there were none" rather than "we looked and could not tell".
+
+The report counts them and says what it would mean if any of them is an agent.
+Schema 25 stores the count so a report served a week later says the same thing.
+
+### The documents had drifted from the measurements
+
+`docs/STATUS.md` said the stress corpus separates by 0.18 with one agent in
+review. It separates by -0.202 with two agents missed, one dismissed outright —
+the page written to say where the classifier fails was reporting that it works.
+The numbers were copied out of a terminal by hand and nothing connected them to
+the code. A test recomputes each one, and refuses any decimal in that block
+that no measurement produces.
+
 ### Four defects in the correction, found by re-reading it
 
 Found by re-reading the week's own code rather than by any test. A ratio
@@ -44,10 +91,9 @@ producing the result. `make ablation` removes each in turn and re-measures.
 
 The answer depends on which corpus you ask. On the base corpus four of the five
 are redundant and `egress_asymmetry` — the signal the specification was
-rewritten around — costs 0.043 of separation. On the stress corpus removing
-`tool_interleave` or `mcp_fingerprint` makes the classes overlap outright. A
-signal can look free on a corpus that is not hard enough to need it, so
-`make gates` prints the stress table.
+rewritten around — costs 0.043 of separation. On the stress corpus
+`tool_interleave` carries 0.226 of it. A signal can look free on a corpus that
+is not hard enough to need it, so `make gates` prints the stress table.
 
 **`offhours_activity` is removed.** Not inert but negative: taking it out
 widens the margin by 0.07 on both corpora with no verdict changing. The reason

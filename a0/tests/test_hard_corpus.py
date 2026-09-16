@@ -110,10 +110,12 @@ def test_the_stress_margin_is_recorded_and_narrower(extended):
     0.657.
 
     That is the corpus getting harder rather than the classifier getting
-    worse. The workload was added because an ablation said mcp_fingerprint
-    contributed nothing, which was a fact about a corpus where every MCP user
-    already scored 0.995 on everything else. With the case it was carried for
-    present, removing that signal collapses the classes into each other.
+    worse. The IDE assistant was added because an ablation said
+    mcp_fingerprint contributed nothing, which was a fact about a corpus where
+    every MCP user already scored 0.995 on everything else. Removing that
+    signal now costs no margin and no recall; what it costs is that
+    workload's place in the review queue, which the ablation could not see
+    until it had a `surfaced` column.
 
     Pinned so a change that narrows it further has to be noticed.
     """
