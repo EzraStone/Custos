@@ -4,7 +4,7 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
-### Three defects in the correction, all pointing the same way
+### Four defects in the correction, found by re-reading it
 
 Found by re-reading the week's own code rather than by any test. A ratio
 computed against a payload that clamped to zero, hitting its cap at a million
@@ -12,11 +12,19 @@ to one; a discriminator with no minimum sample, deciding a 42x correction on
 six packets; and model bytes summed over the calls rather than over every
 window, which dropped the tail of a response from the ratio's denominator.
 
-All three inflate the ratio, which is to say all three point at false
-positives — which a correction whose job is to remove bytes from a denominator
-was always going to do. None of them moved a gate, because no workload in
-either corpus has an unreadable response, a six-packet conversation or an
+Those three inflate the ratio, which is to say they point at false positives —
+which a correction whose job is to remove bytes from a denominator was always
+going to do. None of them moved a gate, because no workload in either corpus
+has an unreadable response, a six-packet conversation or an
 acknowledgement-only window.
+
+The fourth points the other way and is worse. The correction reached model
+byte counts and stopped there, leaving tool counts as wire bytes — and a
+self-hosted gateway proxies Server-Sent Events, so on a streamed capture its
+ratio fell under the threshold and the detector asked **no questions at all**.
+A report with no findings and no questions is the artefact a hidden gateway
+produces. Both sides go through one function now, and `make questions`
+measures both regimes.
 
 ### Six features computed for nobody
 

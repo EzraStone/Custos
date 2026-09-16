@@ -731,13 +731,15 @@ entirely wrong numbers, which is the worse of the two.
 
 ---
 
-## Finding 14 — three defects the correction introduced, found by re-reading it
+## Finding 14 — four defects the correction introduced, found by re-reading it
 
 Findings 12 and 13 both came from asking a question nobody had asked. This one
 came from reading the code those findings produced, adversarially, a day later.
-All three defects point the same way — at false positives — which is the
+Three of the four point the same way — at false positives — which is the
 direction this product can least afford and, on reflection, the direction a
 correction that *removes* bytes from a denominator was always going to err in.
+The fourth points the other way and is worse: it hides agents rather than
+inventing them.
 
 **A ratio against a payload that clamped to zero.** Taking the protocol out of
 a byte count can leave nothing behind: a principal that sent a great deal to a
@@ -772,7 +774,25 @@ This one was only reachable because bytes became payload. Before that the
 acknowledgements themselves counted as outbound model traffic, so the window
 was never excluded and the set was right for the wrong reason.
 
-**None of the three moved a gate**, which is the part worth sitting with. No
+**A fourth, and this one was silence rather than a wrong number.** The
+correction reached model byte counts and stopped there. Tool byte counts were
+still wire bytes — and one of those destinations may be a model endpoint nobody
+has told us about, which is the entire premise of the gateway detector.
+
+A self-hosted gateway proxies a model API, so it proxies Server-Sent Events:
+its responses arrive one token at a time like the ones behind it. Read as wire
+bytes its egress-to-ingress ratio falls under the threshold, and on a streamed
+capture of the corpus the detector asked **no questions at all**. Not a worse
+ranking — zero. A report with no findings and no questions is exactly the
+artefact a hidden gateway produces, which is the thing the mechanism exists to
+prevent.
+
+`make questions` measures both regimes now. It was measured on whole responses
+only, which is the same failure as the corpus that had no destination the
+detector could get wrong: a measurement covering only the configuration where
+the mechanism works.
+
+**None of the first three moved a gate**, which is the part worth sitting with. No
 workload in either corpus has an unreadable response, a six-packet model
 conversation, or an acknowledgement-only window, so every number in this
 document was identical before and after the fixes. They were found by reading,

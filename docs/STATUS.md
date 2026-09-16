@@ -41,7 +41,7 @@ custos diff                 →  what changed since last week
 | Destination naming | Works. Measured: 100% of a nameable estate, from nine sources |
 | Customer-supplied pricing | Works. Per account, dated, superseded rather than overwritten. Agents on a fallback rate are named |
 | Gateway questions in the report | Works. Their own section, ranked across regions, with what was ruled out |
-| Gateway questions, measured | Works. `make questions`: precision 0.67, both real endpoints shown, was 0.00 and eighth |
+| Gateway questions, measured | Works. `make questions`, both regimes: precision 0.67, both real endpoints shown. Asked nothing at all on a streamed capture until the framing correction reached tool traffic |
 | Review band, kept and readable | Works. In the console, the CLI, and both reports, with evidence and recurrence |
 | Model gateway declaration | Works. Private ranges scoped to a region (SEC-24) |
 | Bedrock over PrivateLink | Works. The endpoint is resolved from AWS; nobody declares anything |
