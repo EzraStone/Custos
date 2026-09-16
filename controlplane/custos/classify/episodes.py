@@ -97,8 +97,14 @@ class Window:
     the data actually supports — finer than the principal, which is where this
     decision was first made and where it was wrong for exactly this shape."""
 
-    tool_egress: int = 0
-    tool_ingress: int = 0
+    tool_peers: dict[str, PeerTraffic] = field(default_factory=dict)
+    """Tool traffic per destination, for the same reason the model side keeps
+    it: the protocol has to come out before the bytes mean anything.
+
+    It matters most for the destination that is secretly a model endpoint. A
+    self-hosted gateway proxies Server-Sent Events, so its responses arrive a
+    token at a time — and the detector that exists to find it looks for a
+    destination receiving far more than it returns."""
     model_connections: int = 0
     """Distinct 5-tuples to model endpoints carrying a SYN in this window."""
     tool_classes: set[DestinationClass] = field(default_factory=set)
@@ -112,6 +118,14 @@ class Window:
     — AWS says which service it is in `pkt-dst-aws-service`, and dropping that
     here left every Bedrock agent's spend estimated at the rate for a provider
     nobody could name."""
+    @property
+    def tool_egress(self) -> int:
+        return sum(p.egress for p in self.tool_peers.values())
+
+    @property
+    def tool_ingress(self) -> int:
+        return sum(p.ingress for p in self.tool_peers.values())
+
     @property
     def model_egress(self) -> int:
         """Outbound model bytes, summed over this window's peers.
@@ -178,6 +192,14 @@ class Episode:
     @property
     def length(self) -> int:
         return len(self.windows)
+
+    @property
+    def tool_egress(self) -> int:
+        return sum(p.egress for p in self.tool_peers.values())
+
+    @property
+    def tool_ingress(self) -> int:
+        return sum(p.ingress for p in self.tool_peers.values())
 
     @property
     def model_egress(self) -> int:
@@ -309,10 +331,18 @@ def build_windows(
             known = w.tool_seen.get(peer)
             if known is None or seen.better_than(known):
                 w.tool_seen[peer] = seen
+            side = w.tool_peers.setdefault(peer, PeerTraffic())
             if egress:
-                w.tool_egress += r.bytes
+                side.egress += r.bytes
+                side.egress_packets += r.packets
+                if r.tcp_flags & SYN:
+                    marker = ("tool", key, r.srcport, peer)
+                    if marker not in seen_syn:
+                        seen_syn.add(marker)
+                        side.connections += 1
             else:
-                w.tool_ingress += r.bytes
+                side.ingress += r.bytes
+                side.ingress_packets += r.packets
 
     return [windows[k] for k in sorted(windows)]
 
@@ -342,6 +372,50 @@ def build_episodes(
             current = [w]
     episodes.append(Episode(current))
     return episodes
+
+
+def _correct(windows: list[Window], side_of) -> bool:
+    """Turn one side's byte counts from wire bytes into payload bytes.
+
+    Per destination, because the regime belongs to a conversation: an assistant
+    embedding a query at one endpoint and generating from another has one of
+    each, and summed together they read as neither. A flow log is keyed on the
+    5-tuple, so the peer address is the finest grain the data supports.
+
+    Returns whether any of them streamed.
+    """
+    peers = {p for w in windows for p in side_of(w)}
+    streaming: dict[str, bool] = {}
+    totals: dict[str, int] = {}
+    connections: dict[str, int] = {}
+    for peer in peers:
+        sides = [side_of(w)[peer] for w in windows if peer in side_of(w)]
+        totals[peer] = sum(s.ingress for s in sides)
+        connections[peer] = sum(s.connections for s in sides)
+        streaming[peer] = framing.responses_streamed(
+            totals[peer],
+            sum(s.ingress_packets for s in sides),
+            sum(s.egress_packets for s in sides),
+        )
+
+    for w in windows:
+        for peer, side in side_of(w).items():
+            # The handshake share of this window, so a window that opened no
+            # connection is not charged for one. Proportional rather than
+            # exact: a flow record says a connection was opened, not which
+            # window's bytes paid for the certificate chain.
+            share = side.ingress / totals[peer] if totals[peer] else 0.0
+            # Packet counts stay as the flow log reported them. They are what
+            # the regime was decided from, and rewriting them would leave the
+            # decision unreproducible from the record it was made on.
+            side.ingress = int(framing.payload_in(
+                side.ingress, side.ingress_packets, side.egress_packets,
+                connections[peer] * share, streaming[peer],
+            ))
+            side.egress = int(framing.payload_out(
+                side.egress, side.egress_packets, side.ingress_packets,
+            ))
+    return any(streaming.values())
 
 
 def _to_payload(windows: list[Window]) -> bool:
@@ -376,45 +450,14 @@ def _to_payload(windows: list[Window]) -> bool:
     Returns whether any of them streamed, which is what the surfaces quoting
     these figures have to disclose.
     """
-    peers = {p for w in windows for p in w.model_peers}
-    streaming: dict[str, bool] = {}
-    for peer in peers:
-        sides = [w.model_peers[peer] for w in windows if peer in w.model_peers]
-        streaming[peer] = framing.responses_streamed(
-            sum(s.ingress for s in sides),
-            sum(s.ingress_packets for s in sides),
-            sum(s.egress_packets for s in sides),
-        )
-
-    # Handshakes are per connection and do not scale with anything said, so
-    # they are spread across a peer's windows in proportion to its bytes there.
-    # A flow record says a connection was opened, not which window's bytes paid
-    # for the certificate chain.
-    totals = {
-        peer: sum(w.model_peers[peer].ingress for w in windows if peer in w.model_peers)
-        for peer in peers
-    }
-    connections = {
-        peer: sum(
-            w.model_peers[peer].connections for w in windows if peer in w.model_peers
-        )
-        for peer in peers
-    }
-
-    for w in windows:
-        for peer, side in w.model_peers.items():
-            share = side.ingress / totals[peer] if totals[peer] else 0.0
-            # Packet counts stay as the flow log reported them. They are what
-            # the regime was decided from, and rewriting them would leave the
-            # decision unreproducible from the record it was made on.
-            side.ingress = int(framing.payload_in(
-                side.ingress, side.ingress_packets, side.egress_packets,
-                connections[peer] * share, streaming[peer],
-            ))
-            side.egress = int(framing.payload_out(
-                side.egress, side.egress_packets, side.ingress_packets,
-            ))
-    return any(streaming.values())
+    streamed = _correct(windows, lambda w: w.model_peers)
+    # The same correction on tool traffic, because one of those destinations
+    # may be a model endpoint nobody has told us about. A self-hosted gateway
+    # proxies Server-Sent Events, and the detector that exists to find it looks
+    # for a destination receiving far more than it returns — read on wire bytes
+    # that ratio collapses and the detector asks nothing at all.
+    _correct(windows, lambda w: w.tool_peers)
+    return streamed
 
 
 def sessionize(
