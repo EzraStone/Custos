@@ -644,6 +644,93 @@ the situation.
 
 ---
 
+## Finding 13 — the weight of a signal is not how much work it does
+
+Finding 12 came from asking whether the classifier was invariant to something
+the customer configures. The obvious next question was which of the five
+signals was actually producing the result, and the classifier had never been
+ablated.
+
+Leave one out, re-measure the margin. `make ablation`.
+
+**On the base corpus, four of the five are redundant.**
+
+| signal removed | weight | margin | cost | recall |
+|---|---|---|---|---|
+| tool_interleave | 2.0 | +0.304 | +0.181 | 0.60 |
+| inbound_decoupling | 2.6 | +0.412 | +0.073 | 0.60 |
+| egress_asymmetry | 2.4 | +0.442 | +0.043 | 0.80 |
+| mcp_fingerprint | 1.6 | +0.485 | +0.000 | 1.00 |
+
+The signal the specification was rewritten around costs 0.043 of separation
+there. That is not a verdict on the signal — it is a verdict on the corpus,
+and the stress corpus says something different, which is why `make gates`
+prints that one.
+
+**Two signals came out of it looking unjustified, and they were different
+problems.**
+
+`offhours_activity` was not inert, it was negative: removing it *widened* the
+margin by 0.07 on both corpora with no verdict changing. It is rejected now,
+and the reason is structural rather than a fact about this corpus. A nightly
+reconciliation agent runs at 3am and so does a nightly batch summariser;
+running unattended is what both are for. It separated scheduled work from
+interactive work, which is not the question being asked.
+
+`mcp_fingerprint` contributed exactly 0.000 on both corpora, and by the
+precedent of the IAM policy — thirteen granted actions nothing called, and the
+first instinct was to write a plausible sentence beside each one — that is an
+argument for deleting it.
+
+It was the corpus. Every workload in it that reached an MCP server was already
+scoring 0.995 on the other four signals, so the fingerprint had nothing left to
+do. The way to tell a dead signal from an untested one is to add the case it
+was carried for: an IDE assistant backend, inbound-coupled because a person
+types first, trajectories of two or three steps so the transcript barely
+accumulates, driving an MCP server. With that workload present, removing
+`mcp_fingerprint` makes the classes overlap — margin **-0.199**, no threshold
+separates them at all.
+
+**The new workload is a miss, and it stays one.** It lands at 0.657, in the
+review band. Stress recall falls from 1.00 to 0.91 and the stress margin from
+0.356 to 0.180. Confirming an agent on that evidence would be guessing and
+dropping it silently is what the band exists to prevent, so review is the
+right answer — and a corpus that only contains cases the classifier passes is
+not measuring anything.
+
+**A third number came out of it.** This run has now found two cases of a
+headline figure hiding a second one: the margin improving while the headroom
+above the reporting threshold shrank, and both improving while the *review*
+threshold ended up a hundredth from a workload. The sweep prints that
+clearance now.
+
+It is 0.010, and it was 0.030 before `offhours_activity` was removed. The
+comment beside those thresholds has always said they sit in measured empty
+space. That is true of the agent threshold — every agent at or above 0.96, the
+highest negative at 0.48 — and has never been very true of the review one. A
+test parses the figures out of that comment and holds them against the corpus
+now, because three of the four numbers it used to carry were stale and nothing
+noticed.
+
+Nothing moves the review threshold to improve the clearance. Placing a
+threshold to put a particular workload on a particular side is fitting to
+eleven workloads, and the workload in question is undecidable a hundredth
+either way.
+
+**Two bugs in the measurement before it produced a number**, both worth
+recording because both produced output that looked like a result.
+
+It patched `signals.SIGNALS` while the engine holds its own reference from
+`from .signals import SIGNALS`, so nothing changed and every signal came back
+costing exactly 0.000 — a clean table of nothing, which is what a broken
+measurement looks like when it has no way to say it failed. Then it built each
+ablated table from the module's current one rather than from the original, so
+each pass removed a signal from the previous pass's table and by the fifth the
+classifier had one signal left. That version produced confident, plausible,
+entirely wrong numbers, which is the worse of the two.
+
+---
+
 ## Why this result should be believed, and where it should not
 
 **The corpus is adversarial by construction.** Four negatives exist
