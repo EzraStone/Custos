@@ -130,13 +130,26 @@ def aggregate(corpus: Corpus, config: AggregationConfig | None = None) -> Captur
 
         for call in w.calls:
             if call.kind is CallKind.INBOUND:
-                if cfg.have_alb_logs:
+                if cfg.have_alb_logs and call.at <= corpus.end:
                     cap.requests.setdefault(w.src_ip, []).append(
                         InboundRequest(
                             at=call.at, target=w.src_ip,
                             received_bytes=call.req_bytes, sent_bytes=call.resp_bytes,
                         )
                     )
+                continue
+
+            if call.at > corpus.end:
+                # A collector reading a window that ends at T does not see
+                # traffic after T. Episodes can run past the corpus boundary by
+                # a few seconds — an arrival near the end plus the jitter on
+                # each step — and letting those records through put traffic in
+                # a capture that claims not to cover it.
+                #
+                # Four records of 67,160 on the full corpus, so this changes no
+                # number. It is here because a capture asserting a window it
+                # does not honour is the kind of small untruth the measurements
+                # built on it cannot see.
                 continue
 
             ep = call.endpoint
