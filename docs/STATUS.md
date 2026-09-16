@@ -289,11 +289,13 @@ reproduces it and the discriminator reads every workload in both captures
 correctly.
 
 What is unmeasured is the mixture. How much real agent traffic streams is a
-question about customers, the corpus can be built either way, and a workload
-running both regimes at once — streamed completions and whole embedding
-responses — lands between the two constants and fits neither. The report says
-per scan which reading produced its figures, because it was inferred rather
-than supplied.
+question about customers, and the corpus can be built either way. *(This entry
+also claimed a workload running both regimes at once lands between the two
+constants and fits neither. That was wrong and was corrected the same week: the
+two halves go to different endpoints, a flow log is keyed on the 5-tuple, so
+the regime is decided per destination address and both conversations are read
+correctly. `docs/adr/0004-payload-not-wire.md`.)* The report says per scan which
+reading produced its figures, because it was inferred rather than supplied.
 
 **The byte ratios have only been measured against synthetic traffic.** The
 weights were fitted on the A0 corpus. What A0 establishes is that a separating
