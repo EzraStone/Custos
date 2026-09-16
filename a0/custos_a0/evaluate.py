@@ -263,6 +263,39 @@ class Result:
         return not self.unscorable
 
     @property
+    def overlap(self) -> tuple[Row, Row] | None:
+        """The pair that makes the margin negative, when one does.
+
+        A negative margin is one number saying the classes are not separable,
+        and one number is not enough to act on: it does not say whether every
+        agent is tangled with every chatbot or whether one workload of each
+        kind sits on the wrong side of the other. Naming the pair is the
+        difference between "this does not work" and "this does not work on
+        workloads of this shape", which are different findings.
+        """
+        if not self.agents or not self.negatives:
+            return None
+        worst = min(self.agents, key=lambda r: r.verdict.confidence)
+        best = max(self.negatives, key=lambda r: r.verdict.confidence)
+        if worst.verdict.confidence >= best.verdict.confidence:
+            return None
+        return worst, best
+
+    def margin_without(self, workload: str) -> float:
+        """The separation margin with one workload left out.
+
+        For saying how far a negative margin reaches. One agent tangled with
+        the negatives and one class of agent tangled with them are different
+        findings, and the difference is this number."""
+        agents = [r for r in self.agents if r.workload != workload]
+        negatives = [r for r in self.negatives if r.workload != workload]
+        if not agents or not negatives:
+            return 0.0
+        return min(r.verdict.confidence for r in agents) - max(
+            r.verdict.confidence for r in negatives
+        )
+
+    @property
     def missed_agents(self) -> list[Row]:
         return [r for r in self.agents if r.verdict.disposition is not Disposition.AGENT]
 

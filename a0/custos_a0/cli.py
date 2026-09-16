@@ -137,6 +137,20 @@ def cmd_stress(args: argparse.Namespace) -> int:
             "nothing could score describes the absence of evidence, not the "
             "separation of classes."
         )
+    if result.overlap:
+        agent, negative = result.overlap
+        print()
+        without = result.margin_without(agent.workload)
+        print(
+            f"The margin is negative because {agent.workload} "
+            f"({agent.verdict.confidence:.3f}) scores below {negative.workload} "
+            f"({negative.verdict.confidence:.3f}), which is not an agent. "
+            f"Leaving that one workload out the margin is {without:+.3f}, so "
+            "this is one shape the classifier cannot separate rather than a "
+            "failure across the board — a distinction that matters to anyone "
+            "quoting either number, and neither should be quoted alone."
+        )
+
     if result.missed_agents:
         print()
         for row in result.missed_agents:

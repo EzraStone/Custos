@@ -103,9 +103,11 @@ def test_no_false_positives_on_the_stress_corpus(built_in, extended):
 def test_the_stress_margin_is_recorded_and_narrower(extended):
     """The honest number.
 
-    The base corpus separates by 0.49. This corpus separates by 0.18, and one
-    of its agents is not confirmed at all: the IDE assistant lands in the
-    review band at 0.657.
+    The base corpus separates by 0.49. This corpus does not separate at all
+    once the interactive blind spot is in it: a support copilot driving
+    ordinary HTTP tools scores below a chatbot. Leaving that one workload out
+    the rest separate by 0.18, with the IDE assistant in the review band at
+    0.657.
 
     That is the corpus getting harder rather than the classifier getting
     worse. The workload was added because an ablation said mcp_fingerprint
@@ -116,8 +118,16 @@ def test_the_stress_margin_is_recorded_and_narrower(extended):
     Pinned so a change that narrows it further has to be noticed.
     """
     margin = extended.separation_margin
-    assert margin > 0, "the classes must still separate"
-    assert 0.15 < margin < 0.24, f"stress margin moved to {margin:.3f}"
+    assert margin < 0, "the interactive blind spot should make this negative"
+
+    # One shape, not a failure across the board. Leaving out the workload the
+    # classifier has no distinguishing evidence for, the rest separate.
+    overlap = extended.overlap
+    assert overlap is not None
+    agent, _ = overlap
+    assert agent.workload == "support-copilot-backend", agent.workload
+    without = extended.margin_without(agent.workload)
+    assert 0.15 < without < 0.24, f"stress margin without it moved to {without:.3f}"
 
 
 # --- the CLI ------------------------------------------------------------------

@@ -36,6 +36,12 @@ Four workloads, each aimed at a specific assumption:
                           the strong signals are weak, and it drives an MCP
                           server.
 
+    agent_interactive_http
+                          the same shape with the one thing that catches it
+                          removed: ordinary HTTP tools instead of MCP.
+                          Expected to be missed, and here so that being missed
+                          is a number.
+
     agent_via_published_endpoint
                           the residue. Model calls go over PrivateLink to a
                           service another AWS account published, which AWS
@@ -307,6 +313,54 @@ def agent_interactive_mcp(rng: Random, start: datetime, end: datetime) -> Worklo
                 request_id=rid, step=step * 2 + 1,
             ))
             t += jitter(rng, timedelta(milliseconds=180), 0.4)
+        if t >= end:
+            break
+
+    return w
+
+
+def agent_interactive_http(rng: Random, start: datetime, end: datetime) -> Workload:
+    w = Workload(
+        name="support-copilot-backend",
+        principal="arn:aws:iam::447120043318:role/support-copilot",
+        scenario="agent_interactive_http",
+        label=Label.AGENT,
+        compute="ECS",
+        note=(
+            "THE BLIND SPOT, STATED. The same shape as ide-assistant-backend "
+            "with the one thing that catches it removed: an agent behind a "
+            "support console that reads tickets, looks up orders and posts "
+            "replies, driving ordinary HTTP APIs rather than an MCP server.\n\n"
+            "Every observable it has is shared with a retrieval-augmented "
+            "chatbot. A person types, so it is coupled; it alternates model "
+            "and tool calls, so it interleaves; its trajectories are short, so "
+            "the transcript does not accumulate. It is expected to be missed, "
+            "and it is here so that being missed is a measured number rather "
+            "than an argument about what the classifier would do."
+        ),
+    )
+    tools = [TICKET_API, ORDERS_DB, BILLING_API]
+
+    for at in poisson_arrivals(rng, start, end, 20.0):
+        rid = f"req-{int(at.timestamp() * 1e6)}"
+        _inbound(w, at, rid, 1_200, 3_800)
+        t = at + jitter(rng, timedelta(milliseconds=55), 0.5)
+        for step in range(2 + rng.randrange(2)):
+            w.calls.append(Call(
+                at=t, kind=CallKind.MODEL, endpoint=ANTHROPIC,
+                req_bytes=tok(850 + 650 * step + 200 * rng.random()),
+                **reply(240 + 190 * rng.random()),
+                request_id=rid, step=step * 2,
+            ))
+            t += jitter(rng, timedelta(milliseconds=750), 0.3)
+            tool = tools[rng.randrange(len(tools))]
+            w.calls.append(Call(
+                at=t, kind=CallKind.TOOL, endpoint=tool,
+                req_bytes=tok(110 + 70 * rng.random()),
+                resp_bytes=tok(550 + 850 * rng.random()),
+                request_id=rid, step=step * 2 + 1,
+            ))
+            t += jitter(rng, timedelta(milliseconds=170), 0.4)
         if t >= end:
             break
 

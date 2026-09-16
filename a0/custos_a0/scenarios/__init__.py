@@ -34,6 +34,7 @@ from .chatbots import chatbot_multiturn, chatbot_rag, chatbot_simple, embedding_
 from .hard import (
     agent_batch,
     agent_human_in_loop,
+    agent_interactive_http,
     agent_interactive_mcp,
     agent_via_gateway,
     agent_via_privatelink,
@@ -74,6 +75,7 @@ HARD: list[Generator] = [
     agent_via_privatelink,
     agent_via_published_endpoint,
     agent_interactive_mcp,
+    agent_interactive_http,
 ]
 """Workloads that break the clean coupled/decoupled split the base corpus has.
 

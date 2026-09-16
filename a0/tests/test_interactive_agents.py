@@ -84,16 +84,50 @@ def test_the_count_of_tools_does_not_separate_them(coupled):
     )
 
 
-def test_mcp_is_the_only_thing_separating_them(coupled):
+def test_mcp_is_the_only_thing_that_separates_any_of_them(coupled):
     """Which is the finding.
 
     Every other feature overlaps or inverts, so the verdict on an interactive
     workload rests entirely on whether it speaks a protocol designed for giving
-    models tools. That is decent evidence and it is not the same question, and
-    an interactive agent driving ordinary HTTP tools has nothing left to be
-    caught by.
+    models tools. That is decent evidence and it is not the same question.
     """
-    for r in coupled:
-        assert (r.verdict.features.mcp_windows > 0) is (r.label is Label.AGENT), (
-            r.workload, r.verdict.features.mcp_windows, r.label
+    separated = [r for r in coupled if r.verdict.features.mcp_windows > 0]
+    assert separated, "nothing in the coupled set uses MCP"
+    for r in separated:
+        assert r.label is Label.AGENT, r.workload
+
+
+def test_a_coupled_agent_without_mcp_is_not_merely_uncertain_but_dismissed(coupled):
+    """The blind spot, as a number.
+
+    A support copilot driving ordinary HTTP APIs has every observable a
+    retrieval-augmented chatbot has. It does not land in the review band where
+    a human would see it — it lands below the floor, which means it is recorded
+    for the next scan's baseline and reported to nobody.
+
+    That is the correct behaviour for the evidence and the wrong outcome for
+    the account, and the gap between those two is what this file exists to
+    keep visible.
+    """
+    blind = [
+        r for r in coupled
+        if r.label is Label.AGENT and r.verdict.features.mcp_windows == 0
+    ]
+    assert blind, "the corpus no longer contains an interactive agent without MCP"
+    for r in blind:
+        assert r.verdict.disposition.value == "not_agent", (
+            r.workload, r.verdict.confidence, r.verdict.disposition
         )
+
+
+def test_the_blind_agent_scores_below_a_chatbot_it_sits_beside(coupled):
+    """Not a near miss. It is ranked below workloads that are not agents, so no
+    amount of moving the threshold recovers it without taking them too."""
+    blind = [
+        r for r in coupled
+        if r.label is Label.AGENT and r.verdict.features.mcp_windows == 0
+    ]
+    negatives = [r for r in coupled if r.label is not Label.AGENT]
+    assert min(r.verdict.confidence for r in blind) < max(
+        r.verdict.confidence for r in negatives
+    )
