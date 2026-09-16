@@ -21,20 +21,11 @@ from custos.spend import BYTES_PER_TOKEN
 from custos_a0 import corpus as corpus_mod
 from custos_a0.conversion import measure
 
-# A workload that streams half its calls and not the other half is read as one
-# or the other and is wrong for that half by construction. Excluded by the
-# property rather than by name.
-MIXED_FLOOR = 1.0
-
 
 @pytest.fixture(scope="module")
 def both():
     corpus = corpus_mod.build()
     return measure(corpus, streaming=True), measure(corpus, streaming=False)
-
-
-def _pure(rows):
-    return [m for m in rows if m.payload_per_token > MIXED_FLOOR]
 
 
 def test_the_discriminator_reads_every_workload_correctly(both):
@@ -70,26 +61,36 @@ def test_one_constant_covers_both_regimes(both):
     the customer's client is configured. On payload it is one number.
     """
     streamed, whole = both
-    rates = [m.payload_per_token for m in _pure(streamed) + _pure(whole)]
+    rates = [m.payload_per_token for m in streamed + whole]
     assert max(rates) / min(rates) < 1.05, (min(rates), max(rates))
 
 
 def test_spend_divides_by_what_was_measured(both):
     """The constant in spend.py against the corpus it came from."""
     streamed, whole = both
-    rates = [m.payload_per_token for m in _pure(streamed) + _pure(whole)]
+    rates = [m.payload_per_token for m in streamed + whole]
     measured = sum(rates) / len(rates)
     assert abs(BYTES_PER_TOKEN - measured) / measured < 0.02, (
         BYTES_PER_TOKEN, measured
     )
 
 
-def test_the_mixed_workload_is_still_in_the_corpus(both):
-    """The limit this measurement cannot speak for, kept where it can be seen.
+def test_a_workload_running_both_regimes_is_measured_as_both(both):
+    """The exclusion that turned into a row.
 
-    One principal embedding a query whole and streaming the answer gets one
-    answer for both halves. If it ever disappears from the corpus the exclusion
-    above starts silently covering nothing.
+    One principal embedding a query whole and streaming the answer used to
+    land between the two constants and fit neither, and that was written down
+    as something a flow log cannot resolve. The two halves go to different
+    endpoints; a row is one conversation now, and both of them are in the band
+    above with nothing excluded from it.
     """
     streamed, _ = both
-    assert [m.workload for m in streamed if m.payload_per_token <= MIXED_FLOOR]
+    by_workload: dict[str, set[bool]] = {}
+    for m in streamed:
+        by_workload.setdefault(m.workload, set()).add(m.streams)
+
+    mixed = {name for name, kinds in by_workload.items() if len(kinds) > 1}
+    assert mixed, "the corpus no longer contains a workload running both regimes"
+    for m in streamed:
+        if m.workload in mixed:
+            assert 3.9 < m.payload_per_token < 4.4, (m.workload, m.endpoint)

@@ -41,6 +41,8 @@ from .wire.record import SYN, Direction
 
 MODEL_ADDRESSES = frozenset({ANTHROPIC.ip, OPENAI.ip, BEDROCK.ip})
 
+ENDPOINT_NAMES = {ANTHROPIC.ip: "anthropic", OPENAI.ip: "openai", BEDROCK.ip: "bedrock"}
+
 ACK_BYTES = 52
 """A pure acknowledgement, as the wire model emits them."""
 
@@ -50,14 +52,20 @@ class Measured:
     """One workload's model conversation, as a collector would see it."""
 
     workload: str
-    output_tokens: float
+    endpoint: str = ""
+    """Which model endpoint this conversation was with.
+
+    A row is one conversation rather than one workload, because the regime is
+    decided per destination and a row summing two of them measures neither."""
+
+    output_tokens: float = 0.0
     """Ground truth. Known here and never knowable in a customer's account,
     which is the whole reason this is measured against a corpus."""
 
-    ingress_bytes: int
-    ingress_packets: int
-    egress_packets: int
-    streams: bool
+    ingress_bytes: int = 0
+    ingress_packets: int = 0
+    egress_packets: int = 0
+    streams: bool = False
     """Ground truth again: whether this workload's responses were streamed."""
 
     connections: int = 0
@@ -106,39 +114,46 @@ class Measured:
 def measure(corpus: Corpus, streaming: bool) -> list[Measured]:
     """One capture, read the way the control plane reads it.
 
-    Embedding workloads are included rather than filtered. They are the case
-    that proves the discriminator is measuring the protocol rather than the
-    corpus: an embedding response is one JSON array with nothing to stream, so
-    it stays whole in a streamed capture and has to be read as whole.
+    One row per conversation — per (workload, model endpoint) — rather than per
+    workload, because that is the grain the regime is decided at and a row that
+    summed two conversations would be measuring neither. `kb-assistant` is the
+    case that makes the difference visible: its embedding call goes to one
+    endpoint whole and its completion to another streamed, and as a single row
+    it landed between the two constants and fitted neither.
     """
-    truth = {
-        w.src_ip: (
-            w.name,
-            sum(c.resp_bytes / 4 for c in w.calls if c.kind is CallKind.MODEL),
-            any(c.resp_events for c in w.calls if c.kind is CallKind.MODEL),
-        )
-        for w in corpus.workloads
-    }
+    truth: dict[tuple[str, str], tuple[str, float, bool]] = {}
+    for w in corpus.workloads:
+        for call in w.calls:
+            if call.kind is not CallKind.MODEL:
+                continue
+            key = (w.src_ip, call.endpoint.ip)
+            name, tokens, streams = truth.get(key, (w.name, 0.0, False))
+            truth[key] = (
+                name,
+                tokens + call.resp_bytes / 4,
+                streams or bool(call.resp_events),
+            )
 
-    totals: dict[str, list[int]] = {}
+    totals: dict[tuple[str, str], list[int]] = {}
     for r in aggregate(corpus, AggregationConfig(streaming=streaming)).records:
         if r.direction is Direction.INGRESS and r.srcaddr in MODEL_ADDRESSES:
-            row = totals.setdefault(r.dstaddr, [0, 0, 0, 0])
+            row = totals.setdefault((r.dstaddr, r.srcaddr), [0, 0, 0, 0])
             row[0] += r.bytes
             row[1] += r.packets
         elif r.direction is Direction.EGRESS and r.dstaddr in MODEL_ADDRESSES:
-            row = totals.setdefault(r.srcaddr, [0, 0, 0, 0])
+            row = totals.setdefault((r.srcaddr, r.dstaddr), [0, 0, 0, 0])
             row[2] += r.packets
             if r.tcp_flags & SYN:
                 row[3] += 1
 
     out = []
-    for address, (ingress_bytes, ingress_packets, egress_packets, conns) in totals.items():
-        name, tokens, streams = truth[address]
+    for key, (ingress_bytes, ingress_packets, egress_packets, conns) in totals.items():
+        name, tokens, streams = truth[key]
         if tokens < 100:
             continue
         out.append(Measured(
-            workload=name, output_tokens=tokens,
+            workload=name, endpoint=ENDPOINT_NAMES.get(key[1], key[1]),
+            output_tokens=tokens,
             ingress_bytes=ingress_bytes, ingress_packets=ingress_packets,
             egress_packets=egress_packets, connections=conns,
             streams=streams and streaming,

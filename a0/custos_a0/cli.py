@@ -232,8 +232,8 @@ def cmd_conversion(args: argparse.Namespace) -> int:
 
     corpus = corpus_mod.build()
     header = (
-        f"{'workload':<26}{'streams':>9}{'mean pkt':>10}{'payload b/tok':>15}"
-        f"{'read as':>10}"
+        f"{'workload':<26}{'endpoint':<11}{'streams':>9}{'mean pkt':>10}"
+        f"{'payload b/tok':>15}{'read as':>10}"
     )
     for streaming in (False, True):
         label = "streamed" if streaming else "whole"
@@ -246,8 +246,8 @@ def cmd_conversion(args: argparse.Namespace) -> int:
             )
             wrong = "  <-- WRONG" if read != m.streams else ""
             print(
-                f"{m.workload:<26}{str(m.streams):>9}{m.mean_data_packet:>10.0f}"
-                f"{m.payload_per_token:>15.2f}"
+                f"{m.workload:<26}{m.endpoint:<11}{str(m.streams):>9}"
+                f"{m.mean_data_packet:>10.0f}{m.payload_per_token:>15.2f}"
                 f"{('streamed' if read else 'whole'):>10}{wrong}"
             )
         print()
@@ -260,15 +260,12 @@ def cmd_conversion(args: argparse.Namespace) -> int:
         f"{max(m.mean_data_packet for m in streamed):.0f} and "
         f"{min(m.mean_data_packet for m in whole):.0f}"
     )
-    # The mixed-regime workload is excluded from the band and named, because a
-    # range that quietly contained it would be describing a workload the
-    # measurement cannot speak for rather than the spread of the constant.
-    pure = [m for m in everything if m.payload_per_token > 1.0]
-    mixed = [m.workload for m in everything if m.payload_per_token <= 1.0]
+    # Nothing is excluded. A row is one conversation now, so the workload that
+    # runs both regimes contributes one row of each and both are in the band.
     print(
-        f"payload bytes per token: {min(m.payload_per_token for m in pure):.2f}"
-        f"-{max(m.payload_per_token for m in pure):.2f}, both ways round"
-        + (f" (excluding {', '.join(sorted(set(mixed)))}, which runs both)" if mixed else "")
+        f"payload bytes per token: {min(m.payload_per_token for m in everything):.2f}"
+        f"-{max(m.payload_per_token for m in everything):.2f}, "
+        f"across {len(everything)} conversations, both ways round"
     )
     return 0
 
