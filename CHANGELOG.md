@@ -4,6 +4,45 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### The classifier had never been ablated
+
+Five weighted signals, and nothing had ever measured which of them was
+producing the result. `make ablation` removes each in turn and re-measures.
+
+The answer depends on which corpus you ask. On the base corpus four of the five
+are redundant and `egress_asymmetry` — the signal the specification was
+rewritten around — costs 0.043 of separation. On the stress corpus removing
+`tool_interleave` or `mcp_fingerprint` makes the classes overlap outright. A
+signal can look free on a corpus that is not hard enough to need it, so
+`make gates` prints the stress table.
+
+**`offhours_activity` is removed.** Not inert but negative: taking it out
+widens the margin by 0.07 on both corpora with no verdict changing. The reason
+is structural rather than a fact about this corpus — a nightly reconciliation
+agent runs at 3am and so does a nightly batch summariser — so it joins the
+rejected signals rather than being reweighted. Base margin 0.415 to **0.485**,
+stress 0.291 to 0.356.
+
+**`mcp_fingerprint` is kept, and the corpus got a workload to justify it.** It
+contributed exactly 0.000 on both corpora, which by the precedent of the IAM
+policy is an argument for deleting it. It was the corpus: every MCP user in it
+already scored 0.995 on the other four signals. With an IDE assistant backend
+added — inbound-coupled because a person types first, trajectories too short
+for the transcript to accumulate — removing the signal makes the classes
+overlap at -0.199.
+
+That workload lands at 0.657, in the review band, and stays there. Stress
+recall falls to 0.91 and the stress margin to 0.180. Confirming an agent on
+that evidence would be guessing, and a corpus containing only cases the
+classifier passes is not measuring anything.
+
+**A third number is printed.** The review threshold's clearance: how far the
+nearest workload sits from the line at which a human is asked to look. It is
+0.010, and was 0.030 before the removal. The comment beside those thresholds
+has always claimed measured empty space, which is true of the agent threshold
+and never was of this one — and three of the four figures in that comment were
+stale, so a test now holds them against the corpus.
+
 ### The signal that carries the product was measuring the protocol
 
 `egress_asymmetry` is the finding this whole product rests on: an agent resends

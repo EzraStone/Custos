@@ -239,6 +239,35 @@ destination names that resolved for every endpoint when real accounts have
 untagged ENIs. Each made the product look better here than it would in a
 customer's account, and each hid a real defect until someone went looking.
 
+## Adding or removing a signal
+
+`a0/custos_a0/ablation.py` measures what each one is worth: remove it,
+re-measure the margin. Run it before arguing about a weight.
+
+**Ask both corpora.** The base corpus is easy enough that four of five signals
+are redundant, so a signal can read 0.000 there and be the difference between
+separated classes and overlapping ones on the stress corpus. `make gates`
+prints the stress table for that reason.
+
+**A signal reading zero is a question, not an answer.** It means either the
+signal does nothing or the corpus never contains the case it was carried for,
+and those need opposite responses. The way to tell them apart is to add the
+case and measure again — `mcp_fingerprint` read 0.000 on both corpora until a
+workload existed that needed it, and then removing it made the classes
+overlap.
+
+**A signal reading negative is different.** `offhours_activity` was costing
+0.07 of margin on both corpora, and no corpus addition fixes a signal that is
+separating on the wrong question. It was rejected with the reason written into
+`REJECTED`, which is where a signal goes rather than into a lower weight: a
+weight says "worth a little", and the measurement said "worth less than
+nothing".
+
+**Do not move a threshold to make a workload land where you want it.** That is
+fitting to eleven workloads. If a removal leaves a workload a hundredth from a
+threshold, record the clearance — the sweep prints it — and leave the
+threshold alone.
+
 ## Changing the G0 result
 
 `a0/tests/test_g0.py` pins the numbers that were the basis for proceeding past
@@ -270,6 +299,14 @@ own TLS record and its own segment, which is 187 bytes for the same token. That
 was not a measurement anybody had to take — the envelope is documented and the
 rest follows — and it was wrong by forty-four times in the direction that
 flatters the product.
+
+**Assert that the capture is physically possible.**
+`a0/tests/test_capture_is_possible.py` checks what an Ethernet path imposes: no
+packet smaller than its own headers, none larger than the MTU, bytes and
+packets agreeing about whether anything happened, every record inside the
+window the capture claims. Four of those six passed the first time they were
+written and two did not, and one of the two was a real hole — the capture
+contained traffic from after the window it advertised.
 
 **When a protocol detail has two settings, model both and assert neither.**
 Whether real agent traffic streams is a question about customers. The corpus
