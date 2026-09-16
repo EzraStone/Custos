@@ -145,3 +145,30 @@ def test_the_ratio_is_identical_for_two_clients_configured_differently():
     assert abs(a["egress_ratio"] - b["egress_ratio"]) / a["egress_ratio"] < 0.05, (
         a["egress_ratio"], b["egress_ratio"]
     )
+
+
+# --- and nothing computed for nobody ----------------------------------------
+
+
+def test_every_feature_is_read_by_a_signal():
+    """A field on Features that no signal reads is work done for nobody.
+
+    Not merely waste. `Features` is the documented interface between what can
+    be observed and what can be concluded, so a field sitting in it reads as
+    evidence the classifier weighs — in the dataclass, in the report's debug
+    surfaces, and to anyone deciding whether a new signal is redundant.
+
+    It has happened once already. `offhours_egress_fraction` outlived the
+    signal that read it by exactly as long as it took to write this.
+    """
+    import dataclasses
+
+    from custos.classify.features import Features
+
+    read = _attribute_names(signals)
+    fields = {f.name for f in dataclasses.fields(Features)}
+    orphaned = fields - read
+    assert not orphaned, (
+        f"nothing reads {sorted(orphaned)}. Either a signal should, or the "
+        "field should go: a feature nobody reads still reads as evidence."
+    )
