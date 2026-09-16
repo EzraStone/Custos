@@ -4,6 +4,20 @@ Notable changes, newest first. Dates are when the work landed on `main`.
 
 ## Unreleased
 
+### Three defects in the correction, all pointing the same way
+
+Found by re-reading the week's own code rather than by any test. A ratio
+computed against a payload that clamped to zero, hitting its cap at a million
+to one; a discriminator with no minimum sample, deciding a 42x correction on
+six packets; and model bytes summed over the calls rather than over every
+window, which dropped the tail of a response from the ratio's denominator.
+
+All three inflate the ratio, which is to say all three point at false
+positives — which a correction whose job is to remove bytes from a denominator
+was always going to do. None of them moved a gate, because no workload in
+either corpus has an unreadable response, a six-packet conversation or an
+acknowledgement-only window.
+
 ### Six features computed for nobody
 
 Five outlived signals that were measured and rejected — context growth, episode

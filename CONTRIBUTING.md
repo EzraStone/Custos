@@ -92,6 +92,26 @@ find controlplane -name __pycache__ -exec rm -rf {} +
 Go does not have this problem — its build cache keys on content rather than
 timestamps.
 
+## Read the arc back before you call it done
+
+Three defects in one week came from re-reading code written a day earlier, and
+none of them moved a number. No workload in either corpus had an unreadable
+response, a six-packet model conversation or an acknowledgement-only window, so
+every gate was identical before and after the fixes. A green suite said nothing
+about any of them.
+
+Two questions find this class:
+
+**What does this do when the input is degenerate?** Empty, clamped, one packet,
+one window. The arithmetic in this repository is full of denominators, and a
+denominator that reaches zero does not produce an error — it produces a
+confident number at the edge of its range.
+
+**Which way does it err?** Every one of those three pointed at false
+positives, and in hindsight a correction whose whole job is to *remove* bytes
+from a denominator was always going to err that way. Knowing the direction in
+advance is most of finding them.
+
 ## Meta-tests
 
 Several tests in this repository test the repository rather than the product:
