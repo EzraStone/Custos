@@ -97,3 +97,31 @@ def test_unattributable_eni_is_dropped_not_merged():
     recs = [rec(5, "160.79.104.10", 443, Direction.EGRESS, 10_000, eni="eni-orphan")]
     out = sessionize(recs, {}, {}, {}, T0, MIN)
     assert out == []
+
+
+def test_per_peer_state_is_bounded_by_endpoints_not_by_records():
+    """The cost of keeping model traffic per destination.
+
+    A window holds one entry per model endpoint it reached, and a real account
+    reaches a handful. If that key were ever something unbounded — a source
+    port, a 5-tuple — a busy window would hold an entry per connection and the
+    memory of a batch would scale with its records rather than with the
+    account's shape.
+
+    Ingest is the path with a documented ceiling (`deploy/README.md`), so this
+    is the property that has to hold rather than a wall-clock figure that
+    depends on the machine. Measured cost of the change that introduced it:
+    463k to 428k records a second, about 8%.
+    """
+    from custos.classify.episodes import build_windows
+
+    peers = ["160.79.104.10", "104.18.6.10", "52.94.236.10"]
+    recs = []
+    for i in range(3_000):
+        peer = peers[i % len(peers)]
+        recs.append(rec(i % 50, peer, 443, Direction.EGRESS, 1_000, srcport=40_000 + i))
+        recs.append(rec(i % 50, peer, 443, Direction.INGRESS, 500, srcport=40_000 + i))
+
+    windows = build_windows(recs, T0, MIN)
+    for w in windows:
+        assert len(w.model_peers) <= len(peers), len(w.model_peers)

@@ -127,6 +127,13 @@ requests per second. Two measurements bracket it:
 | A quiet account (the A0 corpus, one day) | 11,588 | 5.6MB | **0.3s** |
 | The collector's own record limit | 500,000 | 225MB | **25s** |
 
+Sessionising — grouping records by principal and turning wire bytes into
+payload — is about 430,000 records a second on that hardware, so roughly a
+second of the 25. Keeping model traffic per destination cost about 8% of that
+(463k to 428k); what would cost more than a percentage is keying it on
+something unbounded, so a test asserts the per-window state is bounded by the
+number of endpoints an account reaches rather than by its records.
+
 At an hourly interval a process has 3,600 seconds to spend. That is roughly 140
 accounts running at the collector's ceiling, or thousands of quiet ones — and
 neither is the number that will bite first. What bites first is a handful of
