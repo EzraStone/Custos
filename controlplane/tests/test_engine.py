@@ -268,3 +268,21 @@ def test_a_window_that_only_acknowledged_still_counts_its_bytes():
     f = extract(t)
     assert f.total_model_ingress > 700_000, f.total_model_ingress
     assert f.model_windows == 1
+
+
+def test_a_candidate_signal_is_not_a_shipped_one():
+    """CANDIDATES records what was measured and not adopted. Nothing in it may
+    be wired into the classifier, or the distinction it exists to draw — the
+    difference between an idea with numbers behind it and one with a corpus
+    behind it — has quietly collapsed."""
+    from custos.classify.signals import CANDIDATES, SIGNALS
+
+    shipped = {s.id for s in SIGNALS}
+    assert not (shipped & set(CANDIDATES)), shipped & set(CANDIDATES)
+
+
+def test_candidates_and_rejections_do_not_overlap():
+    """A signal is measured-and-wrong or measured-and-unproven, not both."""
+    from custos.classify.signals import CANDIDATES, REJECTED
+
+    assert not (set(CANDIDATES) & set(REJECTED))

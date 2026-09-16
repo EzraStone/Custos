@@ -175,6 +175,40 @@ are not agents, and a classifier that forgets that generates a report nobody
 finishes reading."""
 
 
+CANDIDATES: dict[str, str] = {
+    "work_per_request_variance": (
+        "Coefficient of variation of model egress per inbound request, across "
+        "windows. The idea is real: a chatbot does a fixed amount of work per "
+        "request — retrieval-augmented generation is embed, retrieve, generate "
+        "and then it stops — while an agent loops until it decides it is done, "
+        "so the work per request varies.\n\n"
+        "It is the only thing measured so far that separates the interactive "
+        "workloads, where every shipped signal overlaps or inverts. Among the "
+        "coupled, tool-calling workloads in the stress corpus it reads 0.30 and "
+        "0.30 for the two agents against 0.15 and 0.11 for the two chatbots.\n\n"
+        "Not adopted, for two reasons that both have to be fixed by data rather "
+        "than by thinking harder.\n\n"
+        "It fires hardest on a negative. The embedding service reads 1.13 and "
+        "the simple chatbot 0.51, both above every agent, so it would need an "
+        "availability predicate scoping it to workloads that interleave tool "
+        "calls — and a signal that has to be fenced off from most of the corpus "
+        "to stop being wrong is a signal being fitted.\n\n"
+        "And the magnitude is an artefact of the corpus. The chatbots were "
+        "written with fixed-length request handling and the agents with loops "
+        "of two or three steps, so measuring that agents vary more is measuring "
+        "the generator. The shape is defensible; the numbers are circular. One "
+        "real capture of an interactive assistant settles it, and this is the "
+        "first thing to compute on one."
+    ),
+}
+"""Signals that might work and have not earned their place yet.
+
+Separate from REJECTED, which is for things measured and found wrong. These are
+measured and found promising against a corpus that cannot validate them, which
+is a different state and would be lost if the only two categories were shipped
+and rejected."""
+
+
 REJECTED: dict[str, str] = {
     "context_growth": (
         "The specification's 'monotonically growing payload size'. Measured on the "
