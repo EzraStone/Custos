@@ -81,8 +81,16 @@ def extract(t: PrincipalTelemetry) -> Features:
     model_windows = t.model_windows
     n_model = len(model_windows)
 
-    total_out = sum(w.model_egress for w in model_windows)
-    total_in = sum(w.model_ingress for w in model_windows)
+    # Over every window, not only the model-active ones. `has_model` asks
+    # whether the workload *called* a model in this interval, which is the
+    # right denominator for the fractions below and the wrong set to sum bytes
+    # over: a window carrying only the tail of a response — acknowledgements
+    # outbound, payload inbound — is not a call and does contain bytes.
+    #
+    # Summing over model_windows dropped those inbound bytes from the ratio's
+    # denominator, which inflates the ratio, which points at false positives.
+    total_out = sum(w.model_egress for w in t.windows)
+    total_in = sum(w.model_ingress for w in t.windows)
 
     have_logs = t.inbound_logs_available
     coupling = 0.0

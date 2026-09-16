@@ -230,3 +230,41 @@ def test_asymmetry_is_available_whenever_there_is_something_to_read():
     _, firings, unavailable = score(BASE)
     assert "egress_asymmetry" not in unavailable
     assert any(f.id == "egress_asymmetry" for f in firings)
+
+
+def test_a_window_that_only_acknowledged_still_counts_its_bytes():
+    """The tail of a response spilling into the next interval.
+
+    `has_model` asks whether the workload called a model in this window, and
+    answers on outbound payload — which an acknowledgement-only window has
+    none of. That is the right denominator for the coupling and interleave
+    fractions and the wrong set to sum bytes over: those inbound bytes are real
+    and dropping them from the ratio's denominator inflates the ratio, which
+    points at false positives.
+
+    Reachable only since byte counts became payload. Before that, the
+    acknowledgements themselves counted as outbound model traffic and the
+    window was never excluded.
+    """
+    from datetime import UTC, datetime
+
+    from custos.classify.episodes import PeerTraffic, PrincipalTelemetry, Window, _to_payload
+    from custos.classify.features import extract
+
+    t0 = datetime(2026, 9, 16, 12, 0, tzinfo=UTC)
+    called = Window(start=t0)
+    called.model_peers["160.79.104.10"] = PeerTraffic(
+        egress=4_000_000, ingress=200_000, egress_packets=3_000, ingress_packets=400,
+    )
+    tail = Window(start=t0)
+    tail.model_peers["160.79.104.10"] = PeerTraffic(
+        egress=40 * 52, ingress=600_000, egress_packets=40, ingress_packets=800,
+    )
+
+    t = PrincipalTelemetry(principal="arn:aws:iam::1:role/x", windows=[called, tail])
+    _to_payload(t.windows)
+    assert not tail.has_model, "the tail is not a call"
+
+    f = extract(t)
+    assert f.total_model_ingress > 700_000, f.total_model_ingress
+    assert f.model_windows == 1
