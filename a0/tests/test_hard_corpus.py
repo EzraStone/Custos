@@ -103,16 +103,21 @@ def test_no_false_positives_on_the_stress_corpus(built_in, extended):
 def test_the_stress_margin_is_recorded_and_narrower(extended):
     """The honest number.
 
-    The base corpus separates by 0.49. This corpus separates by roughly three
-    quarters of that. Accuracy holds and every verdict is correct, but the
-    headroom is materially smaller — which is what the first real capture will
-    eat into.
+    The base corpus separates by 0.49. This corpus separates by 0.18, and one
+    of its agents is not confirmed at all: the IDE assistant lands in the
+    review band at 0.657.
+
+    That is the corpus getting harder rather than the classifier getting
+    worse. The workload was added because an ablation said mcp_fingerprint
+    contributed nothing, which was a fact about a corpus where every MCP user
+    already scored 0.995 on everything else. With the case it was carried for
+    present, removing that signal collapses the classes into each other.
 
     Pinned so a change that narrows it further has to be noticed.
     """
     margin = extended.separation_margin
     assert margin > 0, "the classes must still separate"
-    assert 0.32 < margin < 0.40, f"stress margin moved to {margin:.3f}"
+    assert 0.15 < margin < 0.24, f"stress margin moved to {margin:.3f}"
 
 
 # --- the CLI ------------------------------------------------------------------
@@ -248,3 +253,42 @@ def test_declaring_the_gateway_uses_the_mechanism_that_ships():
     built = body(evaluate.stress_declarations)
     assert "catalog.extend" not in built
     assert "Declaration" in built and "build(" in built
+
+
+def test_the_mcp_only_agent_is_offered_rather_than_missed(extended):
+    """The hard positive added to test a signal, and what happens to it.
+
+    An IDE assistant is inbound-coupled — a person types, then it works — and
+    its trajectories are two or three steps, so neither strong signal has much
+    to go on. It lands at 0.657: not confirmed, and not dropped either.
+
+    That is SEC-17 working rather than failing. The alternative readings are
+    worse in both directions: confirming it on this evidence would be guessing,
+    and dropping it silently is the failure mode the review band exists to
+    prevent.
+    """
+    row = _row(extended, "ide-assistant-backend")
+    assert row.label is Label.AGENT
+    assert row.verdict.disposition.value == "review", row.verdict.confidence
+    assert 0.55 < row.verdict.confidence < 0.75, row.verdict.confidence
+
+
+def test_the_mcp_fingerprint_is_load_bearing_once_the_corpus_needs_it():
+    """The measurement that justifies the signal's weight.
+
+    It contributed 0.000 of separation on both corpora until this workload
+    existed. Removing it now makes the classes overlap — a negative margin,
+    which means no threshold separates them at all.
+    """
+    from custos_a0 import corpus as corpus_mod
+    from custos_a0.ablation import run_ablation
+    from custos_a0.evaluate import SCENARIOS, stress_declarations
+
+    rows = run_ablation(
+        corpus_mod.build(corpus_mod.CorpusSpec(hard=True)),
+        SCENARIOS[0],
+        stress_declarations(),
+    )
+    mcp = next(a for a in rows if a.removed == "mcp_fingerprint")
+    assert mcp.margin < 0, mcp.margin
+    assert mcp.load_bearing

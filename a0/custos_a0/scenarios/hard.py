@@ -31,6 +31,11 @@ Four workloads, each aimed at a specific assumption:
                           nobody has to be asked, because AWS knows what that
                           ENI is and will say so.
 
+    agent_interactive_mcp the positive only the MCP fingerprint catches.
+                          Inbound-coupled and short-trajectoried, so both of
+                          the strong signals are weak, and it drives an MCP
+                          server.
+
     agent_via_published_endpoint
                           the residue. Model calls go over PrivateLink to a
                           service another AWS account published, which AWS
@@ -51,6 +56,7 @@ from ..endpoints import (
     BEDROCK_PRIVATELINK,
     BILLING_API,
     DEPLOY_API,
+    MCP_FILES,
     MCP_GITHUB,
     ORDERS_DB,
     PROVIDER_PRIVATELINK,
@@ -250,5 +256,58 @@ def agent_via_published_endpoint(rng: Random, start: datetime, end: datetime) ->
 
     for at in uniform_arrivals(rng, start, end, 3.0):
         agent_episode(w, rng, at, 5 + rng.randrange(7), PROVIDER_PRIVATELINK, tools)
+
+    return w
+
+
+def agent_interactive_mcp(rng: Random, start: datetime, end: datetime) -> Workload:
+    w = Workload(
+        name="ide-assistant-backend",
+        principal="arn:aws:iam::447120043318:role/ide-assistant",
+        scenario="agent_interactive_mcp",
+        label=Label.AGENT,
+        compute="ECS",
+        note=(
+            "THE POSITIVE THAT ONLY MCP CATCHES. A coding assistant behind an "
+            "editor: every trajectory starts with a person typing, so the "
+            "decoupling signal is nearly absent, and each one is two or three "
+            "steps so the transcript barely accumulates and the asymmetry is "
+            "weak. What it does do is drive an MCP server, which is what an "
+            "agent is for and what nothing else in this corpus needed the "
+            "fingerprint to see.\n\n"
+            "Added because an ablation measured mcp_fingerprint as contributing "
+            "0.000 of separation on both corpora — every workload reaching an "
+            "MCP server was already scoring 0.995 on the other signals, so the "
+            "signal had nothing left to do. That is a fact about the corpus, "
+            "not about the signal, and the way to tell the difference is to "
+            "put in the case it was carried for."
+        ),
+    )
+    tools = [MCP_GITHUB, MCP_FILES]
+
+    for at in poisson_arrivals(rng, start, end, 18.0):
+        rid = f"req-{int(at.timestamp() * 1e6)}"
+        _inbound(w, at, rid, 1_400, 4_200)
+        t = at + jitter(rng, timedelta(milliseconds=60), 0.5)
+        # Two or three steps. Short enough that cumulative egress never pulls
+        # far ahead of what comes back.
+        for step in range(2 + rng.randrange(2)):
+            w.calls.append(Call(
+                at=t, kind=CallKind.MODEL, endpoint=ANTHROPIC,
+                req_bytes=tok(900 + 700 * step + 200 * rng.random()),
+                **reply(260 + 200 * rng.random()),
+                request_id=rid, step=step * 2,
+            ))
+            t += jitter(rng, timedelta(milliseconds=800), 0.3)
+            tool = tools[rng.randrange(len(tools))]
+            w.calls.append(Call(
+                at=t, kind=CallKind.TOOL, endpoint=tool,
+                req_bytes=tok(120 + 80 * rng.random()),
+                resp_bytes=tok(600 + 900 * rng.random()),
+                request_id=rid, step=step * 2 + 1,
+            ))
+            t += jitter(rng, timedelta(milliseconds=180), 0.4)
+        if t >= end:
+            break
 
     return w
