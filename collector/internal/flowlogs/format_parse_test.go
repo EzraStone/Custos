@@ -167,3 +167,31 @@ var known = map[string]bool{
 	"flow-direction": true, "log-status": true, "packets": true,
 	"pkt-dst-aws-service": true, "pkt-src-aws-service": true,
 }
+
+// TestAFormatWithoutPacketsSaysWhatItCosts: the field was neither required nor
+// optional until packet counts started deciding something, and a format
+// without it parses perfectly while every byte figure quietly becomes wire
+// bytes — acknowledgements, TLS handshakes and streaming framing included.
+//
+// AWS's own default format carries it, so this is about the customer who
+// hand-rolled a minimal one to keep the flow log bill down. That is the
+// cost-conscious platform team, which is the target profile.
+func TestAFormatWithoutPacketsSaysWhatItCosts(t *testing.T) {
+	f := MustParseFormat(
+		"version account-id interface-id srcaddr dstaddr srcport dstport " +
+			"protocol bytes start end action log-status",
+	)
+	d := strings.Join(f.Degradations(), "\n")
+
+	if !strings.Contains(d, "packets absent") {
+		t.Fatalf("the cost of no packet counts is not disclosed:\n%s", d)
+	}
+	if !strings.Contains(d, "spend") {
+		t.Fatalf("does not say what it costs:\n%s", d)
+	}
+	// And it is still a usable format: this degrades a figure, it does not
+	// stop the scan.
+	if !f.Usable() {
+		t.Fatal("a format without packet counts was rejected as unusable")
+	}
+}
