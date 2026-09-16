@@ -54,12 +54,32 @@ def cmd_scan(args: argparse.Namespace) -> int:
     print(f"flow records  {len(batch.flows):,}")
     print(f"agents found  {len(outcome.result.register.agents)}")
     print(f"for review    {len(outcome.result.review_candidates)}")
+    # Not a third disposition — these were dismissed, and this is the count
+    # that says the dismissal rests on evidence that does not separate them.
+    # A CI job reads the two lines above and nothing else; a clean pair of
+    # numbers with no mention of this is a coverage claim nothing supports.
+    if outcome.coverage.interactive_unresolved:
+        print(f"undecidable   {outcome.coverage.interactive_unresolved}")
     if outcome.batch.duplicate:
         print("note          this window had already been ingested; the batch was replaced")
     if outcome.coverage_note:
         print(f"limited by    {outcome.coverage_note}")
     print()
     print(outcome.result.headline)
+
+    if outcome.coverage.interactive_unresolved:
+        n = outcome.coverage.interactive_unresolved
+        subject = (
+            "1 workload answers inbound requests and calls"
+            if n == 1
+            else f"{n} workloads answer inbound requests and call"
+        )
+        print(
+            f"{subject} internal services between model calls.\n"
+            "An agent of that shape and a retrieval-augmented chatbot look the "
+            "same here, so\nnone of them is above — including any that is an "
+            "agent."
+        )
 
     if outcome.diff.actionable:
         print()

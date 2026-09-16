@@ -53,6 +53,43 @@ def test_scan_reports_findings_and_exits_nonzero(db, batch_file, capsys):
     assert "agents found  5" in out
 
 
+def test_scan_says_which_workloads_it_could_not_decide_about(db, batch_file, capsys):
+    """The two counts above this are what a CI job reads.
+
+    "agents found 5, for review 1" is a complete-looking answer. It is not one
+    while a workload in the account has a shape this scan cannot judge, and
+    the operator has no other surface in a CI log.
+    """
+    main(["--db", db, "scan", str(batch_file)])
+    out = capsys.readouterr().out
+    assert "undecidable   1" in out
+    assert "answers inbound requests and calls internal services" in out
+    assert "including any that is an agent" in out
+
+
+def test_the_undecidable_line_is_absent_when_there_are_none(db, tmp_path, capsys):
+    """A line that appears whatever happened is one a reader stops seeing.
+
+    Also the discriminating half of the test above: if this rendered
+    unconditionally, "undecidable 1" would prove nothing about the count.
+    """
+    import json
+
+    from custos_a0 import corpus
+    from custos_a0.batchbridge import build_batch
+
+    body = build_batch(corpus.build(corpus.CorpusSpec(days=1))).model_dump(mode="json")
+    body["account_id"] = ACCOUNT
+    body["flows"] = []
+    body["requests"] = []
+    path = tmp_path / "empty.json"
+    path.write_text(json.dumps(body))
+
+    main(["--db", db, "scan", str(path)])
+    out = capsys.readouterr().out
+    assert "undecidable" not in out
+
+
 def test_scan_writes_a_self_contained_report(db, batch_file, tmp_path):
     report = tmp_path / "report.html"
     main(["--db", db, "scan", str(batch_file), "--out", str(report)])
