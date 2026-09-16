@@ -533,6 +533,55 @@ func TestPublicIPv6DestinationsAreWarnedAboutBeforeTheScan(t *testing.T) {
 	}
 }
 
+func TestPublicIPv6DestinationsAreNamedNotJustCounted(t *testing.T) {
+	// The remedy says "declare it". A count cannot be acted on: the customer
+	// is the only one who can recognise their model provider, and they can
+	// only do that if they are told which addresses we mean.
+	report := run(good(), stubFlows{
+		records: v6Records("2606:4700::1", "2606:4700::2", "2606:4700::1"),
+		stats:   flowlogs.Stats{Lines: 3, Parsed: 3},
+	})
+	result := find(t, report, "ipv6 destinations")
+
+	if !strings.Contains(result.Detail, "2606:4700::1") {
+		t.Fatalf("does not name the address: %q", result.Detail)
+	}
+	if !strings.Contains(result.Detail, "MB out") {
+		t.Fatalf("names the address without saying how much went to it: %q", result.Detail)
+	}
+	if !strings.Contains(result.Remedy, "endpoints declare") {
+		t.Fatalf("remedy does not say how to act on it: %q", result.Remedy)
+	}
+}
+
+func TestTheLoudestIPv6DestinationIsNamedFirst(t *testing.T) {
+	// Cut at three, so an alphabetical order would drop the destination worth
+	// recognising to keep one that sent a kilobyte. The records builder sends
+	// the same bytes per record, so repetition is the volume.
+	var records []wire.FlowRecord
+	records = append(records, v6Records("2606:4700::a")...)
+	for i := 0; i < 4; i++ {
+		records = append(records, v6Records("2606:4700::b")...)
+	}
+	records = append(records, v6Records("2606:4700::c", "2606:4700::d", "2606:4700::e")...)
+
+	report := run(good(), stubFlows{
+		records: records,
+		stats:   flowlogs.Stats{Lines: len(records), Parsed: len(records)},
+	})
+	detail := find(t, report, "ipv6 destinations").Detail
+
+	if !strings.Contains(detail, "2606:4700::b") {
+		t.Fatalf("the loudest destination is not named: %q", detail)
+	}
+	if !strings.Contains(detail, "more not named") {
+		t.Fatalf("cut the list without saying how many were dropped: %q", detail)
+	}
+	if strings.Index(detail, "2606:4700::b") > strings.Index(detail, "2606:4700::a") {
+		t.Fatalf("not loudest first: %q", detail)
+	}
+}
+
 func TestPrivateIPv6IsNotAWarning(t *testing.T) {
 	// A dual-stack VPC's internal traffic classifies fine. Warning about it
 	// would put this on every dual-stack account whether or not it had a

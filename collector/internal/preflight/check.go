@@ -288,7 +288,11 @@ func plural(n int, one, many string) string {
 // each year: AWS began charging for public IPv4 addresses in 2024 and
 // dual-stack VPCs are the response.
 func checkForIPv6(report *Report, records []wire.FlowRecord) {
-	seen := map[string]bool{}
+	// Bytes sent, not a presence set. The advice this check gives is "tell us
+	// the addresses so they can be declared", and for two releases it printed
+	// a count — asking a customer to act on information it had and withheld.
+	// Ranking needs a magnitude, and the one that matters is how much left.
+	sent := map[string]int64{}
 	for _, r := range records {
 		peer := r.DstAddr
 		if r.Direction == wire.Ingress {
@@ -312,22 +316,60 @@ func checkForIPv6(report *Report, records []wire.FlowRecord) {
 		if service != "" {
 			continue
 		}
-		seen[peer] = true
+		// Egress only. An address this account mostly receives from is not
+		// somewhere it is sending prompts, and the point of naming these is
+		// to let somebody recognise their model provider.
+		if _, ok := sent[peer]; !ok {
+			sent[peer] = 0
+		}
+		if r.Direction != wire.Ingress {
+			sent[peer] += r.Bytes
+		}
 	}
-	if len(seen) == 0 {
+	if len(sent) == 0 {
 		report.add("ipv6 destinations", Pass, "none reached", "")
 		return
 	}
 
-	report.add("ipv6 destinations", Warn,
-		fmt.Sprintf("%d public IPv6 addresses reached; the model endpoint "+
-			"catalogue is IPv4 only", len(seen)),
+	type dest struct {
+		peer string
+		out  int64
+	}
+	loudest := make([]dest, 0, len(sent))
+	for peer, out := range sent {
+		loudest = append(loudest, dest{peer: peer, out: out})
+	}
+	// Loudest first, and cut at three like the gateway list. An alphabetical
+	// cut across a dual-stack account throws away the destination worth
+	// recognising to keep one that sent a kilobyte.
+	sort.Slice(loudest, func(i, j int) bool {
+		if loudest[i].out != loudest[j].out {
+			return loudest[i].out > loudest[j].out
+		}
+		return loudest[i].peer < loudest[j].peer
+	})
+	total := len(loudest)
+	if len(loudest) > 3 {
+		loudest = loudest[:3]
+	}
+
+	named := make([]string, 0, len(loudest))
+	for _, d := range loudest {
+		named = append(named, fmt.Sprintf("%s (%.1fMB out)", d.peer, float64(d.out)/1e6))
+	}
+	detail := fmt.Sprintf("%d public IPv6 address(es) reached; the model "+
+		"endpoint catalogue is IPv4 only: %s", total, strings.Join(named, "; "))
+	if total > len(loudest) {
+		detail += fmt.Sprintf("; %d more not named", total-len(loudest))
+	}
+
+	report.add("ipv6 destinations", Warn, detail,
 		"an agent reaching Anthropic or OpenAI over IPv6 will not appear in "+
 			"the report at all; AWS's own model endpoints are unaffected, "+
 			"because the flow log names the service rather than the address "+
-			"family. If these workloads call third-party model APIs, prefer "+
-			"IPv4 egress for them or tell us the addresses so they can be "+
-			"declared")
+			"family. If you recognise any of these as a model API, declare "+
+			"it — `custos endpoints declare <address>/128` — or prefer IPv4 "+
+			"egress for the workloads reaching it")
 }
 
 // checkFormat says what the account's flow log format costs, before the scan.
