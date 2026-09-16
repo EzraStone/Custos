@@ -32,13 +32,15 @@ paying customer asks for it.
 
 **Gate G0 passed.** The load-bearing assumption — that an agent is
 distinguishable from a chatbot backend using metadata alone — is tested and
-holds, with a 0.26 separation margin, full recall, and zero false positives.
+holds, with a 0.49 separation margin, full recall, and zero false positives.
+It reads the same whether or not the account's model clients stream, which it
+did not until the classifier stopped measuring wire bytes.
 
 Against a harder corpus added afterwards — agents that pause for human
-approval, agents on batch schedules, chatbots with function calling — every
-verdict is still correct and there are still no false positives, but the margin
-falls to **0.14**. That is the number to quote wherever the first one would be
-doing work.
+approval, agents on batch schedules, chatbots with function calling, an IDE
+assistant nothing but the MCP fingerprint can see — the margin falls to
+**0.18** and one of those agents is not confirmed at all. That is the number
+to quote wherever the first one would be doing work.
 
 That corpus also contains an agent whose model calls go through a self-hosted
 gateway. It is missed, and it is meant to be: a model endpoint we do not
