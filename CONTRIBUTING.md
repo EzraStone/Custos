@@ -107,10 +107,20 @@ one window. The arithmetic in this repository is full of denominators, and a
 denominator that reaches zero does not produce an error — it produces a
 confident number at the edge of its range.
 
-**Which way does it err?** Every one of those three pointed at false
-positives, and in hindsight a correction whose whole job is to *remove* bytes
-from a denominator was always going to err that way. Knowing the direction in
-advance is most of finding them.
+**Which way does it err?** Three of the four pointed at false positives, and in
+hindsight a correction whose whole job is to *remove* bytes from a denominator
+was always going to err that way. Knowing the direction in advance is most of
+finding them.
+
+**And who else reads the same bytes?** The fourth was the expensive one and it
+was not a wrong number, it was silence. The correction was applied to model
+byte counts and stopped there; tool byte counts kept the protocol in them, and
+the gateway detector reads those — so on an account whose clients stream it
+asked no questions at all, which is the artefact a hidden gateway produces.
+
+The correction existed twice, once per side, which is how it came to exist on
+one side only. If two places do the same arithmetic to the same kind of
+number, they are one function or they will diverge.
 
 ## Meta-tests
 
