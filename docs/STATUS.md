@@ -76,13 +76,16 @@ Reproduce with `make experiment`. CI fails the build if it stops holding.
 ```
 G0, base corpus          separation margin 0.485, headroom 0.162, review gap 0.010
 the classifier, stress   separation margin 0.180, recall 0.91, one agent in review
-the gateway detector     3 questions, 2 worth asking, both real ones shown
+the gateway detector     3 questions, 2 worth asking, both real ones shown,
+                         identical whether or not the account streams
 which signal carries it  tool_interleave 0.448, mcp_fingerprint 0.378 (stress)
-payload bytes per token  4.12-4.29 both ways round, discriminator at 600
+payload bytes per token  4.12-4.29 across 24 conversations, discriminator at 600
 scope readability        26 of 26 nameable interfaces
 ```
 
-That is the set anyone asking what is real will want together, and four of the
+Every one of those is reproducible from a clean checkout in under two minutes,
+and the numbers in this document are the ones those commands print. That is the
+set anyone asking what is real will want together, and four of the
 five started at a number worth being embarrassed by: the stress margin at half
 the headline, the detector at 0.00, readability at 46%, and the conversion at a
 single constant that is wrong by forty-four times for half the accounts that
