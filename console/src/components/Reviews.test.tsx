@@ -60,3 +60,45 @@ describe("the review band", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 });
+
+describe("workloads nothing could decide about", () => {
+  // The sentence is assembled from several JSX expressions, so it is several
+  // text nodes and `getByText` can only ever see one of them. Reading the
+  // rendered text is what an operator does.
+  function text(container: HTMLElement): string {
+    return container.textContent?.replace(/\s+/g, " ") ?? "";
+  }
+
+  it("still says nothing when there is nothing to disclose", () => {
+    const { container } = render(<Reviews reviews={[]} undecidable={0} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("speaks up when the review band is empty and the silence is not earned", () => {
+    // The case the disclosure exists for. Without it this account renders as
+    // "the classifier was sure about everything", which is true and useless.
+    const { container } = render(<Reviews reviews={[]} undecidable={3} />);
+    expect(text(container)).toContain("3 workloads answer inbound requests");
+    expect(text(container)).toContain("neither here nor in the register");
+  });
+
+  it("appears alongside the maybes when there are some", () => {
+    const { container } = render(<Reviews reviews={[review()]} undecidable={2} />);
+    expect(screen.getByText("nightly-doc-summariser")).toBeInTheDocument();
+    expect(text(container)).toContain("2 workloads answer inbound requests");
+  });
+
+  it("reads as English for one", () => {
+    const { container } = render(<Reviews reviews={[]} undecidable={1} />);
+    expect(text(container)).toContain("1 workload answers inbound requests");
+    expect(text(container)).toContain("it is neither here nor in the register");
+    expect(text(container)).toContain("If it runs a tool loop");
+  });
+
+  it("names nobody", () => {
+    // Deliberate. The overwhelming majority of workloads with this shape are
+    // ordinary chatbots, and a list would read as an accusation of each.
+    const { container } = render(<Reviews reviews={[]} undecidable={4} />);
+    expect(container.querySelector("li")).toBeNull();
+  });
+});

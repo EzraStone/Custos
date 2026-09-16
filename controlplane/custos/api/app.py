@@ -509,12 +509,26 @@ def create_app(
         """
         account_id = scope(principal, account)
         reviews = ReviewStore(app.state.db)
+        scans = ScanStore(app.state.db)
         return {
             "account_id": account_id,
             "reviews": [
                 {**r, "seen_in_scans": reviews.recurrence(account_id, r["principal"])}
                 for r in reviews.latest_for(account_id)
             ],
+            # Workloads the classifier was *not* unsure about and should have
+            # been: an assistant behind a chat box and a retrieval-augmented
+            # chatbot produce the same flow log, so these were dismissed on
+            # evidence that does not separate them.
+            #
+            # Here rather than in its own route because it is the number that
+            # says what an empty review list means. Summed across the latest
+            # scan per region for the same reason the coverage counts are: a
+            # principal belongs to one region's scan.
+            "undecidable": sum(
+                s.interactive_unresolved
+                for s in scans.latest_scan_per_region(account_id)
+            ),
         }
 
     def _open_questions(account_id: str) -> list[dict]:

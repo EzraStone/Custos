@@ -38,6 +38,7 @@ export function App() {
   const [candidates, setCandidates] = useState<GatewayCandidate[]>([]);
   const [declined, setDeclined] = useState(0);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [undecidable, setUndecidable] = useState(0);
   const [declaring, setDeclaring] = useState<string | null>(null);
   const [declareError, setDeclareError] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<string[] | null>(null);
@@ -77,6 +78,7 @@ export function App() {
     setDiff(null);
     setCandidates([]);
     setReviews([]);
+    setUndecidable(0);
     setAccounts(null);
     setFleet([]);
     setHealth(null);
@@ -131,6 +133,7 @@ export function App() {
       setCandidates("candidates" in gateways ? gateways.candidates : []);
       setDeclined("declined" in gateways ? (gateways.declined ?? 0) : 0);
       setReviews("reviews" in maybes ? maybes.reviews : []);
+      setUndecidable("undecidable" in maybes ? (maybes.undecidable ?? 0) : 0);
       if (status) setHealth(status);
     } catch (caught) {
       if (mine !== ticket.current) return;
@@ -442,7 +445,7 @@ export function App() {
         than pretending to show them. Saying "there are five and they are not
         here" is worth more than saying nothing.
       */}
-      <Reviews reviews={reviews} />
+      <Reviews reviews={reviews} undecidable={undecidable} />
 
       <Gateways
         candidates={candidates}

@@ -272,7 +272,8 @@ Workloads the classifier was unsure about in the last scan.
       "evidence": ["Sent 2.1MB and received 890.0KB, a ratio of 2.4:1."],
       "unavailable": ["decoupling"],
       "scan_id": 12, "seen_in_scans": 7 }
-  ]
+  ],
+  "undecidable": 3
 }
 ```
 
@@ -293,6 +294,19 @@ model-traffic signals are unavailable rather than zero, so it is not scored —
 see `GET /v1/gateway-candidates`, which names the workloads reaching each
 undeclared address. That is the surface for a workload we cannot see, and it
 asks a question rather than reporting a low confidence.
+
+`undecidable` counts a third category, and it is the number that says what an
+empty `reviews` means. These are workloads the classifier was *not* unsure
+about — it dismissed them, confidently, on evidence that does not separate
+them from what they might be. A workload that answers inbound requests and
+calls internal services between model calls is either an assistant behind a
+chat box or a retrieval-augmented chatbot, and a flow log shows the same thing
+for both. Dismissing them is the right default; being silent about having done
+it is not.
+
+There is no list, deliberately. The overwhelming majority of workloads with
+this shape are ordinary chatbots, and naming them would read as an accusation
+of each. What is actionable is that the shape is present in the account.
 
 `unavailable` names the signals that could not be evaluated — usually the
 decoupling signal, when the account has no load balancer access logs. A

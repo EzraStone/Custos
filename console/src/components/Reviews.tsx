@@ -22,9 +22,39 @@ import type { Review } from "../api/types";
  * model-traffic signals are unavailable rather than zero, so it is not scored.
  * What surfaces those is the gateway question above the register, which names
  * the workloads reaching each undeclared address.
+ *
+ * `undecidable` is the third category and the one with no list at all. These
+ * are workloads the classifier was *not* unsure about — it dismissed them,
+ * confidently, and the confidence is not warranted. An assistant behind a chat
+ * box and a retrieval-augmented chatbot produce the same flow log, so
+ * dismissing them is the right default and being silent about having done it
+ * is not.
  */
-export function Reviews({ reviews }: { reviews: Review[] }) {
-  if (reviews.length === 0) return null;
+export function Reviews({
+  reviews,
+  undecidable = 0,
+}: {
+  reviews: Review[];
+  /**
+   * Workloads dismissed as chatbots that this scan could not tell apart from
+   * an interactive agent.
+   *
+   * Rendered even when there are no reviews, which is the case it exists for.
+   * "The classifier was sure about everything" and "the classifier was sure
+   * about everything and three of those answers are not worth much" are
+   * different claims, and a console that draws both as nothing at all makes
+   * the second one unreadable.
+   */
+  undecidable?: number;
+}) {
+  if (reviews.length === 0) {
+    return undecidable > 0 ? (
+      <section className="reviews">
+        <h2>Nothing the classifier was unsure about</h2>
+        <Undecidable count={undecidable} />
+      </section>
+    ) : null;
+  }
 
   return (
     <details className="reviews">
@@ -37,6 +67,7 @@ export function Reviews({ reviews }: { reviews: Review[] }) {
         They are never written to the register — this is the whole of what is
         known about them.
       </p>
+      {undecidable > 0 ? <Undecidable count={undecidable} /> : null}
       <ul className="review-list">
         {reviews.map((review) => (
           <li key={review.principal}>
@@ -75,6 +106,30 @@ export function Reviews({ reviews }: { reviews: Review[] }) {
         ))}
       </ul>
     </details>
+  );
+}
+
+/**
+ * The workloads with no entry anywhere, and why there is no list.
+ *
+ * Naming them would be the obvious improvement and is the wrong one. The count
+ * is a property of the scan; the names would read as an accusation, and the
+ * overwhelming majority of workloads with this shape are ordinary chatbots.
+ * What an operator can act on is knowing the shape exists in their account.
+ */
+function Undecidable({ count }: { count: number }) {
+  return (
+    <p className="muted">
+      {count} {count === 1 ? "workload answers" : "workloads answer"} inbound
+      requests and {count === 1 ? "calls" : "call"} internal services between
+      model calls — the shape of an assistant behind a chat box or an editor.
+      An agent of that kind and a retrieval-augmented chatbot are identical in
+      everything a flow log shows, so {count === 1 ? "it is" : "they are"}{" "}
+      neither here nor in the register. If{" "}
+      {count === 1 ? "it runs" : "any of them runs"} a tool loop on its own
+      judgement, {count === 1 ? "it is" : "that one is"} an agent and nothing
+      above says so.
+    </p>
   );
 }
 

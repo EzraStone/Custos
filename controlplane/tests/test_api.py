@@ -831,6 +831,52 @@ def test_reviews_are_kept_not_just_counted(client, realistic_payload):
         assert body["reviews"][0]["evidence"], "a maybe with no evidence is a rumour"
 
 
+def test_reviews_disclose_the_workloads_nothing_could_decide_about(
+    client, realistic_payload
+):
+    """The number that says what an empty review list means.
+
+    A workload that answers inbound requests and calls internal services
+    between model calls is either an assistant behind a chat box or a
+    retrieval-augmented chatbot, and a flow log shows the same thing for both.
+    The classifier dismisses them, correctly; a console that renders "nothing
+    to review" without saying so is claiming a coverage guarantee nothing
+    supports.
+    """
+    _ingest_real_batch(client, realistic_payload)
+    body = client.get("/v1/reviews", headers=AUTH).json()
+    assert body["undecidable"] == 1, body["undecidable"]
+
+
+def test_the_harder_corpus_has_more_of_them(client, stress_payload):
+    """The assertion above is only evidence if the number can be different.
+
+    The stress corpus was built around this shape — an IDE assistant, a
+    support copilot, a knowledge-base assistant — so it has three where the
+    base corpus has one. A count that read the same on both would be counting
+    something other than what it claims to.
+    """
+    client.post("/v1/batches", json=stress_payload, headers=AUTH)
+    body = client.get("/v1/reviews", headers=AUTH).json()
+    assert body["undecidable"] == 3, body["undecidable"]
+
+
+def test_the_undecidable_count_names_nobody(client, realistic_payload):
+    """Deliberate, and asserted so it is not quietly improved into a list.
+
+    The overwhelming majority of workloads with this shape are ordinary
+    chatbots. A list of principals would read as an accusation of each, and
+    the actionable fact is that the shape is present in the account.
+    """
+    _ingest_real_batch(client, realistic_payload)
+    body = client.get("/v1/reviews", headers=AUTH).json()
+    assert isinstance(body["undecidable"], int)
+    assert not any(
+        isinstance(v, list) and v and isinstance(v[0], str) and "role/" in v[0]
+        for k, v in body.items() if k != "reviews"
+    ), "the count must not grow a list of principals beside it"
+
+
 def test_reviews_report_how_often_a_workload_recurs(client, realistic_payload):
     """One uncertain window is a different thing from every window for a
     month, and the count is the only way to tell."""

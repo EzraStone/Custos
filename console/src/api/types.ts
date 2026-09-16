@@ -213,6 +213,20 @@ export interface Review {
 export interface ReviewsResponse {
   account_id: string;
   reviews: Review[];
+  /**
+   * Workloads dismissed as chatbots that the scan could not tell apart from an
+   * interactive agent — one behind a chat box or an editor.
+   *
+   * Not reviews. The classifier was confident about these and the confidence
+   * is not warranted, which is a different thing from being unsure and has no
+   * list anywhere. An empty `reviews` means something different depending on
+   * this number.
+   *
+   * Optional: a control plane older than the field omits it, and a console
+   * that rendered "0 undecidable" against an older server would be claiming a
+   * coverage guarantee that server never made.
+   */
+  undecidable?: number;
 }
 
 export interface GatewayCandidate {
