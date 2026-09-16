@@ -117,10 +117,13 @@ gates: ## Every measured number this product rests on, in one run
 	@$(PY) -m custos_a0.cli experiment | tail -3
 	@echo
 	@echo "=== the classifier, stress corpus (quote this one) ==="
-	@$(PY) -m custos_a0.cli stress | tail -4
+	@$(PY) -m custos_a0.cli stress | grep -E "^(recall|missed:)"
 	@echo
 	@echo "=== the gateway detector, noise corpus ==="
 	@$(PY) -m custos_a0.cli questions | tail -2
+	@echo
+	@echo "=== which signal is carrying the result ==="
+	@$(PY) -m custos_a0.cli ablation | sed -n '/stress corpus/,$$p' | grep -E "^[a-z_]+ +[0-9]"
 	@echo
 	@echo "=== payload bytes per token, and how to tell it from the wire ==="
 	@$(PY) -m custos_a0.cli conversion | tail -2
