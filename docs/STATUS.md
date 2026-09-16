@@ -218,6 +218,14 @@ What is unmeasured is how much real agent traffic streams — a question about
 customers rather than protocols, so the corpus is built both ways and neither
 is asserted.
 
+**The correction assumes one token per SSE frame**, which is what Anthropic and
+OpenAI send. A provider that batches five tokens into a frame is over-corrected
+about fourfold, and the error points at false positives: too little payload
+makes the ratio look larger, which makes a workload look more like an agent.
+Measured in `make conversion`'s test, not corrected — the mean packet size
+carries some of the signal and not enough of it, and a factor derived from that
+would be invented. One real capture settles it.
+
 **The conversion was right and its input was wrong.** *(The entry above is what
 this turned into.)* The dollar figure that gets a report forwarded to somebody with a budget comes
 from dividing observed bytes by a constant. That constant was four in both

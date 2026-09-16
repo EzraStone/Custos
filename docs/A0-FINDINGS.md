@@ -595,6 +595,32 @@ That gap being narrow was the stated reason this signal is weighted alongside
 others rather than used as a threshold. The reason still holds for a different
 cause: eleven workloads do not justify a threshold however wide the gap looks.
 
+**The correction has an assumption of its own, and it points the wrong way.**
+41.9 is the inflation when one token rides in one SSE frame, which is what
+Anthropic and OpenAI do. A provider batching five tokens into a frame pays the
+envelope once for all five, and the correction then removes four times too
+much: payload reads 0.90 bytes per token where it should read 4.15.
+
+| tokens per frame | payload bytes per token |
+|---|---|
+| 1 | 4.12 |
+| 2 | 2.12 |
+| 5 | 0.90 |
+| 10 | 0.49 |
+
+Too small a payload makes the egress-to-ingress ratio look *larger*, which
+makes a workload look more like an agent. The error points at false positives,
+which is the failure this product can least afford — so it is worth more than
+the size of the number suggests.
+
+Nothing corrects for it. The mean packet size does move with batching, 232
+bytes at one token a frame to 341 at twenty, but the implied inflation reads
+4.7 where the truth is 41.9 because TCP coalescing means packets are not
+frames. A correction derived from that would be an invented number. The
+discriminator itself survives — a batched stream is still read as a stream and
+still corrected, just by the wrong factor, which is the better of the two
+failures.
+
 **What is still unmeasured.** How much real agent traffic streams — a question
 about customers, not protocols, so the corpus is built both ways and neither is
 asserted.

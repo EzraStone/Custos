@@ -50,7 +50,23 @@ SSE_INFLATION = 41.9
 frame, a TLS record and a TCP segment per token — and the denominator is the
 same response as a single body. A constant rather than a per-workload figure
 because the measurement found no meaningful spread: every workload in the
-corpus lands within a tenth of a byte per token at both ends."""
+corpus lands within a tenth of a byte per token at both ends.
+
+**It assumes one token per frame**, which is what Anthropic and OpenAI do. A
+provider batching five tokens into a frame pays the 114-byte envelope once for
+all five, so this removes about four times too much: payload reads 0.90 bytes
+per token where it should read 4.15 (`a0/tests/test_conversion.py`).
+
+That error points at false positives. Too small a payload makes the
+egress-to-ingress ratio look larger, which makes a workload look more like an
+agent, and a false positive is the failure this product can least afford.
+
+Nothing corrects for it. The mean packet size does move with batching — 232
+bytes at one token a frame, 341 at twenty — but not in a way that recovers the
+factor, because TCP coalescing means packets are not frames: the implied
+inflation reads 4.7 where the truth is 41.9. A correction derived from that
+would be an invented number, so the error is measured and stated instead. One
+real capture settles it."""
 
 STREAMED_PACKET_BYTES = 600.0
 """Mean size of an inbound data packet above which responses were not streamed.
