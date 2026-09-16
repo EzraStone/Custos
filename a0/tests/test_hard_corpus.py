@@ -231,10 +231,20 @@ def test_declaring_the_gateway_uses_the_mechanism_that_ships():
     # The docstring explains what it no longer does, so read the code only.
     # A source-text assertion that its own explanation trips is a test that
     # fails for the opposite of its reason.
-    source = inspect.getsource(evaluate.run_hard)
-    code = source[source.index('"""', source.index('"""') + 3) + 3:]
+    def body(fn) -> str:
+        # The docstrings explain what these no longer do, so read the code
+        # only. A source-text assertion its own explanation trips is a test
+        # that fails for the opposite of its reason.
+        source = inspect.getsource(fn)
+        return source[source.index('"""', source.index('"""') + 3) + 3:]
 
-    assert "catalog.extend" not in code, (
+    assert "catalog.extend" not in body(evaluate.run_hard), (
         "run_hard is simulating the remedy through global state again"
     )
-    assert "Declaration" in code and "build(" in code
+    # The declarations moved into their own function so the ablation could use
+    # the same ones. Follow them there rather than asserting on where they
+    # used to be: what matters is that they are still built through the
+    # per-account mechanism the product ships.
+    built = body(evaluate.stress_declarations)
+    assert "catalog.extend" not in built
+    assert "Declaration" in built and "build(" in built
