@@ -119,7 +119,7 @@ gates: ## Every measured number this product rests on, in one run
 	@echo "=== the gateway detector, noise corpus ==="
 	@$(PY) -m custos_a0.cli questions | tail -2
 	@echo
-	@echo "=== wire bytes per output token, and how to tell which ==="
+	@echo "=== payload bytes per token, and how to tell it from the wire ==="
 	@$(PY) -m custos_a0.cli conversion | tail -2
 	@echo
 	@echo "=== how much of a scope an operator can read ==="
