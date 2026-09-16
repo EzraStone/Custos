@@ -290,9 +290,15 @@ def cmd_ablation(args: argparse.Namespace) -> int:
     """Which signal is carrying the result, on each corpus.
 
     Both corpora, because they answer differently and the difference is the
-    point: the base corpus is easy enough that four of the five signals are
+    point: the base corpus is easy enough that most of the signals are
     redundant, so a signal can look free there and be load-bearing on the
     workloads that are actually hard.
+
+    Four columns of outcome rather than three. Margin, recall and precision
+    are all measured at the register boundary, and a signal whose only job is
+    to hold an ambiguous workload in the review queue moves none of them.
+    That is not a hypothetical either: it is what `mcp_fingerprint` does, and
+    for two corpora this table called it free.
     """
     from . import corpus as corpus_mod
     from .ablation import run_ablation
@@ -301,7 +307,7 @@ def cmd_ablation(args: argparse.Namespace) -> int:
     scenario = SCENARIOS[0]
     header = (
         f"{'signal removed':<24}{'weight':>8}{'margin':>9}{'cost':>8}"
-        f"{'recall':>8}{'precision':>11}"
+        f"{'recall':>8}{'surfaced':>10}{'precision':>11}"
     )
     for label, spec, declared in (
         ("base corpus", corpus_mod.CorpusSpec(), None),
@@ -315,15 +321,22 @@ def cmd_ablation(args: argparse.Namespace) -> int:
         print("-" * len(header))
         for a in rows:
             flag = "" if a.load_bearing else "   <-- carries nothing here"
+            if a.dropped:
+                flag = "   <-- drops " + ", ".join(a.dropped)
             print(
                 f"{a.removed:<24}{a.weight:>8.1f}{a.margin:>+9.3f}{a.margin_cost:>+8.3f}"
-                f"{a.recall:>8.2f}{a.precision:>11.2f}{flag}"
+                f"{a.recall:>8.2f}{a.surfaced_recall:>10.2f}{a.precision:>11.2f}{flag}"
             )
         print()
 
     print(
         "Cost is how much separation the signal was providing. Negative means "
         "removing it widened the margin."
+    )
+    print(
+        "Surfaced is the fraction of true agents still reaching a human by "
+        "either door. A signal can cost nothing in margin or recall and still "
+        "be the only thing keeping a workload in the review queue."
     )
     return 0
 

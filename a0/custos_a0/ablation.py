@@ -39,7 +39,10 @@ class Ablated:
     margin: float
     recall: float
     precision: float
+    surfaced_recall: float
+    dropped: tuple[str, ...]
     baseline_margin: float
+    baseline_surfaced: float
 
     @property
     def margin_cost(self) -> float:
@@ -50,9 +53,30 @@ class Ablated:
         return self.baseline_margin - self.margin
 
     @property
+    def surfaced_cost(self) -> float:
+        """The fraction of true agents that stop reaching a human without it.
+
+        The column this table was missing, and the reason it was missing is
+        instructive: margin, recall and precision are all measured at the
+        register boundary, so a signal whose whole job is to hold a workload
+        in the review queue does its job invisibly and reads as free.
+
+        `mcp_fingerprint` was exactly that. It cost 0.000 of margin and 0.00
+        of recall on both corpora, and removing it dropped an agent out of
+        the queue entirely — a signal carrying a real verdict while the
+        measurement built to find free signals called it free.
+        """
+        return self.baseline_surfaced - self.surfaced_recall
+
+    @property
     def load_bearing(self) -> bool:
-        """Whether anything depends on it: separation, or a verdict."""
-        return self.margin_cost > 0.01 or self.recall < 1.0 or self.precision < 1.0
+        """Whether anything depends on it: separation, a verdict, or a queue."""
+        return (
+            self.margin_cost > 0.01
+            or self.surfaced_cost > 0.01
+            or self.recall < 1.0
+            or self.precision < 1.0
+        )
 
 
 def _without(table, signal_id: str):
@@ -83,6 +107,7 @@ def run_ablation(
 ) -> list[Ablated]:
     """Score the corpus once per signal, each time without that signal."""
     baseline: Result = run(scenario, corpus, declared)
+    baseline_dismissed = {r.workload for r in baseline.dismissed_agents}
     original = engine_mod.SIGNALS
 
     out = []
@@ -94,10 +119,16 @@ def run_ablation(
                 removed=signal.id, weight=signal.weight,
                 margin=result.separation_margin,
                 recall=result.recall, precision=result.precision,
+                surfaced_recall=result.surfaced_recall,
+                dropped=tuple(
+                    r.workload for r in result.dismissed_agents
+                    if r.workload not in baseline_dismissed
+                ),
                 baseline_margin=baseline.separation_margin,
+                baseline_surfaced=baseline.surfaced_recall,
             ))
     finally:
         engine_mod.SIGNALS = original
 
-    out.sort(key=lambda a: -a.margin_cost)
+    out.sort(key=lambda a: (-a.surfaced_cost, -a.margin_cost))
     return out
