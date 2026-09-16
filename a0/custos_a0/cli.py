@@ -4,7 +4,8 @@
     custos-a0 experiment --out DIR  also write the report and log fixtures
     custos-a0 report --out DIR      render a scan report from the corpus
     custos-a0 fixtures --out DIR    write flow log fixtures in the native format
-    custos-a0 conversion            measure wire bytes per token, both ways round
+    custos-a0 conversion            measure payload bytes per token, both ways round
+    custos-a0 ablation              which signal is carrying the result
 """
 
 from __future__ import annotations
@@ -270,6 +271,48 @@ def cmd_conversion(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ablation(args: argparse.Namespace) -> int:
+    """Which signal is carrying the result, on each corpus.
+
+    Both corpora, because they answer differently and the difference is the
+    point: the base corpus is easy enough that four of the five signals are
+    redundant, so a signal can look free there and be load-bearing on the
+    workloads that are actually hard.
+    """
+    from . import corpus as corpus_mod
+    from .ablation import run_ablation
+    from .evaluate import SCENARIOS, stress_declarations
+
+    scenario = SCENARIOS[0]
+    header = (
+        f"{'signal removed':<24}{'weight':>8}{'margin':>9}{'cost':>8}"
+        f"{'recall':>8}{'precision':>11}"
+    )
+    for label, spec, declared in (
+        ("base corpus", corpus_mod.CorpusSpec(), None),
+        ("stress corpus", corpus_mod.CorpusSpec(hard=True), stress_declarations()),
+    ):
+        corpus = corpus_mod.build(spec)
+        rows = run_ablation(corpus, scenario, declared)
+        print(f"Custos signal ablation — {label}, margin {rows[0].baseline_margin:+.3f}"
+              + chr(10))
+        print(header)
+        print("-" * len(header))
+        for a in rows:
+            flag = "" if a.load_bearing else "   <-- carries nothing here"
+            print(
+                f"{a.removed:<24}{a.weight:>8.1f}{a.margin:>+9.3f}{a.margin_cost:>+8.3f}"
+                f"{a.recall:>8.2f}{a.precision:>11.2f}{flag}"
+            )
+        print()
+
+    print(
+        "Cost is how much separation the signal was providing. Negative means "
+        "removing it widened the margin."
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="custos-a0", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -288,6 +331,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--limit", type=int, default=5,
                    help="how many questions a customer is shown")
     p.set_defaults(func=cmd_questions)
+
+    p = sub.add_parser("ablation",
+                       help="which signal is carrying the result")
+    p.set_defaults(func=cmd_ablation)
 
     p = sub.add_parser("conversion",
                        help="measure wire bytes per token, both ways round")

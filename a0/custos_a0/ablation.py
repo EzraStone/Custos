@@ -78,16 +78,18 @@ def _without(table, signal_id: str):
     return tuple(s for s in table if s.id != signal_id)
 
 
-def run_ablation(corpus: Corpus, scenario: Scenario) -> list[Ablated]:
+def run_ablation(
+    corpus: Corpus, scenario: Scenario, declared=None
+) -> list[Ablated]:
     """Score the corpus once per signal, each time without that signal."""
-    baseline: Result = run(scenario, corpus, None)
+    baseline: Result = run(scenario, corpus, declared)
     original = engine_mod.SIGNALS
 
     out = []
     try:
         for signal in original:
             engine_mod.SIGNALS = _without(original, signal.id)
-            result = run(scenario, corpus, None)
+            result = run(scenario, corpus, declared)
             out.append(Ablated(
                 removed=signal.id, weight=signal.weight,
                 margin=result.separation_margin,

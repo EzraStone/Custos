@@ -15,7 +15,7 @@ VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 .PHONY: help setup check lint test test-py test-go test-console fmt experiment \
         collector console serve scan image prune onboard preflight smoke \
-        screenshots stress questions conversion gates clean
+        screenshots stress questions conversion ablation gates clean
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -106,8 +106,11 @@ stress: ## Score the classifier against the partially-coupled corpus
 questions: ## Score the gateway detector against the noise corpus
 	$(PY) -m custos_a0.cli questions
 
-conversion: ## Measure wire bytes per token, responses whole and streamed
+conversion: ## Measure payload bytes per token, responses whole and streamed
 	$(PY) -m custos_a0.cli conversion
+
+ablation: ## Which classifier signal is actually carrying the result
+	$(PY) -m custos_a0.cli ablation
 
 gates: ## Every measured number this product rests on, in one run
 	@echo "=== G0: the classifier, base corpus ==="

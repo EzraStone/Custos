@@ -60,6 +60,26 @@ SCENARIOS: tuple[Scenario, ...] = (
 )
 
 
+def stress_declarations() -> Declared:
+    """The three endpoints the built-in catalogue cannot see, declared.
+
+    Factored out of `run_hard` so a measurement that wants the stress corpus
+    scored the way the stress gate scores it does not have to rebuild this
+    list — and cannot rebuild it slightly differently, which is the usual way
+    two measurements of the same thing stop agreeing.
+    """
+    from custos.declared import Declaration, build
+
+    from .endpoints import BEDROCK_PRIVATELINK, PROVIDER_PRIVATELINK
+    from .scenarios.hard import GATEWAY
+
+    return build([
+        Declaration(f"{GATEWAY.ip}/32", "range", "llm-gateway"),
+        Declaration(f"{BEDROCK_PRIVATELINK.ip}/32", "range", "bedrock-privatelink"),
+        Declaration(f"{PROVIDER_PRIVATELINK.ip}/32", "range", "provider-privatelink"),
+    ])
+
+
 def run_hard(gateway_declared: bool = False) -> Result:
     """Score the classifier against the stress corpus.
 
@@ -94,21 +114,8 @@ def run_hard(gateway_declared: bool = False) -> Result:
     the global version has a property the real one deliberately does not: it
     would apply to every account in the process.
     """
-    from custos.declared import Declaration, build
-
-    from .endpoints import BEDROCK_PRIVATELINK, PROVIDER_PRIVATELINK
-    from .scenarios.hard import GATEWAY
-
     corpus = corpus_mod.build(corpus_mod.CorpusSpec(hard=True))
-    declared = (
-        build([
-            Declaration(f"{GATEWAY.ip}/32", "range", "llm-gateway"),
-            Declaration(f"{BEDROCK_PRIVATELINK.ip}/32", "range", "bedrock-privatelink"),
-            Declaration(f"{PROVIDER_PRIVATELINK.ip}/32", "range", "provider-privatelink"),
-        ])
-        if gateway_declared
-        else None
-    )
+    declared = stress_declarations() if gateway_declared else None
     return run(SCENARIOS[0], corpus, declared)
 
 
