@@ -109,10 +109,10 @@ SIGNALS: tuple[Signal, ...] = (
         available=saw_model_traffic,
         activate=lambda f: logistic(f.egress_ratio, EGRESS_RATIO_MIDPOINT, EGRESS_RATIO_SCALE),
         describe=lambda f: (
-            f"Sent {_fmt(f.total_model_egress)} to model endpoints and received "
-            f"{_fmt(f.total_model_ingress)} back, a ratio of {f.egress_ratio:.1f}:1. "
-            "An agent resends its accumulated transcript on every step; a chatbot "
-            "sends one prompt per answer."
+            f"Sent {_fmt(f.total_model_egress)} of message payload to model "
+            f"endpoints and received {_fmt(f.total_model_ingress)} back, a ratio "
+            f"of {f.egress_ratio:.1f}:1. An agent resends its accumulated "
+            "transcript on every step; a chatbot sends one prompt per answer."
         ),
     ),
     Signal(

@@ -38,6 +38,17 @@ class Features:
     model_windows: int
     total_model_egress: int
     total_model_ingress: int
+    """Message payload, not wire bytes.
+
+    The acknowledgements, TLS handshakes and streaming framing are removed
+    before these are computed, because none of it is anything the workload
+    said and all of it scales with how the customer configured their client.
+    Everything in this class is therefore a fact about a conversation.
+
+    It matters for the evidence sentence as much as for the arithmetic: a
+    customer comparing these figures against their own dashboards is looking at
+    wire bytes and will see a smaller number here, so the sentence says which
+    it is."""
 
     egress_ratio: float
     """Bytes sent to model endpoints per byte received.

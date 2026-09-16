@@ -180,3 +180,15 @@ def test_no_evidence_sentence_describes_a_measurement_that_was_not_made():
     for line in verdict.evidence:
         assert "intervals containing model traffic" not in line
         assert "to model endpoints and received" not in line
+
+
+def test_the_asymmetry_evidence_says_the_figures_are_payload():
+    """A customer reading this sentence has their own dashboards open, and
+    those show wire bytes. The figure here is smaller — acknowledgements, TLS
+    handshakes and streaming framing are out of it — so the sentence has to say
+    which it is or it reads as a discrepancy."""
+    from custos.classify.signals import SIGNALS
+
+    asymmetry = next(s for s in SIGNALS if s.id == "egress_asymmetry")
+    sentence = asymmetry.describe(BASE)
+    assert "message payload" in sentence, sentence
