@@ -159,6 +159,25 @@ structural change so far — region becoming part of a batch's key — rebuilds
 that table in a transaction and keeps the row ids, so historical scans still
 resolve. Take a copy of the SQLite file first anyway; it is one file.
 
+**One upgrade changes what a stored number means rather than its shape.** Byte
+counts and spend figures were wire bytes and are payload bytes: the
+acknowledgements, TLS handshakes and streaming framing come out before anything
+reads them. Rows written before that upgrade are on the old scale.
+
+Nothing recomputes them, because the packet counts that would be needed are not
+kept past retention and inventing the difference would be worse than the seam.
+What that means in practice:
+
+- An account's spend history steps down at the upgrade — by roughly its
+  protocol overhead, which is a few tens of percent for whole responses and
+  around forty times for streamed ones. The figures after the step are the
+  correct ones.
+- Drift and the scan diff are unaffected. They compare call rates, tool sets
+  and active hours, none of which are byte counts.
+- Tell a design partner before they notice. A cost figure that halves without
+  explanation is the kind of thing that costs more trust than the correction
+  earns back.
+
 ### Hand them the console
 
 The control plane serves it at `/`. Give the operator their account's token and
